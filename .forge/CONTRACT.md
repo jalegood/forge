@@ -85,7 +85,7 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
 
 - **Reads:** `.forge/VISION.md` (What/Who/Pillars format), `.forge/CONTRACT.md` (sections: Data Model, State Machines, Interfaces, Rules, Boundaries), `.forge/WORKPLAN.md` (if exists)
 - **Does:**
-  - On first run: scaffolds `.forge/` if needed, writes `.claude/settings.json` if absent (see Hook Configuration), generates WORKPLAN.md
+  - On first run: scaffolds `.forge/` if needed (creates VISION.md, CONTRACT.md, WORKPLAN.md, and `templates/` with scaffold.md, feature.md, clarify.md, refactor.md, fix.md, investigate.md), writes `.claude/settings.json` if absent (see Hook Configuration), generates WORKPLAN.md
   - On subsequent runs: regenerates only `pending` tasks; preserves `done` and `active` tasks exactly as-is
   - Orders tasks as a dependency DAG — no task runs before its `Depends` entries are all `done`
 - **Output task format:** Each task in WORKPLAN.md uses this structure: `## [TASK-XXX] Description` followed by fields — Status (`pending` for new tasks), Type (`scaffold|feature|clarify|refactor|fix|investigate`), Depends (`none` or comma-separated task IDs), Context (manifest references like `CONTRACT#section-name`), Gate (shell command or `manual:` prefix), Notes (empty for new tasks). Task IDs are sequential and unique (TASK-001, TASK-002, ...).

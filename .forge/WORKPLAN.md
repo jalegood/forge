@@ -20,7 +20,7 @@
 
 ## [TASK-003] Implement /forge-plan command
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-001
 - **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#data-model/context-manifest, CONTRACT#rules/workplan-integrity, CONTRACT#rules/manifest-completeness

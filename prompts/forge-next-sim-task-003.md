@@ -30,7 +30,7 @@ The following Contract sections are relevant to this task. Stay within these con
 
 - **Reads:** `.forge/VISION.md` (What/Who/Pillars format), `.forge/CONTRACT.md` (sections: Data Model, State Machines, Interfaces, Rules, Boundaries), `.forge/WORKPLAN.md` (if exists)
 - **Does:**
-  - On first run: scaffolds `.forge/` if needed, writes `.claude/settings.json` if absent (see Hook Configuration), generates WORKPLAN.md
+  - On first run: scaffolds `.forge/` if needed (creates VISION.md, CONTRACT.md, WORKPLAN.md, and `templates/` with scaffold.md, feature.md, clarify.md, refactor.md, fix.md, investigate.md), writes `.claude/settings.json` if absent (see Hook Configuration), generates WORKPLAN.md
   - On subsequent runs: regenerates only `pending` tasks; preserves `done` and `active` tasks exactly as-is
   - Orders tasks as a dependency DAG — no task runs before its `Depends` entries are all `done`
 - **Output task format:** Each task in WORKPLAN.md uses this structure: `## [TASK-XXX] Description` followed by fields — Status (`pending` for new tasks), Type (`scaffold|feature|clarify|refactor|fix|investigate`), Depends (`none` or comma-separated task IDs), Context (manifest references like `CONTRACT#section-name`), Gate (shell command or `manual:` prefix), Notes (empty for new tasks). Task IDs are sequential and unique (TASK-001, TASK-002, ...).
@@ -108,13 +108,9 @@ The feature template's first instruction is "Write or update tests that express 
 
 This is the second time this comes up. The template taxonomy (scaffold/feature/clarify/refactor/fix/investigate) was designed for code deliverables. Slash command creation is a recurring task type in Forge's own build that doesn't fit cleanly. Not worth adding a `command` type — but worth noting that the first execution of any template against a non-code deliverable will require the agent to adapt instructions.
 
-### 2. First-run scaffold behavior is underspecified
+### 2. ~~First-run scaffold behavior is underspecified~~ — RESOLVED
 
-The interface section says "scaffolds `.forge/` if needed" but doesn't detail what the scaffold contains. The forge-plan command needs to know: create VISION.md, CONTRACT.md, WORKPLAN.md, and `templates/` with all 6 template files. This information exists in the Data Model artifacts table (`CONTRACT#data-model/artifacts`) but that section is not in the manifest.
-
-The agent writing the command can infer the scaffold contents from the artifacts referenced elsewhere in the context (VISION.md, CONTRACT.md, WORKPLAN.md all appear in the interface section). But the templates directory and its 6 files are not mentioned anywhere in the resolved context. An agent with no prior Forge knowledge might scaffold `.forge/` with only the three markdown files and miss the templates entirely.
-
-**Recommendation:** Either widen the manifest to include `CONTRACT#data-model/artifacts`, or add a brief scaffold listing to the `/forge-plan` interface section. The latter is preferred for self-containment.
+The interface section now includes the full scaffold listing inline: VISION.md, CONTRACT.md, WORKPLAN.md, and `templates/` with all 6 template files. No manifest widening needed.
 
 ### 3. This is the highest-leverage deliverable
 
@@ -124,4 +120,4 @@ The simulation prompt includes the Notes field guidance about manifest completen
 
 ### 4. Resolved context is well-sized
 
-4 sections totaling ~40 lines of Contract content. Well within the 200-line budget. The sections cover: what the command does (interface), how manifests work (data model), what constraints apply (workplan integrity), and the completeness requirement (manifest completeness). This is a good example of a manifest that passes the completeness test — except for Issue #2 above.
+4 sections totaling ~40 lines of Contract content. Well within the 200-line budget. The sections cover: what the command does (interface), how manifests work (data model), what constraints apply (workplan integrity), and the completeness requirement (manifest completeness). With Issue #2 resolved, this manifest now passes the completeness test.
