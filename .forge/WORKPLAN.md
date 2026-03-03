@@ -56,7 +56,7 @@
 
 ## [TASK-007] Structural smoke test
 
-- **Status:** pending
+- **Status:** done
 - **Type:** scaffold
 - **Depends:** TASK-004, TASK-005, TASK-006
 - **Context:** CONTRACT#rules/gate-patterns, CONTRACT#state-machines/task-lifecycle
