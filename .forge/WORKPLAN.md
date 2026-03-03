@@ -47,7 +47,7 @@
 
 ## [TASK-006] Write CLAUDE.md integration block
 
-- **Status:** pending
+- **Status:** done
 - **Type:** scaffold
 - **Depends:** TASK-002, TASK-003, TASK-004
 - **Context:** CONTRACT#interfaces/claudemd-integration-block, CONTRACT#rules/claudemd-minimalism
