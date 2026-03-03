@@ -29,7 +29,7 @@
 
 ## [TASK-004] Implement /forge-next command
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-001, TASK-003
 - **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#state-machines/task-lifecycle, CONTRACT#state-machines/session-lifecycle, CONTRACT#data-model/context-manifest
