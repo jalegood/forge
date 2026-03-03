@@ -2,7 +2,7 @@
 
 ## [TASK-001] Create prompt templates for all 5 task types
 
-- **Status:** complete
+- **Status:** done
 - **Type:** scaffold
 - **Depends:** none
 - **Context:** CONTRACT#interfaces/prompt-template-interface
@@ -11,7 +11,7 @@
 
 ## [TASK-002] Implement /forge-status command
 
-- **Status:** pending
+- **Status:** done
 - **Type:** scaffold
 - **Depends:** none
 - **Context:** CONTRACT#interfaces/command-forge-status
@@ -23,9 +23,9 @@
 - **Status:** pending
 - **Type:** feature
 - **Depends:** TASK-001
-- **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#data-model/context-manifest, CONTRACT#rules/workplan-integrity
-- **Gate:** `test -s .claude/commands/forge-plan.md && grep -q "VISION" .claude/commands/forge-plan.md && grep -q "CONTRACT" .claude/commands/forge-plan.md && echo "forge-plan command valid"`
-- **Notes:**
+- **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#data-model/context-manifest, CONTRACT#rules/workplan-integrity, CONTRACT#rules/manifest-completeness
+- **Gate:** `test -s .claude/commands/forge-plan.md && grep -q "VISION" .claude/commands/forge-plan.md && grep -q "CONTRACT" .claude/commands/forge-plan.md && grep -q -i "manifest\|completeness\|independently" .claude/commands/forge-plan.md && echo "forge-plan command valid"`
+- **Notes:** The /forge-plan command prompt must include an explicit instruction about manifest completeness. When generating tasks, the AI planner must verify each manifest passes the completeness test: could an agent with no prior knowledge produce the correct deliverable from the resolved context alone? This is the operational leverage point — if it's not in this prompt, future projects will produce narrow manifests. See CONTRACT#rules/manifest-completeness.
 
 ## [TASK-004] Implement /forge-next command
 

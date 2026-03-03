@@ -208,6 +208,8 @@ Every task carries a `Context` field listing _exactly_ which Contract sections t
 
 **Budget guideline:** If a task's resolved context exceeds ~200 lines of Contract content, either the Contract sections are too large (break them up) or the task scope is too broad (decompose it).
 
+**Completeness guideline:** Each task's resolved context must be sufficient to execute independently. The test: could an agent with no prior knowledge of the project produce the correct deliverable using only the resolved context? When an interface section references concepts defined elsewhere (statuses, data formats, transition rules), either inline the essential details into the interface section (preferred — keeps manifests lean) or widen the manifest to include the referenced sections. `/forge-plan` should generate manifests that pass this test; the human reviewer should verify.
+
 ---
 
 ## Planning at Scale

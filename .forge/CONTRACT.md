@@ -83,25 +83,29 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
 
 ### Command: `/forge-plan`
 
-- **Reads:** `.forge/VISION.md`, `.forge/CONTRACT.md`, `.forge/WORKPLAN.md` (if exists)
+- **Reads:** `.forge/VISION.md` (What/Who/Pillars format), `.forge/CONTRACT.md` (sections: Data Model, State Machines, Interfaces, Rules, Boundaries), `.forge/WORKPLAN.md` (if exists)
 - **Does:**
-  - On first run: scaffolds `.forge/` if needed, generates WORKPLAN.md from Vision + Contract
-  - On subsequent runs: regenerates only `pending` tasks, preserves `done` and `active` tasks
-  - Generates dependency-ordered tasks as a DAG
-  - Each task follows the task format (see Data Model)
+  - On first run: scaffolds `.forge/` if needed, writes `.claude/settings.json` if absent (see Hook Configuration), generates WORKPLAN.md
+  - On subsequent runs: regenerates only `pending` tasks; preserves `done` and `active` tasks exactly as-is
+  - Orders tasks as a dependency DAG — no task runs before its `Depends` entries are all `done`
+- **Output task format:** Each task in WORKPLAN.md uses this structure: `## [TASK-XXX] Description` followed by fields — Status (`pending` for new tasks), Type (`scaffold|feature|clarify|refactor|fix|investigate`), Depends (`none` or comma-separated task IDs), Context (manifest references like `CONTRACT#section-name`), Gate (shell command or `manual:` prefix), Notes (empty for new tasks). Task IDs are sequential and unique (TASK-001, TASK-002, ...).
+- **Task sizing:** One task per concern. If a description uses "and" connecting two distinct pieces of work, split it. Each task should complete in a single clean session.
+- **Manifest generation:** Each task's Context field must list all Contract sections needed to execute independently (see Manifest Completeness rule).
 - **Outputs:** Updated `.forge/WORKPLAN.md`
 - **Human action required:** Review and edit the workplan before proceeding
 
 ### Command: `/forge-next`
 
 - **Reads:** `.forge/WORKPLAN.md`, `.forge/CONTRACT.md` (referenced sections only), `.forge/templates/`
+- **Task format:** Parses WORKPLAN.md entries: `## [TASK-XXX] Description` followed by Status, Type, Depends, Context, Gate, Notes fields.
+- **Task selection:** Finds the next unblocked `pending` task, or accepts a specific task ID (e.g., `/forge-next TASK-012`). A task is **unblocked** when its `Depends` field is `none` or all listed task IDs have status `done`. If a specified task has unmet dependencies, warns the human and asks for confirmation.
 - **Does:**
-  1. Finds the next unblocked `pending` task (all dependencies `done`), or executes a specific task if a task ID is provided (e.g., `/forge-next TASK-012`). If the specified task has unmet dependencies, warns the human and asks for confirmation before proceeding.
-  2. Resolves the context manifest (extracts referenced Contract sections)
+  1. Selects the target task (see Task selection above)
+  2. Resolves the context manifest: parses the `Context` field references (e.g., `CONTRACT#interfaces/command-forge-status`), extracts matching markdown sections from CONTRACT.md (each section runs from its header through the next same-level header), concatenates them
   3. Marks task `active` in WORKPLAN.md
-  4. Loads the appropriate prompt template for the task type
-  5. Injects resolved context into the template at `{{context}}`
-  6. Executes the task
+  4. Loads the prompt template from `.forge/templates/{type}.md` matching the task's Type field
+  5. Injects resolved context into the template at `{{context}}`, plus task details into `{{task_id}}`, `{{task_description}}`, `{{gate}}`
+  6. Executes the task following the template instructions
   7. Runs the gate command. If the gate starts with `manual:`, presents the description to the human and asks for pass/fail confirmation instead of running a shell command.
   8. On pass: marks `done`, suggests commit message
   9. On fail: keeps `active`, writes diagnostic to `Notes`
@@ -110,8 +114,12 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
 ### Command: `/forge-status`
 
 - **Reads:** `.forge/WORKPLAN.md`
-- **Does:** Counts tasks by status, identifies next unblocked task, lists `clarify` tasks awaiting input
-- **Outputs:** Progress summary (read-only, no side effects)
+- **Task format:** Parses task entries: `## [TASK-XXX] Description` followed by Status, Type, Depends, Context, Gate, Notes fields.
+- **Does:**
+  - Counts tasks by status: `pending`, `active`, `done`, `blocked`
+  - Identifies next unblocked task: first `pending` task whose `Depends` are all `done` or `none`
+  - Lists any `clarify`-type tasks that are `pending` or `active` (these need human decisions)
+- **Outputs:** Progress summary to the user — task counts by status, next unblocked task ID and description, clarify tasks awaiting input (if any). Read-only — no file modifications, no side effects.
 
 ### Prompt Template Interface
 
@@ -163,6 +171,17 @@ Exactly 3 lines in the project's CLAUDE.md:
 - Resolved context per task must not exceed ~200 lines of Contract content.
 - If a single Contract section exceeds ~200 lines, it must be broken into subsections.
 - The full Contract never enters the context window during execution — only manifested sections.
+
+### Manifest Completeness
+
+A task's context manifest must include all Contract sections needed to execute the task independently. The test: could an agent with no prior knowledge of the project produce the correct deliverable using only the resolved context?
+
+When an interface section references concepts defined elsewhere (task statuses, data formats, transition rules), either:
+
+- **Inline** the essential details into the interface section (preferred — keeps manifests lean), or
+- **Widen** the manifest to include the referenced sections
+
+`/forge-plan` should generate manifests that pass this test. The human reviewer should verify: read only the resolved context for a task and ask whether it's sufficient to do the work.
 
 ### Session Boundary Protocol
 
