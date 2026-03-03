@@ -38,12 +38,12 @@
 
 ## [TASK-005] Configure hooks in settings.json
 
-- **Status:** pending
+- **Status:** done
 - **Type:** scaffold
 - **Depends:** none
 - **Context:** CONTRACT#boundaries/hook-configuration
 - **Gate:** `node -e "JSON.parse(require('fs').readFileSync('.claude/settings.json','utf8'))" && grep -q "PostToolUse\|PreToolUse" .claude/settings.json && echo "Valid JSON with hooks configured"`
-- **Notes:** Per resolved CONTRACT decision: auto-create settings.json only if absent. PostToolUse lint hook enabled. PreToolUse commit hook disabled by default (enable after test infra exists).
+- **Notes:** Per resolved CONTRACT decision: auto-create settings.json only if absent. PostToolUse lint hook enabled. PreToolUse commit hook disabled by default (enable after test infra exists). Gate passed.
 
 ## [TASK-006] Write CLAUDE.md integration block
 
