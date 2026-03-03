@@ -1,0 +1,259 @@
+# Contract
+
+## Data Model
+
+### Artifacts
+
+Forge operates on these file artifacts:
+
+| Artifact | Path | Owner | Purpose |
+|---|---|---|---|
+| Vision | `.forge/VISION.md` | Human (100%) | Immutable project direction — what, who, pillars |
+| Contract | `.forge/CONTRACT.md` | Human (80%) / AI (20%) | Hard constraints, interfaces, rules — the automation boundary |
+| Workplan | `.forge/WORKPLAN.md` | AI (80%) / Human (20%) | Dependency-ordered task list, one task per session |
+| Templates | `.forge/templates/*.md` | Forge-managed | Prompt templates per task type, injected fresh each session |
+| Commands | `.claude/commands/forge-*.md` | Forge-managed | Slash command definitions for Claude Code |
+| Settings | `.claude/settings.json` | Human-configured | Hook definitions for deterministic enforcement |
+| CLAUDE.md | `CLAUDE.md` (project root) | Human-configured | Minimal pipeline pointer (3 lines max) |
+
+### Relationships
+
+- Vision feeds Contract (pillars constrain rules).
+- Contract feeds Workplan (tasks reference Contract sections via context manifests).
+- Workplan feeds Execution (commands read workplan to find and execute tasks).
+- Templates shape Execution (task type determines which template is injected).
+- Hooks enforce invariants independently of all other artifacts.
+
+### Context Manifest
+
+A context manifest is a list of Contract section references in a task's `Context` field. Format:
+
+- `CONTRACT#section-name` — references a top-level section (e.g., `CONTRACT#data-model`)
+- `CONTRACT#section-name/subsection` — references a subsection
+- For multi-file contracts: `filename#section-name` (e.g., `combat#rules/damage-calc`)
+
+Resolution: parse the references, extract matching markdown sections (header through next same-level header), concatenate, inject into prompt template at the `{{context}}` slot.
+
+**Budget:** Resolved context must not exceed ~200 lines of Contract content per task. Exceeding this signals the Contract section is too large or the task scope is too broad.
+
+## State Machines
+
+### Task Lifecycle
+
+```
+pending ──→ active ──→ done
+  │            │
+  │            └──→ blocked
+  │                   │
+  └───────────────────┘ (when blocker resolves)
+```
+
+- **pending:** Not yet started. All dependencies must be `done` to become unblocked.
+- **active:** Currently being executed in a session. Exactly 0 or 1 tasks may be `active` at any time.
+- **done:** Gate passed. Code committed. Terminal state.
+- **blocked:** Cannot proceed. Requires a `clarify` task or dependency resolution. Returns to `pending` when unblocked.
+
+Valid transitions: `pending→active`, `active→done`, `active→blocked`, `blocked→pending`.
+
+### Session Lifecycle
+
+```
+start ──→ execute ──→ gate ──→ commit ──→ clear
+                       │
+                       └──→ notes ──→ commit/stash ──→ clear
+```
+
+**End of session (gate passes):**
+1. `forge-next` marks task `done` in WORKPLAN.md
+2. Human commits code + updated WORKPLAN.md together
+3. Human runs `/clear`
+
+**End of session (incomplete):**
+1. `forge-next` writes a `Notes` entry: what was done, what remains, decisions made
+2. Human commits partial progress or stashes
+3. Task stays `active`
+4. Human runs `/clear`
+
+**Start of session:**
+1. `forge-next` reads WORKPLAN.md
+2. If resuming an `active` task, `Notes` field provides continuity
+3. Fresh context window — full reasoning capacity
+
+## Interfaces
+
+### Command: `/forge-plan`
+
+- **Reads:** `.forge/VISION.md`, `.forge/CONTRACT.md`, `.forge/WORKPLAN.md` (if exists)
+- **Does:**
+  - On first run: scaffolds `.forge/` if needed, generates WORKPLAN.md from Vision + Contract
+  - On subsequent runs: regenerates only `pending` tasks, preserves `done` and `active` tasks
+  - Generates dependency-ordered tasks as a DAG
+  - Each task follows the task format (see Data Model)
+- **Outputs:** Updated `.forge/WORKPLAN.md`
+- **Human action required:** Review and edit the workplan before proceeding
+
+### Command: `/forge-next`
+
+- **Reads:** `.forge/WORKPLAN.md`, `.forge/CONTRACT.md` (referenced sections only), `.forge/templates/`
+- **Does:**
+  1. Finds the next unblocked `pending` task (all dependencies `done`), or executes a specific task if a task ID is provided (e.g., `/forge-next TASK-012`). If the specified task has unmet dependencies, warns the human and asks for confirmation before proceeding.
+  2. Resolves the context manifest (extracts referenced Contract sections)
+  3. Marks task `active` in WORKPLAN.md
+  4. Loads the appropriate prompt template for the task type
+  5. Injects resolved context into the template at `{{context}}`
+  6. Executes the task
+  7. Runs the gate command. If the gate starts with `manual:`, presents the description to the human and asks for pass/fail confirmation instead of running a shell command.
+  8. On pass: marks `done`, suggests commit message
+  9. On fail: keeps `active`, writes diagnostic to `Notes`
+- **Outputs:** Executed code changes, gate result, updated WORKPLAN.md
+
+### Command: `/forge-status`
+
+- **Reads:** `.forge/WORKPLAN.md`
+- **Does:** Counts tasks by status, identifies next unblocked task, lists `clarify` tasks awaiting input
+- **Outputs:** Progress summary (read-only, no side effects)
+
+### Prompt Template Interface
+
+Each template in `.forge/templates/` must contain:
+
+- A `{{context}}` slot for resolved Contract content
+- Task-type-specific instructions
+- A reminder to run the gate command before reporting completion
+- An instruction to update `Notes` if work is incomplete
+
+Templates are ~30-50 lines. They are injected fresh each session.
+
+### Task Types
+
+| Type | Purpose | Default Gate Style |
+|---|---|---|
+| `scaffold` | Project setup, config, boilerplate | Structural checks |
+| `feature` | Vertical slice of functionality | Test suite + build |
+| `clarify` | Resolve `<!-- UNRESOLVED -->` in Contract | Contract updated, ambiguity removed |
+| `refactor` | Improve structure, preserve behavior | Existing tests pass |
+| `fix` | Repair broken gate or bug | Original failing command passes |
+| `investigate` | Diagnose issues, explore unknowns | `manual:` — findings documented in Notes |
+
+Each type has a corresponding prompt template in `.forge/templates/`. The task type determines which template `/forge-next` loads for execution.
+
+### CLAUDE.md Integration Block
+
+Exactly 3 lines in the project's CLAUDE.md:
+
+```markdown
+## Forge
+
+- Pipeline: .forge/ (VISION.md, CONTRACT.md, WORKPLAN.md)
+- Workflow: /forge-next → review → commit → /clear
+- Do not modify CONTRACT.md without asking first
+```
+
+## Rules
+
+### Task Sizing
+
+- Every task must be completable in a single clean Claude Code session (one focused prompt + one review/correction cycle).
+- One task touches one concern (one endpoint, one component, one migration).
+- If a task description contains "and" connecting two distinct pieces of work, it must be split.
+- Scaffold tasks may be larger (boilerplate is low-risk). Feature tasks must be tight.
+
+### Context Budget
+
+- Resolved context per task must not exceed ~200 lines of Contract content.
+- If a single Contract section exceeds ~200 lines, it must be broken into subsections.
+- The full Contract never enters the context window during execution — only manifested sections.
+
+### Session Boundary Protocol
+
+- `/clear` between tasks is a structural requirement, not optional hygiene.
+- Git commit is the persistence boundary.
+- Every session starts by reading WORKPLAN.md (the `forge-next` command does this automatically).
+- Notes field provides continuity between sessions — conversation history does not.
+
+### Contract Amendment Protocol
+
+The Contract will change during execution as implementation reveals new understanding. When amending the Contract:
+
+1. **Identify the change.** Note which specific sections are affected.
+2. **Update CONTRACT.md.** Make the change directly. Precision matters — downstream tasks reference specific sections.
+3. **Assess impact on the Workplan:**
+   - `done` tasks whose Context referenced changed sections may need `fix` tasks to reconcile.
+   - `active` tasks should be evaluated — if the change invalidates current work, update Notes and consider restarting the task.
+   - `pending` tasks with Context referencing changed sections may need re-scoping or regeneration.
+4. **Update the Workplan.** Either add corrective tasks manually, or run `/forge-plan` to regenerate pending tasks (done and active tasks are preserved).
+5. **Commit together.** The Contract change and workplan updates are a single commit.
+
+Do not let the Contract drift from reality. A wrong Contract causes compounding errors — every future task that references stale sections builds on false assumptions.
+
+### Mid-Task Scope Splitting
+
+When a task turns out to be larger than expected during execution:
+
+1. Stop. Do not continue past 3 exchanges.
+2. Write what was accomplished and what remains to the task's `Notes` field.
+3. Commit partial progress.
+4. Edit WORKPLAN.md: shrink the current task description to what was completed, add a new task for the remainder with appropriate dependencies.
+5. `/clear` and continue with the new task.
+
+Splitting mid-session is a normal workflow event, not a failure.
+
+### CLAUDE.md Minimalism
+
+- CLAUDE.md contains at most 3 lines of Forge configuration.
+- Behavioral enforcement belongs in hooks and prompt templates, not CLAUDE.md.
+- Every CLAUDE.md line competes for ~100 remaining instruction slots.
+
+### Workplan Integrity
+
+- WORKPLAN.md is a single file with a unified DAG, even when the Contract is split across multiple files.
+- `forge-plan` preserves `done` and `active` tasks on re-run; only regenerates `pending` tasks.
+- Task IDs are sequential and unique (TASK-001, TASK-002, ...).
+
+### Gate Patterns
+
+Gates validate deliverable structure, not quality. Different deliverable types require different gate strategies:
+
+| Deliverable Type | Gate Strategy | Example |
+|---|---|---|
+| Code | Test suite / build command | `npm test && npm run build` |
+| Config / JSON | Parse validation + key check | `node -e "JSON.parse(require('fs').readFileSync('f.json','utf8'))"` |
+| Markdown artifacts | Structural check (required sections, slots, line count) | `grep -q '{{context}}' file.md && test $(wc -l < file.md) -gt 10` |
+| Human-judgment deliverables | `manual:` prefix — not automated | `manual: Verify the workflow completes 2-3 full cycles` |
+
+**The `manual:` gate type:** When a gate value starts with `manual:`, `/forge-next` does not run a shell command. Instead, it presents the description to the human and asks for pass/fail confirmation. Use this for deliverables that cannot be structurally validated (e.g., end-to-end workflow validation, UX review).
+
+- Automated gates are always preferred. Use `manual:` only when no structural check is possible.
+- If a task seems to need a `manual:` gate, first consider whether it can be split into an automatable structural task and a smaller manual verification task.
+
+## Boundaries
+
+### What Forge Does Not Do
+
+- **No sub-agents.** Unreliable context inheritance, 7x token cost.
+- **No hidden state.** Everything is readable markdown files.
+- **No conversation continuity dependence.** Every session is self-contained.
+- **No auto-commit or auto-push.** The human is the final gate.
+- **No lock-in.** The files are useful even without the commands.
+
+### What Requires Human Approval
+
+- Any modification to CONTRACT.md.
+- Workplan review after `/forge-plan` generates or regenerates tasks.
+- The commit step after gate passes — human reviews code before committing.
+- Resolving `clarify` tasks (these require human decisions).
+
+### Hook Configuration
+
+`/forge-plan` writes `.claude/settings.json` during initial scaffold **only if the file does not already exist**. The default configuration:
+
+- **PostToolUse (file edit):** Auto-lint/format after every file write (~200ms, non-blocking). Configured for the detected tech stack, or a no-op placeholder if no linter is detected.
+- **PreToolUse (git commit):** Block commits unless test suite passes (exit 0 required). **Disabled by default** — enabled by a later workplan task after test infrastructure exists.
+
+This avoids broken hooks on first run while ensuring deterministic enforcement is available as early as possible. The human may edit `settings.json` at any time to adjust hook behavior.
+
+### Platform Constraints
+
+- Slash commands have a character budget — excess commands may be silently excluded.
+- Forge uses exactly 3 commands to minimize budget consumption.
+- Users should run `/context` to verify commands loaded if behavior seems wrong.

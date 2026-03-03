@@ -1,0 +1,73 @@
+# Workplan
+
+## [TASK-001] Create prompt templates for all 5 task types
+
+- **Status:** complete
+- **Type:** scaffold
+- **Depends:** none
+- **Context:** CONTRACT#interfaces/prompt-template-interface
+- **Gate:** `ls .forge/templates/scaffold.md .forge/templates/feature.md .forge/templates/clarify.md .forge/templates/refactor.md .forge/templates/fix.md && echo "All templates exist"`
+- **Notes:**
+
+## [TASK-002] Implement /forge-status command
+
+- **Status:** pending
+- **Type:** scaffold
+- **Depends:** none
+- **Context:** CONTRACT#interfaces/command-forge-status
+- **Gate:** `test -s .claude/commands/forge-status.md && grep -q "WORKPLAN" .claude/commands/forge-status.md && echo "forge-status command valid"`
+- **Notes:**
+
+## [TASK-003] Implement /forge-plan command
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-001
+- **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#data-model/context-manifest, CONTRACT#rules/workplan-integrity
+- **Gate:** `test -s .claude/commands/forge-plan.md && grep -q "VISION" .claude/commands/forge-plan.md && grep -q "CONTRACT" .claude/commands/forge-plan.md && echo "forge-plan command valid"`
+- **Notes:**
+
+## [TASK-004] Implement /forge-next command
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-001, TASK-003
+- **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#state-machines/task-lifecycle, CONTRACT#state-machines/session-lifecycle, CONTRACT#data-model/context-manifest
+- **Gate:** `test -s .claude/commands/forge-next.md && grep -q "WORKPLAN" .claude/commands/forge-next.md && grep -q "template" .claude/commands/forge-next.md && grep -q "gate" .claude/commands/forge-next.md && echo "forge-next command valid"`
+- **Notes:** This is the most complex command. It must: find next unblocked task, resolve context manifest, inject into template, execute, run gate, update status.
+
+## [TASK-005] Configure hooks in settings.json
+
+- **Status:** pending
+- **Type:** scaffold
+- **Depends:** none
+- **Context:** CONTRACT#boundaries/hook-configuration
+- **Gate:** `node -e "JSON.parse(require('fs').readFileSync('.claude/settings.json','utf8'))" && grep -q "PostToolUse\|PreToolUse" .claude/settings.json && echo "Valid JSON with hooks configured"`
+- **Notes:** Per resolved CONTRACT decision: auto-create settings.json only if absent. PostToolUse lint hook enabled. PreToolUse commit hook disabled by default (enable after test infra exists).
+
+## [TASK-006] Write CLAUDE.md integration block
+
+- **Status:** pending
+- **Type:** scaffold
+- **Depends:** TASK-002, TASK-003, TASK-004
+- **Context:** CONTRACT#interfaces/claudemd-integration-block, CONTRACT#rules/claudemd-minimalism
+- **Gate:** `grep -q "Pipeline:" CLAUDE.md && grep -q "Workflow:" CLAUDE.md && grep -q "CONTRACT.md" CLAUDE.md && echo "CLAUDE.md integration block valid"`
+- **Notes:** Only 3 lines. Must not compete for instruction slots.
+
+## [TASK-007] Structural smoke test
+
+- **Status:** pending
+- **Type:** scaffold
+- **Depends:** TASK-004, TASK-005, TASK-006
+- **Context:** CONTRACT#rules/gate-patterns, CONTRACT#state-machines/task-lifecycle
+- **Gate:** `bash .forge/tests/smoke.sh`
+- **Notes:** Create a test script that validates the pipeline plumbing: command files exist and reference correct artifacts, WORKPLAN.md task format is parseable (status/type/depends/context/gate fields present), settings.json is valid JSON with hook config, CLAUDE.md has the integration block. This is structural validation only — does not test Claude execution.
+
+## [TASK-008] End-to-end manual validation
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-007
+- **Context:** CONTRACT#state-machines/session-lifecycle, CONTRACT#rules/session-boundary-protocol
+- **Gate:** `manual: Complete 2-3 tasks through the full /forge-next → review → commit → /clear cycle on a sample project`
+- **Notes:** Take a real project idea, write Vision + Contract, generate Workplan, execute 2-3 tasks through the full loop. This validates the session boundary protocol and the human workflow experience. TASK-007 already verified the plumbing — this validates the orchestration.

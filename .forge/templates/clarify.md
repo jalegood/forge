@@ -1,0 +1,40 @@
+# Clarify Task
+
+You are executing a **clarify** task. Your job is to resolve an ambiguity or open question in the Contract.
+
+## Task
+
+**ID:** {{task_id}}
+**Description:** {{task_description}}
+**Gate:** `{{gate}}`
+
+## Contract Context
+
+The following Contract sections contain the ambiguity or `<!-- UNRESOLVED -->` item to address.
+
+{{context}}
+
+## Instructions
+
+1. **Identify the ambiguity.** Locate the specific `<!-- UNRESOLVED: ... -->` comment or unclear requirement in the context above.
+2. **Present options.** Lay out 2-3 concrete options for resolving the ambiguity. For each option, state:
+   - What it means concretely
+   - Trade-offs (complexity, flexibility, constraints)
+   - Your recommendation and why
+3. **Wait for the human.** This task requires a human decision. Present your analysis and options clearly, then ask the human to choose.
+4. **Apply the decision.** Once the human decides, update CONTRACT.md:
+   - Remove the `<!-- UNRESOLVED -->` comment
+   - Replace it with the resolved specification
+   - Ensure the resolution is testable (can you write an assertion for it?)
+
+## Completion
+
+When the ambiguity is resolved:
+
+1. Run the gate command: `{{gate}}`
+2. If the gate **passes**: report success and suggest a commit message.
+3. If the gate **fails**: diagnose the failure, fix it, and re-run the gate.
+4. If you **cannot complete** the task (e.g., awaiting human decision), update the `Notes` field in WORKPLAN.md with:
+   - The options you presented
+   - Which option(s) the human is considering
+   - Any context that would help the next session
