@@ -6,15 +6,15 @@
 
 Forge operates on these file artifacts:
 
-| Artifact | Path | Owner | Purpose |
-|---|---|---|---|
-| Vision | `.forge/VISION.md` | Human (100%) | Immutable project direction — what, who, pillars |
-| Contract | `.forge/CONTRACT.md` | Human (80%) / AI (20%) | Hard constraints, interfaces, rules — the automation boundary |
-| Workplan | `.forge/WORKPLAN.md` | AI (80%) / Human (20%) | Dependency-ordered task list, one task per session |
-| Templates | `.forge/templates/*.md` | Forge-managed | Prompt templates per task type, injected fresh each session |
-| Commands | `.claude/commands/forge-*.md` | Forge-managed | Slash command definitions for Claude Code |
-| Settings | `.claude/settings.json` | Human-configured | Hook definitions for deterministic enforcement |
-| CLAUDE.md | `CLAUDE.md` (project root) | Human-configured | Minimal pipeline pointer (3 lines max) |
+| Artifact  | Path                          | Owner                  | Purpose                                                       |
+| --------- | ----------------------------- | ---------------------- | ------------------------------------------------------------- |
+| Vision    | `.forge/VISION.md`            | Human (100%)           | Immutable project direction — what, who, pillars              |
+| Contract  | `.forge/CONTRACT.md`          | Human (80%) / AI (20%) | Hard constraints, interfaces, rules — the automation boundary |
+| Workplan  | `.forge/WORKPLAN.md`          | AI (80%) / Human (20%) | Dependency-ordered task list, one task per session            |
+| Templates | `.forge/templates/*.md`       | Forge-managed          | Prompt templates per task type, injected fresh each session   |
+| Commands  | `.claude/commands/forge-*.md` | Forge-managed          | Slash command definitions for Claude Code                     |
+| Settings  | `.claude/settings.json`       | Human-configured       | Hook definitions for deterministic enforcement                |
+| CLAUDE.md | `CLAUDE.md` (project root)    | Human-configured       | Minimal pipeline pointer (3 lines max)                        |
 
 ### Relationships
 
@@ -64,17 +64,20 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
 ```
 
 **End of session (gate passes):**
+
 1. `forge-next` marks task `done` in WORKPLAN.md
 2. Human commits code + updated WORKPLAN.md together
 3. Human runs `/clear`
 
 **End of session (incomplete):**
+
 1. `forge-next` writes a `Notes` entry: what was done, what remains, decisions made
 2. Human commits partial progress or stashes
 3. Task stays `active`
 4. Human runs `/clear`
 
 **Start of session:**
+
 1. `forge-next` reads WORKPLAN.md
 2. If resuming an `active` task, `Notes` field provides continuity
 3. Fresh context window — full reasoning capacity
@@ -85,7 +88,7 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
 
 - **Reads:** `.forge/VISION.md` (What/Who/Pillars format), `.forge/CONTRACT.md` (sections: Data Model, State Machines, Interfaces, Rules, Boundaries), `.forge/WORKPLAN.md` (if exists)
 - **Does:**
-  - On first run: scaffolds `.forge/` if needed (creates VISION.md, CONTRACT.md, WORKPLAN.md, and `templates/` with scaffold.md, feature.md, clarify.md, refactor.md, fix.md, investigate.md), writes `.claude/settings.json` if absent (see Hook Configuration), generates WORKPLAN.md
+  - On first run: scaffolds `.forge/` if needed (creates VISION.md, CONTRACT.md, WORKPLAN.md, and `templates/` with scaffold.md, feature.md, clarify.md, refactor.md, fix.md, investigate.md), writes `.claude/settings.json` if absent (see Hook Configuration), appends the integration block to `CLAUDE.md` if not already present, generates WORKPLAN.md
   - On subsequent runs: regenerates only `pending` tasks; preserves `done` and `active` tasks exactly as-is
   - Orders tasks as a dependency DAG — no task runs before its `Depends` entries are all `done`
 - **Output task format:** Each task in WORKPLAN.md uses this structure: `## [TASK-XXX] Description` followed by fields — Status (`pending` for new tasks), Type (`scaffold|feature|clarify|refactor|fix|investigate`), Depends (`none` or comma-separated task IDs), Context (manifest references like `CONTRACT#section-name`), Gate (shell command or `manual:` prefix), Notes (empty for new tasks). Task IDs are sequential and unique (TASK-001, TASK-002, ...).
@@ -134,14 +137,14 @@ Templates are ~30-50 lines. They are injected fresh each session.
 
 ### Task Types
 
-| Type | Purpose | Default Gate Style |
-|---|---|---|
-| `scaffold` | Project setup, config, boilerplate | Structural checks |
-| `feature` | Vertical slice of functionality | Test suite + build |
-| `clarify` | Resolve `<!-- UNRESOLVED -->` in Contract | Contract updated, ambiguity removed |
-| `refactor` | Improve structure, preserve behavior | Existing tests pass |
-| `fix` | Repair broken gate or bug | Original failing command passes |
-| `investigate` | Diagnose issues, explore unknowns | `manual:` — findings documented in Notes |
+| Type          | Purpose                                   | Default Gate Style                       |
+| ------------- | ----------------------------------------- | ---------------------------------------- |
+| `scaffold`    | Project setup, config, boilerplate        | Structural checks                        |
+| `feature`     | Vertical slice of functionality           | Test suite + build                       |
+| `clarify`     | Resolve `<!-- UNRESOLVED -->` in Contract | Contract updated, ambiguity removed      |
+| `refactor`    | Improve structure, preserve behavior      | Existing tests pass                      |
+| `fix`         | Repair broken gate or bug                 | Original failing command passes          |
+| `investigate` | Diagnose issues, explore unknowns         | `manual:` — findings documented in Notes |
 
 Each type has a corresponding prompt template in `.forge/templates/`. The task type determines which template `/forge-next` loads for execution.
 
@@ -233,12 +236,12 @@ Splitting mid-session is a normal workflow event, not a failure.
 
 Gates validate deliverable structure, not quality. Different deliverable types require different gate strategies:
 
-| Deliverable Type | Gate Strategy | Example |
-|---|---|---|
-| Code | Test suite / build command | `npm test && npm run build` |
-| Config / JSON | Parse validation + key check | `node -e "JSON.parse(require('fs').readFileSync('f.json','utf8'))"` |
-| Markdown artifacts | Structural check (required sections, slots, line count) | `grep -q '{{context}}' file.md && test $(wc -l < file.md) -gt 10` |
-| Human-judgment deliverables | `manual:` prefix — not automated | `manual: Verify the workflow completes 2-3 full cycles` |
+| Deliverable Type            | Gate Strategy                                           | Example                                                             |
+| --------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------- |
+| Code                        | Test suite / build command                              | `npm test && npm run build`                                         |
+| Config / JSON               | Parse validation + key check                            | `node -e "JSON.parse(require('fs').readFileSync('f.json','utf8'))"` |
+| Markdown artifacts          | Structural check (required sections, slots, line count) | `grep -q '{{context}}' file.md && test $(wc -l < file.md) -gt 10`   |
+| Human-judgment deliverables | `manual:` prefix — not automated                        | `manual: Verify the workflow completes 2-3 full cycles`             |
 
 **The `manual:` gate type:** When a gate value starts with `manual:`, `/forge-next` does not run a shell command. Instead, it presents the description to the human and asks for pass/fail confirmation. Use this for deliverables that cannot be structurally validated (e.g., end-to-end workflow validation, UX review).
 

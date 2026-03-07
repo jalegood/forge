@@ -261,6 +261,18 @@ Gate is `manual:` — present your findings to the human and ask for pass/fail c
 
 > Note: The `PreToolUse` commit-blocking hook is intentionally omitted until test infrastructure exists. Add it manually once tests are in place.
 
+**`CLAUDE.md`** — append the integration block if not already present:
+
+```markdown
+## Forge
+
+- Pipeline: .forge/ (VISION.md, CONTRACT.md, WORKPLAN.md)
+- Workflow: /forge-next → review → commit → /clear
+- Do not modify CONTRACT.md without asking first
+```
+
+> If `CLAUDE.md` does not exist, create it with only the integration block. If it already exists, check whether it contains `Pipeline: .forge/` — if not, append the block at the end. Never overwrite or truncate existing content.
+
 ### 3. Read context
 
 Read the following files in full:
