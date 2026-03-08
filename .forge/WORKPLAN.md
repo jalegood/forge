@@ -63,11 +63,38 @@
 - **Gate:** `bash .forge/tests/smoke.sh`
 - **Notes:** Create a test script that validates the pipeline plumbing: command files exist and reference correct artifacts, WORKPLAN.md task format is parseable (status/type/depends/context/gate fields present), settings.json is valid JSON with hook config, CLAUDE.md has the integration block. This is structural validation only — does not test Claude execution.
 
-## [TASK-008] End-to-end manual validation
+## [TASK-008] Update feature.md and fix.md templates with test-first ordering instructions
+
+- **Status:** done
+- **Type:** feature
+- **Depends:** TASK-007
+- **Context:** CONTRACT#rules/test-first-convention, CONTRACT#interfaces/prompt-template-interface
+- **Gate:** `grep -q "Write tests" .forge/templates/feature.md && grep -q "Write a failing test" .forge/templates/fix.md && echo "Test-first instructions present"`
+- **Notes:** Files: .forge/templates/feature.md, .forge/templates/fix.md, .forge/WORKPLAN.md
+
+## [TASK-009] Update /forge-next to append Files manifest on task completion
 
 - **Status:** pending
 - **Type:** feature
 - **Depends:** TASK-007
-- **Context:** CONTRACT#state-machines/session-lifecycle, CONTRACT#rules/session-boundary-protocol
-- **Gate:** `manual: Complete 2-3 tasks through the full /forge-next → review → commit → /clear cycle on a sample project`
-- **Notes:** Take a real project idea, write Vision + Contract, generate Workplan, execute 2-3 tasks through the full loop. This validates the session boundary protocol and the human workflow experience. TASK-007 already verified the plumbing — this validates the orchestration.
+- **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#rules/traceability
+- **Gate:** `grep -qi "Files\|file manifest\|git diff" .claude/commands/forge-next.md && echo "forge-next file manifest present"`
+- **Notes:**
+
+## [TASK-010] Update /forge-plan to enforce test commands in feature and fix gates
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-007
+- **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#rules/test-first-convention, CONTRACT#rules/gate-patterns
+- **Gate:** `grep -qi "test.*command\|test-first\|feature.*fix" .claude/commands/forge-plan.md && echo "forge-plan test gate enforcement present"`
+- **Notes:**
+
+## [TASK-011] End-to-end manual validation of enhanced workflow
+
+- **Status:** pending
+- **Type:** investigate
+- **Depends:** TASK-008, TASK-009, TASK-010
+- **Context:** CONTRACT#state-machines/session-lifecycle, CONTRACT#rules/session-boundary-protocol, CONTRACT#rules/test-first-convention, CONTRACT#rules/traceability
+- **Gate:** `manual: Complete 2-3 tasks through the full /forge-next → review → commit → /clear cycle. Verify: (1) feature/fix templates prompt test-first ordering, (2) completed task Notes contain a Files: line, (3) suggested commit message ends with (TASK-XXX)`
+- **Notes:**

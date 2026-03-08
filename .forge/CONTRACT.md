@@ -110,7 +110,7 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
   5. Injects resolved context into the template at `{{context}}`, plus task details into `{{task_id}}`, `{{task_description}}`, `{{gate}}`
   6. Executes the task following the template instructions
   7. Runs the gate command. If the gate starts with `manual:`, presents the description to the human and asks for pass/fail confirmation instead of running a shell command.
-  8. On pass: marks `done`, suggests commit message
+  8. On pass: marks `done`, runs `git diff --name-only HEAD` (or staged files if not yet committed) to collect touched files, appends `Files: <comma-separated list>` to the task's Notes field, suggests commit message ending with `(TASK-XXX)`
   9. On fail: keeps `active`, writes diagnostic to `Notes`
 - **Outputs:** Executed code changes, gate result, updated WORKPLAN.md
 
@@ -232,6 +232,61 @@ Splitting mid-session is a normal workflow event, not a failure.
 - `forge-plan` preserves `done` and `active` tasks on re-run; only regenerates `pending` tasks.
 - Task IDs are sequential and unique (TASK-001, TASK-002, ...).
 
+### Contract-First
+
+Every task must derive from a Contract section that covers its deliverable. The Contract must specify the interface, rule, or data model governing the deliverable — not merely mention that something exists.
+
+A task without Contract coverage cannot be correctly sized, manifested, or gated.
+
+If planned work has no Contract coverage:
+
+1. The agent drafts the missing CONTRACT language (or surfaces it from the planning input if already present).
+2. The human approves — either applying the changes directly or signalling the agent to write them.
+3. Once CONTRACT.md is updated, task generation proceeds: either the agent continues immediately (if it wrote the changes), or the human re-invokes `/forge-plan` with the relevant section anchors.
+
+No implementation tasks are generated until coverage exists.
+
+This is the spec-first invariant: the Contract is the spec, tasks are implementations, gates are test runs. Work not covered by the Contract is out of scope — not skipped, but deferred until specified.
+
+**Exemptions:** `/forge-plan` on a brand-new project may scaffold stub tasks to prompt the human to fill in VISION.md and CONTRACT.md before substantive planning begins.
+
+### Test-First Convention
+
+`feature` and `fix` tasks follow test-first development:
+
+1. Write tests that specify expected behavior before writing implementation.
+2. Run the test command to confirm tests exercise new behavior.
+3. Write implementation to satisfy the tests.
+4. Run the full gate command.
+
+**Enforcement:**
+
+- Gate commands for `feature` and `fix` tasks must include a test command (e.g., `npm test && npm run build`). `/forge-plan` generates these; the human verifies.
+- The PreToolUse commit hook blocks commits when the test command fails. This is enabled after test infrastructure exists.
+- Test-first *ordering* is a convention. The human reviewer verifies it by reading the diff — tests should appear as additions alongside or before implementation code.
+
+**Exemptions:** `scaffold` tasks (create test infrastructure), `investigate` tasks (manual gates), `clarify` tasks (no code). `refactor` tasks already have tests — write characterization tests first if coverage is insufficient.
+
+### Traceability
+
+Task IDs are the traceability anchor. Every task leaves a grep-able trail:
+
+**Commit messages** must end with `(TASK-XXX)`:
+
+```text
+Add user auth middleware (TASK-012)
+```
+
+`/forge-next` generates this format automatically when suggesting commit messages.
+
+**File manifest** — when `/forge-next` marks a task `done`, it appends a `Files` line to the task's Notes listing the files created or modified (derived from `git diff --name-only` against the task's starting commit). This records the requirement→file mapping inside WORKPLAN.md without relying on code annotations.
+
+**Discovery:**
+
+- Find commits: `git log --oneline --grep="TASK-007"`
+- Find files: look at the `Files` line in the task's Notes, or `git log --name-only --grep="TASK-007"`
+- Full diff: `git log -p --grep="TASK-007"`
+
 ### Gate Patterns
 
 Gates validate deliverable structure, not quality. Different deliverable types require different gate strategies:
@@ -260,7 +315,7 @@ Gates validate deliverable structure, not quality. Different deliverable types r
 
 ### What Requires Human Approval
 
-- Any modification to CONTRACT.md.
+- Any modification to CONTRACT.md — human approval is required before changes are applied. The agent may write the changes after explicit approval.
 - Workplan review after `/forge-plan` generates or regenerates tasks.
 - The commit step after gate passes — human reviews code before committing.
 - Resolving `clarify` tasks (these require human decisions).

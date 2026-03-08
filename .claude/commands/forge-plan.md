@@ -3,6 +3,8 @@
 Read `.forge/VISION.md` and `.forge/CONTRACT.md`, then generate or update `.forge/WORKPLAN.md`.
 This command is **idempotent** — safe to re-run at any point.
 
+**Planning scope:** If the user provides text after the command (e.g., a file reference or description), treat it as the planning input that scopes what to plan. If no input is provided, plan the full set of deliverables implied by VISION.md and CONTRACT.md.
+
 ## Steps
 
 ### 1. Detect run type
@@ -40,7 +42,7 @@ Create any missing files. Never overwrite files that already exist.
 <!-- Key entities, their fields, and relationships -->
 
 ## State Machines
-<!-- Task or object lifecycles as ASCII state diagrams -->
+<!-- Task or object lifecycles as ASCII or mermaid state diagrams -->
 
 ## Interfaces
 <!-- Command definitions, API shapes, file formats -->
@@ -282,6 +284,26 @@ Read the following files in full:
 - **`.forge/WORKPLAN.md`** (if it exists) — to identify tasks to preserve
 
 If VISION.md is still a template stub (contains `<!-- What this project builds`), stop and tell the user to fill in VISION.md and CONTRACT.md before running `/forge-plan`.
+
+### 3b. Validate Contract coverage (Contract-First check)
+
+Before generating any tasks, verify that every planned deliverable has Contract coverage.
+
+For each deliverable implied by the planning input, identify the CONTRACT section(s) that specify it — interface, rule, or data model. Coverage means the section specifies the *what*, not merely mentions that something exists.
+
+**If the planning input already contains proposed CONTRACT language** (e.g., the user points to a spec document with exact rule/interface text): surface that language directly as the proposed amendment — do not re-draft it.
+
+**If unspecified work exists:**
+
+1. Draft the missing CONTRACT language for each gap (or extract it from the planning input).
+2. Present it to the human with the proposed language and two options:
+   - **"Apply it yourself"** — edit CONTRACT.md directly, then run: `/forge-plan "generate tasks for: CONTRACT#section/name, ..."` using the actual anchors for the added sections.
+   - **"Apply it for me"** — reply with approval and the agent will write the changes to CONTRACT.md, then immediately continue to generate tasks.
+3. Stop. Await the human's choice before proceeding.
+
+**If all work is covered:** proceed to step 4.
+
+This is the Contract-First invariant — see CONTRACT#rules/contract-first.
 
 ### 4. Identify tasks to preserve
 
