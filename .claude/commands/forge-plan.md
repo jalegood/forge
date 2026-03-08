@@ -381,6 +381,16 @@ Each gate validates the deliverable structurally:
 
 Prefer automated gates. Use `manual:` only when no structural check is possible.
 
+**Test-first enforcement for `feature` and `fix` tasks:**
+
+Gates for `feature` and `fix` tasks **must** include a test command. This is non-negotiable — it enforces the test-first convention at the gate level.
+
+- If a test runner exists (e.g., `npm test`, `pytest`, `go test ./...`), use it: `npm test && npm run build`
+- If no test runner is detected yet, use a placeholder that will fail until tests are added: `test -f package.json && npm test`
+- **Never generate a `feature` or `fix` gate that contains only structural checks** (grep, file existence, line counts) — those are for `scaffold` tasks.
+
+When generating a gate for a `feature` or `fix` task, verify: does this gate command invoke a test suite? If not, revise it before writing to WORKPLAN.md.
+
 ### 8. Write WORKPLAN.md
 
 Write to `.forge/WORKPLAN.md`:

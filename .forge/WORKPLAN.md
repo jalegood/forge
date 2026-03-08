@@ -83,12 +83,12 @@
 
 ## [TASK-010] Update /forge-plan to enforce test commands in feature and fix gates
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-007
 - **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#rules/test-first-convention, CONTRACT#rules/gate-patterns
 - **Gate:** `grep -qi "test.*command\|test-first\|feature.*fix" .claude/commands/forge-plan.md && echo "forge-plan test gate enforcement present"`
-- **Notes:**
+- **Notes:** Files: .claude/commands/forge-plan.md, .forge/WORKPLAN.md
 
 ## [TASK-011] End-to-end manual validation of enhanced workflow
 
