@@ -70,16 +70,16 @@
 - **Depends:** TASK-007
 - **Context:** CONTRACT#rules/test-first-convention, CONTRACT#interfaces/prompt-template-interface
 - **Gate:** `grep -q "Write tests" .forge/templates/feature.md && grep -q "Write a failing test" .forge/templates/fix.md && echo "Test-first instructions present"`
-- **Notes:** Files: .forge/templates/feature.md, .forge/templates/fix.md, .forge/WORKPLAN.md
+- **Notes:**
 
 ## [TASK-009] Update /forge-next to append Files manifest on task completion
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-007
 - **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#rules/traceability
 - **Gate:** `grep -qi "Files\|file manifest\|git diff" .claude/commands/forge-next.md && echo "forge-next file manifest present"`
-- **Notes:**
+- **Notes:** Files: .claude/commands/forge-next.md, .forge/WORKPLAN.md
 
 ## [TASK-010] Update /forge-plan to enforce test commands in feature and fix gates
 

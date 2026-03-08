@@ -139,8 +139,13 @@ When you believe the task is complete, run the gate from the task's Gate field.
    ```
    - **Status:** done
    ```
-2. Report success to the user.
-3. Suggest a commit message:
+2. Collect touched files: run `git diff --name-only HEAD` (or `git diff --name-only --cached` if changes are staged but not committed). Take the resulting file list and append a `Files:` line to the task's Notes field in WORKPLAN.md:
+   ```
+   - **Notes:** Files: path/to/file1.md, path/to/file2.ts
+   ```
+   If the Notes field already has content, append on a new line after existing content.
+3. Report success to the user.
+4. Suggest a commit message:
    ```
    [Description] (TASK-XXX)
    ```
