@@ -16,11 +16,14 @@ The following Contract sections define the expected behavior that is currently b
 
 ## Instructions
 
+Follow this test-first ordering strictly:
+
 1. **Reproduce first.** Run the failing gate command or test to see the actual error. Don't guess at the problem.
 2. **Read the diagnostics.** Check the `Notes` field from the previous task — it may contain error output or a diagnosis.
-3. **Root cause, not symptoms.** Find why it broke, not just what broke. A surface fix that passes the gate but leaves the underlying issue will fail again downstream.
-4. **Minimal fix.** Change only what's necessary to fix the issue. Don't refactor, don't improve, don't clean up surrounding code.
-5. **Verify the original gate.** The gate for this fix task should include the original failing command. Make sure that specific command passes.
+3. **Write a failing test** that captures the bug behavior. This anchors the fix and prevents regression. Skip this step only if an existing test already isolates the failure.
+4. **Root cause, not symptoms.** Find why it broke, not just what broke. A surface fix that passes the gate but leaves the underlying issue will fail again downstream.
+5. **Minimal fix.** Change only what's necessary to fix the issue. Don't refactor, don't improve, don't clean up surrounding code.
+6. **Verify the original gate.** The gate for this fix task should include the original failing command. Make sure that specific command passes.
 
 ## Completion
 
