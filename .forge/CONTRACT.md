@@ -84,12 +84,27 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
 
 ## Interfaces
 
+### Command: `/forge-init`
+
+- **Reads:** nothing (creates from built-in templates only)
+- **Does:**
+  - Creates `.forge/VISION.md` if absent (stub template with What/Who/Pillars sections)
+  - Creates `.forge/CONTRACT.md` if absent (stub template with all top-level sections)
+  - Creates `.forge/templates/` directory with all 6 template files if absent: scaffold.md, feature.md, clarify.md, refactor.md, fix.md, investigate.md
+  - Writes `.claude/settings.json` if absent (PostToolUse lint hook; PreToolUse commit hook disabled by default)
+  - Appends the Forge integration block to `CLAUDE.md` if not already present
+  - Never overwrites any file that already exists
+  - On completion: tells the user to fill in VISION.md and CONTRACT.md, then run `/forge-plan`
+- **Outputs:** Scaffold files listed above
+- **When to run:** Once, at project setup. Safe to re-run — idempotent due to no-overwrite rule.
+- **Template refresh:** To update templates to the latest versions, delete `.forge/templates/` and re-run `/forge-init`.
+
 ### Command: `/forge-plan`
 
 - **Reads:** `.forge/VISION.md` (What/Who/Pillars format), `.forge/CONTRACT.md` (sections: Data Model, State Machines, Interfaces, Rules, Boundaries), `.forge/WORKPLAN.md` (if exists)
 - **Does:**
-  - On first run: scaffolds `.forge/` if needed (creates VISION.md, CONTRACT.md, WORKPLAN.md, and `templates/` with scaffold.md, feature.md, clarify.md, refactor.md, fix.md, investigate.md), writes `.claude/settings.json` if absent (see Hook Configuration), appends the integration block to `CLAUDE.md` if not already present, generates WORKPLAN.md
-  - On subsequent runs: regenerates only `pending` tasks; preserves `done` and `active` tasks exactly as-is
+  - Assumes scaffold has already run (via `/forge-init`). Always reads context and validates/generates the workplan.
+  - Regenerates only `pending` tasks; preserves `done` and `active` tasks exactly as-is.
   - Orders tasks as a dependency DAG — no task runs before its `Depends` entries are all `done`
 - **Output task format:** Each task in WORKPLAN.md uses this structure: `## [TASK-XXX] Description` followed by fields — Status (`pending` for new tasks), Type (`scaffold|feature|clarify|refactor|fix|investigate`), Depends (`none` or comma-separated task IDs), Context (manifest references like `CONTRACT#section-name`), Gate (shell command or `manual:` prefix), Notes (empty for new tasks). Task IDs are sequential and unique (TASK-001, TASK-002, ...).
 - **Task sizing:** One task per concern. If a description uses "and" connecting two distinct pieces of work, split it. Each task should complete in a single clean session.
@@ -106,7 +121,7 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
   1. Selects the target task (see Task selection above)
   2. Resolves the context manifest: parses the `Context` field references (e.g., `CONTRACT#interfaces/command-forge-status`), extracts matching markdown sections from CONTRACT.md (each section runs from its header through the next same-level header), concatenates them
   3. Marks task `active` in WORKPLAN.md
-  4. Loads the prompt template from `.forge/templates/{type}.md` matching the task's Type field
+  4. Loads the prompt template from `.forge/templates/{type}.md` matching the task's Type field. If the file does not exist, stop and tell the user: "Template file missing. Run `/forge-init` to create project templates." Do not proceed with inline fallbacks.
   5. Injects resolved context into the template at `{{context}}`, plus task details into `{{task_id}}`, `{{task_description}}`, `{{gate}}`
   6. Executes the task following the template instructions
   7. Runs the gate command. If the gate starts with `manual:`, presents the description to the human and asks for pass/fail confirmation instead of running a shell command.
@@ -332,5 +347,5 @@ This avoids broken hooks on first run while ensuring deterministic enforcement i
 ### Platform Constraints
 
 - Slash commands have a character budget — excess commands may be silently excluded.
-- Forge uses exactly 3 commands to minimize budget consumption.
+- Forge uses exactly 4 commands to minimize budget consumption: forge-init, forge-plan, forge-next, forge-status.
 - Users should run `/context` to verify commands loaded if behavior seems wrong.

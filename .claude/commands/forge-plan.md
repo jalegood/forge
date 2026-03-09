@@ -24,12 +24,15 @@ Create any missing files. Never overwrite files that already exist.
 # Vision
 
 ## What
+
 <!-- What this project builds, in 1-2 sentences -->
 
 ## Who
+
 <!-- Target users or stakeholders -->
 
 ## Pillars
+
 <!-- 3-5 core principles that constrain every design decision -->
 ```
 
@@ -39,18 +42,23 @@ Create any missing files. Never overwrite files that already exist.
 # Contract
 
 ## Data Model
+
 <!-- Key entities, their fields, and relationships -->
 
 ## State Machines
+
 <!-- Task or object lifecycles as ASCII or mermaid state diagrams -->
 
 ## Interfaces
+
 <!-- Command definitions, API shapes, file formats -->
 
 ## Rules
+
 <!-- Hard constraints on behavior, sizing, and validation -->
 
 ## Boundaries
+
 <!-- What this system does not do; what requires human approval -->
 ```
 
@@ -289,7 +297,7 @@ If VISION.md is still a template stub (contains `<!-- What this project builds`)
 
 Before generating any tasks, verify that every planned deliverable has Contract coverage.
 
-For each deliverable implied by the planning input, identify the CONTRACT section(s) that specify it — interface, rule, or data model. Coverage means the section specifies the *what*, not merely mentions that something exists.
+For each deliverable implied by the planning input, identify the CONTRACT section(s) that specify it — interface, rule, or data model. Coverage means the section specifies the _what_, not merely mentions that something exists.
 
 **If the planning input already contains proposed CONTRACT language** (e.g., the user points to a spec document with exact rule/interface text): surface that language directly as the proposed amendment — do not re-draft it.
 
@@ -329,20 +337,21 @@ Analyze VISION.md and CONTRACT.md to determine the full set of deliverables. For
 **Task ID assignment:** Sequential integers, TASK-001 onward. On subsequent runs, new tasks continue from the highest existing ID + 1.
 
 **Task sizing rules:**
+
 - One task per concern. If a description uses "and" connecting two distinct pieces of work, split it into two tasks.
 - Each task must be completable in a single focused Claude Code session (one prompt + one review cycle).
 - Scaffold tasks may be slightly larger (boilerplate is low-risk). Feature tasks must be tight.
 
 **Task types:**
 
-| Type | Purpose | Gate style |
-|---|---|---|
-| `scaffold` | Setup, config, boilerplate | Structural file/content checks |
-| `feature` | Vertical slice of functionality | Test suite + build |
-| `clarify` | Resolve `<!-- UNRESOLVED -->` in CONTRACT.md | Contract updated, ambiguity removed |
-| `refactor` | Improve structure, preserve behavior | Existing tests still pass |
-| `fix` | Repair broken gate or bug | Original failing command now passes |
-| `investigate` | Diagnose issues, explore unknowns | `manual:` gate |
+| Type          | Purpose                                      | Gate style                          |
+| ------------- | -------------------------------------------- | ----------------------------------- |
+| `scaffold`    | Setup, config, boilerplate                   | Structural file/content checks      |
+| `feature`     | Vertical slice of functionality              | Test suite + build                  |
+| `clarify`     | Resolve `<!-- UNRESOLVED -->` in CONTRACT.md | Contract updated, ambiguity removed |
+| `refactor`    | Improve structure, preserve behavior         | Existing tests still pass           |
+| `fix`         | Repair broken gate or bug                    | Original failing command now passes |
+| `investigate` | Diagnose issues, explore unknowns            | `manual:` gate                      |
 
 **Dependency DAG:** No task may appear before all of its `Depends` entries in the file. Within the same dependency level, order by implementation risk — lower risk first.
 
@@ -364,6 +373,7 @@ Do not generate a task with an incomplete manifest. The completeness test is the
 **Context budget:** Resolved context must not exceed ~200 lines of Contract content per task. If a single task's manifest exceeds this, the task scope is too broad or the Contract section needs splitting.
 
 **Reference format:**
+
 - `CONTRACT#section-name` — top-level section
 - `CONTRACT#section-name/subsection` — subsection
 - `filename#section-name` — for multi-file contracts
@@ -372,12 +382,12 @@ Do not generate a task with an incomplete manifest. The completeness test is the
 
 Each gate validates the deliverable structurally:
 
-| Deliverable | Gate strategy | Example |
-|---|---|---|
-| Code | Test suite + build | `npm test && npm run build` |
-| Config/JSON | Parse + key check | `node -e "JSON.parse(require('fs').readFileSync('f.json','utf8'))"` |
-| Markdown artifact | Required content + line count | `grep -q '{{context}}' file.md && test $(wc -l < file.md) -gt 10` |
-| Human judgment | `manual:` prefix | `manual: Verify the workflow completes 2-3 full cycles` |
+| Deliverable       | Gate strategy                 | Example                                                             |
+| ----------------- | ----------------------------- | ------------------------------------------------------------------- |
+| Code              | Test suite + build            | `npm test && npm run build`                                         |
+| Config/JSON       | Parse + key check             | `node -e "JSON.parse(require('fs').readFileSync('f.json','utf8'))"` |
+| Markdown artifact | Required content + line count | `grep -q '{{context}}' file.md && test $(wc -l < file.md) -gt 10`   |
+| Human judgment    | `manual:` prefix              | `manual: Verify the workflow completes 2-3 full cycles`             |
 
 Prefer automated gates. Use `manual:` only when no structural check is possible.
 
@@ -401,6 +411,7 @@ Write to `.forge/WORKPLAN.md`:
 ### 9. Report and prompt human review
 
 Tell the user:
+
 - First run or subsequent run
 - How many tasks were generated (or regenerated)
 - Which tasks were preserved unchanged
@@ -408,6 +419,7 @@ Tell the user:
 Then say:
 
 > **Review `.forge/WORKPLAN.md` before proceeding.** Verify:
+>
 > - Each task is sized for one session (no "and"-connected concerns)
 > - Each manifest lists everything needed to execute independently
 > - Dependencies are correct — no task depends on something later in the file
