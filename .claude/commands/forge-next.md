@@ -94,7 +94,7 @@ Do this **before** beginning execution — if the session is interrupted, the ta
 
 ### 5. Load and fill the prompt template
 
-1. Read `.forge/templates/{type}.md` where `{type}` is the task's Type field (e.g., `feature`, `scaffold`, `clarify`).
+1. Read `.forge/templates/{type}.md` where `{type}` is the task's Type field (e.g., `feature`, `scaffold`, `clarify`). If the file does not exist, stop and tell the user: "Template file missing. Run `/forge-init` to create project templates." Do not proceed with inline fallbacks.
 
 2. Replace template slots with resolved values:
    - `{{context}}` → the concatenated resolved context from step 3

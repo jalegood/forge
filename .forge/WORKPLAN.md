@@ -110,12 +110,12 @@
 
 ## [TASK-013] Update /forge-next to fail-fast on missing template file
 
-- **Status:** pending
+- **Status:** done
 - **Type:** scaffold
 - **Depends:** TASK-012
 - **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#interfaces/command-forge-init
 - **Gate:** `bash .forge/tests/smoke.sh && grep -qi "forge-init\|template.*missing\|missing.*template" .claude/commands/forge-next.md && echo "forge-next fail-fast behavior present"`
-- **Notes:**
+- **Notes:** Files: .claude/commands/forge-next.md, .forge/WORKPLAN.md
 
 ## [TASK-014] End-to-end validation of forge-init entry point
 
