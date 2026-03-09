@@ -101,12 +101,12 @@
 
 ## [TASK-012] Simplify /forge-plan — remove first-run scaffold step
 
-- **Status:** pending
+- **Status:** done
 - **Type:** refactor
 - **Depends:** TASK-012
 - **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#interfaces/command-forge-init
 - **Gate:** `bash .forge/tests/smoke.sh && ! grep -q "First-run scaffold" .claude/commands/forge-plan.md && echo "forge-plan scaffold step removed"`
-- **Notes:**
+- **Notes:** Files: .claude/commands/forge-plan.md, .forge/WORKPLAN.md
 
 ## [TASK-013] Update /forge-next to fail-fast on missing template file
 

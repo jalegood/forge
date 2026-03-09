@@ -7,283 +7,7 @@ This command is **idempotent** — safe to re-run at any point.
 
 ## Steps
 
-### 1. Detect run type
-
-Check whether `.forge/WORKPLAN.md` exists and contains any tasks with status `done` or `active`.
-
-- **First run:** file is absent, or all tasks are `pending`.
-- **Subsequent run:** at least one task is `done` or `active`.
-
-### 2. First-run scaffold (first run only)
-
-Create any missing files. Never overwrite files that already exist.
-
-**`.forge/VISION.md`** — if absent, create with this template:
-
-```markdown
-# Vision
-
-## What
-
-<!-- What this project builds, in 1-2 sentences -->
-
-## Who
-
-<!-- Target users or stakeholders -->
-
-## Pillars
-
-<!-- 3-5 core principles that constrain every design decision -->
-```
-
-**`.forge/CONTRACT.md`** — if absent, create with this template:
-
-```markdown
-# Contract
-
-## Data Model
-
-<!-- Key entities, their fields, and relationships -->
-
-## State Machines
-
-<!-- Task or object lifecycles as ASCII or mermaid state diagrams -->
-
-## Interfaces
-
-<!-- Command definitions, API shapes, file formats -->
-
-## Rules
-
-<!-- Hard constraints on behavior, sizing, and validation -->
-
-## Boundaries
-
-<!-- What this system does not do; what requires human approval -->
-```
-
-**`.forge/templates/scaffold.md`** — if absent:
-
-```markdown
-# Scaffold Task
-
-## Context
-
-{{context}}
-
-## Task
-
-**ID:** {{task_id}}
-**Description:** {{task_description}}
-**Gate:** `{{gate}}`
-
-## Instructions
-
-1. Create or configure the files and structure described in the Context above.
-2. Match shapes, formats, and content exactly as specified — no extras.
-3. When done, run the gate command below.
-
-## Completion
-
-Run the gate: `{{gate}}`
-
-- **Passes:** mark {{task_id}} as `done` in WORKPLAN.md, report success, suggest a commit message.
-- **Fails:** diagnose the failure, fix it, re-run.
-- **Incomplete:** write to Notes: what was done, what remains, any blockers encountered.
-```
-
-**`.forge/templates/feature.md`** — if absent:
-
-```markdown
-# Feature Task
-
-## Context
-
-{{context}}
-
-## Task
-
-**ID:** {{task_id}}
-**Description:** {{task_description}}
-**Gate:** `{{gate}}`
-
-## Instructions
-
-1. Verify the Contract spec is clear before writing any code.
-2. One concern only — touch one endpoint, one component, or one data flow.
-3. Contract is law — implement exactly what's specified, nothing more.
-4. Match interfaces exactly — downstream tasks depend on correct shapes.
-5. No premature abstractions, no speculative additions.
-6. When done, run the gate command below.
-
-## Completion
-
-Run the gate: `{{gate}}`
-
-- **Passes:** mark {{task_id}} as `done` in WORKPLAN.md, report success, suggest a commit message.
-- **Fails:** diagnose the failure, fix it, re-run.
-- **Incomplete:** write to Notes: what was done, what remains, any blockers encountered.
-```
-
-**`.forge/templates/clarify.md`** — if absent:
-
-```markdown
-# Clarify Task
-
-## Context
-
-{{context}}
-
-## Task
-
-**ID:** {{task_id}}
-**Description:** {{task_description}}
-**Gate:** `{{gate}}`
-
-## Instructions
-
-1. Read the Contract section(s) listed in Context.
-2. Identify the specific ambiguity or gap — quote it.
-3. Propose a resolution. Do not resolve unilaterally — present options if there is real uncertainty.
-4. Once the human approves, update CONTRACT.md with the resolved language.
-5. Remove any `<!-- UNRESOLVED -->` markers that have been addressed.
-
-## Completion
-
-Run the gate: `{{gate}}`
-
-- **Passes:** mark {{task_id}} as `done` in WORKPLAN.md, report success, suggest a commit message.
-- **Fails:** diagnose, fix, re-run.
-- **Incomplete:** write to Notes: what was done, what remains, any blockers encountered.
-```
-
-**`.forge/templates/refactor.md`** — if absent:
-
-```markdown
-# Refactor Task
-
-## Context
-
-{{context}}
-
-## Task
-
-**ID:** {{task_id}}
-**Description:** {{task_description}}
-**Gate:** `{{gate}}`
-
-## Instructions
-
-1. Identify the structural issue. State clearly what property will be preserved.
-2. Make the structural change — behavior must not change.
-3. Run existing tests. If tests fail, stop and diagnose before continuing.
-4. No feature changes, no scope expansion.
-
-## Completion
-
-Run the gate: `{{gate}}`
-
-- **Passes:** mark {{task_id}} as `done` in WORKPLAN.md, report success, suggest a commit message.
-- **Fails:** diagnose, fix, re-run.
-- **Incomplete:** write to Notes: what was done, what remains, any blockers encountered.
-```
-
-**`.forge/templates/fix.md`** — if absent:
-
-```markdown
-# Fix Task
-
-## Context
-
-{{context}}
-
-## Task
-
-**ID:** {{task_id}}
-**Description:** {{task_description}}
-**Gate:** `{{gate}}`
-
-## Instructions
-
-1. Reproduce the failure — confirm the gate currently fails before changing anything.
-2. Identify the root cause. Do not patch symptoms.
-3. Apply the minimal fix that makes the gate pass.
-4. No unrelated changes.
-
-## Completion
-
-Run the gate: `{{gate}}`
-
-- **Passes:** mark {{task_id}} as `done` in WORKPLAN.md, report success, suggest a commit message.
-- **Fails:** diagnose further, fix, re-run.
-- **Incomplete:** write to Notes: what was done, what remains, any blockers encountered.
-```
-
-**`.forge/templates/investigate.md`** — if absent:
-
-```markdown
-# Investigate Task
-
-## Context
-
-{{context}}
-
-## Task
-
-**ID:** {{task_id}}
-**Description:** {{task_description}}
-**Gate:** `{{gate}}`
-
-## Instructions
-
-1. Define what you are trying to learn. State the question explicitly.
-2. Gather evidence — read code, run commands, inspect artifacts.
-3. Write findings in Notes: what you learned, what you ruled out, what remains unknown.
-4. Propose next steps (a fix task, a clarify task, or a design change).
-
-## Completion
-
-Gate is `manual:` — present your findings to the human and ask for pass/fail confirmation.
-
-- **Passes:** mark {{task_id}} as `done` in WORKPLAN.md.
-- **Incomplete:** write to Notes: what was investigated, what remains open.
-```
-
-**`.claude/settings.json`** — write only if this file does not already exist:
-
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo 'File written — add lint/format command here for your stack'"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-> Note: The `PreToolUse` commit-blocking hook is intentionally omitted until test infrastructure exists. Add it manually once tests are in place.
-
-**`CLAUDE.md`** — append the integration block if not already present:
-
-```markdown
-## Forge
-
-- Pipeline: .forge/ (VISION.md, CONTRACT.md, WORKPLAN.md)
-- Workflow: /forge-next → review → commit → /clear
-- Do not modify CONTRACT.md without asking first
-```
-
-> If `CLAUDE.md` does not exist, create it with only the integration block. If it already exists, check whether it contains `Pipeline: .forge/` — if not, append the block at the end. Never overwrite or truncate existing content.
-
-### 3. Read context
+### 1. Read context
 
 Read the following files in full:
 
@@ -293,7 +17,7 @@ Read the following files in full:
 
 If VISION.md is still a template stub (contains `<!-- What this project builds`), stop and tell the user to fill in VISION.md and CONTRACT.md before running `/forge-plan`.
 
-### 3b. Validate Contract coverage (Contract-First check)
+### 2. Validate Contract coverage (Contract-First check)
 
 Before generating any tasks, verify that every planned deliverable has Contract coverage.
 
@@ -309,15 +33,15 @@ For each deliverable implied by the planning input, identify the CONTRACT sectio
    - **"Apply it for me"** — reply with approval and the agent will write the changes to CONTRACT.md, then immediately continue to generate tasks.
 3. Stop. Await the human's choice before proceeding.
 
-**If all work is covered:** proceed to step 4.
+**If all work is covered:** proceed to step 3.
 
 This is the Contract-First invariant — see CONTRACT#rules/contract-first.
 
-### 4. Identify tasks to preserve
+### 3. Identify tasks to preserve
 
 On **subsequent runs**, collect all tasks with status `done` or `active`. These will be written back verbatim — do not alter their description, status, context, gate, or notes in any way.
 
-### 5. Generate tasks
+### 4. Generate tasks
 
 Analyze VISION.md and CONTRACT.md to determine the full set of deliverables. For each deliverable:
 
@@ -355,7 +79,7 @@ Analyze VISION.md and CONTRACT.md to determine the full set of deliverables. For
 
 **Dependency DAG:** No task may appear before all of its `Depends` entries in the file. Within the same dependency level, order by implementation risk — lower risk first.
 
-### 6. Generate context manifests
+### 5. Generate context manifests
 
 For each task, fill the `Context` field with every CONTRACT.md section reference needed to execute the task independently.
 
@@ -378,7 +102,7 @@ Do not generate a task with an incomplete manifest. The completeness test is the
 - `CONTRACT#section-name/subsection` — subsection
 - `filename#section-name` — for multi-file contracts
 
-### 7. Generate gates
+### 6. Generate gates
 
 Each gate validates the deliverable structurally:
 
@@ -401,18 +125,17 @@ Gates for `feature` and `fix` tasks **must** include a test command. This is non
 
 When generating a gate for a `feature` or `fix` task, verify: does this gate command invoke a test suite? If not, revise it before writing to WORKPLAN.md.
 
-### 8. Write WORKPLAN.md
+### 7. Write WORKPLAN.md
 
 Write to `.forge/WORKPLAN.md`:
 
 1. All `done` and `active` tasks, in their original order, byte-for-byte identical.
 2. All newly generated `pending` tasks, ordered by the dependency DAG.
 
-### 9. Report and prompt human review
+### 8. Report and prompt human review
 
 Tell the user:
 
-- First run or subsequent run
 - How many tasks were generated (or regenerated)
 - Which tasks were preserved unchanged
 
@@ -429,7 +152,6 @@ Then say:
 
 ## Constraints
 
-- **Never overwrite** files that already exist during scaffold (VISION.md, CONTRACT.md, settings.json).
 - **Never modify** `done` or `active` tasks on re-run — preserve them exactly.
-- **No side effects** beyond writing WORKPLAN.md (and scaffold files on first run).
+- **No side effects** beyond writing WORKPLAN.md.
 - **Human reviews before execution** — this command does not run any tasks.
