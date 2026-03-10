@@ -17,11 +17,13 @@ Every task gets only the Contract sections it needs (not the whole spec), runs i
 
 ## Quick Start
 
-### 1. Set up the pipeline
+### 1. Bootstrap the pipeline
 
-```bash
-mkdir -p .forge/templates .claude/commands
 ```
+/forge-init
+```
+
+This creates all required scaffold files — `.forge/VISION.md`, `.forge/CONTRACT.md`, prompt templates, hook config, and a `CLAUDE.md` integration block. Safe to re-run: existing files are never overwritten.
 
 ### 2. Write your Vision
 

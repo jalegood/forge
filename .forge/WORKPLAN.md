@@ -117,6 +117,15 @@
 - **Gate:** `bash .forge/tests/smoke.sh && grep -qi "forge-init\|template.*missing\|missing.*template" .claude/commands/forge-next.md && echo "forge-next fail-fast behavior present"`
 - **Notes:** Files: .claude/commands/forge-next.md, .forge/WORKPLAN.md
 
+## [TASK-016] Enhance /forge-plan with pre-task unknown classification and ASSUMED annotation
+
+- **Status:** done
+- **Type:** refactor
+- **Depends:** TASK-012
+- **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#rules/contract-first, CONTRACT#boundaries/what-requires-human-approval
+- **Gate:** `test -s .claude/commands/forge-plan.md && grep -q "ASSUMED" .claude/commands/forge-plan.md && grep -q "Plan-blocking\|plan-blocking" .claude/commands/forge-plan.md && echo "forge-plan unknown classification present"`
+- **Notes:** Merged coverage check and unknown-classification into a single pre-task validation step. Added plan-blocking vs implementation-detail classification. Replaced stop-and-ask ceremony with direct CONTRACT.md writes using ASSUMED annotations — Claude Code's native file-write confirmation is the approval gate. Updated clarify task type to reflect its new scope (implementation-detail unknowns only). Files: .claude/commands/forge-plan.md, .forge/CONTRACT.md, .forge/WORKPLAN.md
+
 ## [TASK-014] End-to-end validation of forge-init entry point
 
 - **Status:** pending

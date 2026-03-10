@@ -104,8 +104,11 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
 - **Reads:** `.forge/VISION.md` (What/Who/Pillars format), `.forge/CONTRACT.md` (sections: Data Model, State Machines, Interfaces, Rules, Boundaries), `.forge/WORKPLAN.md` (if exists)
 - **Does:**
   - Assumes scaffold has already run (via `/forge-init`). Always reads context and validates/generates the workplan.
+  - Runs a two-check Contract readiness validation before generating any tasks:
+    1. **Coverage check** — every planned deliverable has a Contract section specifying its interface, rule, or data model (not merely mentioning it exists).
+    2. **Unknown check** — scans CONTRACT.md for plan-blocking unknowns: `<!-- UNRESOLVED -->` markers, technology choices without documented rationale, external dependencies without constraints, rules referencing undefined concepts. Classifies each as *plan-blocking* (would change which tasks exist, their order, or their gates — treated like a coverage gap) or *implementation-detail* (only affects one task's internals — deferred to a `clarify` task). Both checks resolve together in a single pass; gaps and plan-blocking unknowns are written to CONTRACT.md with `<!-- ASSUMED: reason -->` annotations, then task generation proceeds immediately.
   - Regenerates only `pending` tasks; preserves `done` and `active` tasks exactly as-is.
-  - Orders tasks as a dependency DAG — no task runs before its `Depends` entries are all `done`
+  - Orders tasks as a dependency DAG — no task runs before its `Depends` entries are all `done`.
 - **Output task format:** Each task in WORKPLAN.md uses this structure: `## [TASK-XXX] Description` followed by fields — Status (`pending` for new tasks), Type (`scaffold|feature|clarify|refactor|fix|investigate`), Depends (`none` or comma-separated task IDs), Context (manifest references like `CONTRACT#section-name`), Gate (shell command or `manual:` prefix), Notes (empty for new tasks). Task IDs are sequential and unique (TASK-001, TASK-002, ...).
 - **Task sizing:** One task per concern. If a description uses "and" connecting two distinct pieces of work, split it. Each task should complete in a single clean session.
 - **Manifest generation:** Each task's Context field must list all Contract sections needed to execute independently (see Manifest Completeness rule).
@@ -156,7 +159,7 @@ Templates are ~30-50 lines. They are injected fresh each session.
 | ------------- | ----------------------------------------- | ---------------------------------------- |
 | `scaffold`    | Project setup, config, boilerplate        | Structural checks                        |
 | `feature`     | Vertical slice of functionality           | Test suite + build                       |
-| `clarify`     | Resolve `<!-- UNRESOLVED -->` in Contract | Contract updated, ambiguity removed      |
+| `clarify`     | Resolve implementation-detail unknowns deferred from planning | Decision documented, unblocks dependent task |
 | `refactor`    | Improve structure, preserve behavior      | Existing tests pass                      |
 | `fix`         | Repair broken gate or bug                 | Original failing command passes          |
 | `investigate` | Diagnose issues, explore unknowns         | `manual:` — findings documented in Notes |
@@ -256,8 +259,8 @@ A task without Contract coverage cannot be correctly sized, manifested, or gated
 If planned work has no Contract coverage:
 
 1. The agent drafts the missing CONTRACT language (or surfaces it from the planning input if already present).
-2. The human approves — either applying the changes directly or signalling the agent to write them.
-3. Once CONTRACT.md is updated, task generation proceeds: either the agent continues immediately (if it wrote the changes), or the human re-invokes `/forge-plan` with the relevant section anchors.
+2. The agent writes the changes to CONTRACT.md, annotating inferred resolutions with `<!-- ASSUMED: reason -->`. Claude Code's native file-write confirmation is the approval mechanism.
+3. Task generation proceeds immediately after CONTRACT.md is updated.
 
 No implementation tasks are generated until coverage exists.
 
@@ -330,7 +333,7 @@ Gates validate deliverable structure, not quality. Different deliverable types r
 
 ### What Requires Human Approval
 
-- Any modification to CONTRACT.md — human approval is required before changes are applied. The agent may write the changes after explicit approval.
+- Any modification to CONTRACT.md — approval occurs through Claude Code's native file-write confirmation. `/forge-plan` may write `<!-- ASSUMED: reason -->` annotations directly during validation; substantive amendments (outside of planning) follow the Contract Amendment Protocol.
 - Workplan review after `/forge-plan` generates or regenerates tasks.
 - The commit step after gate passes — human reviews code before committing.
 - Resolving `clarify` tasks (these require human decisions).

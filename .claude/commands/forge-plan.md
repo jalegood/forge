@@ -17,23 +17,26 @@ Read the following files in full:
 
 If VISION.md is still a template stub (contains `<!-- What this project builds`), stop and tell the user to fill in VISION.md and CONTRACT.md before running `/forge-plan`.
 
-### 2. Validate Contract coverage (Contract-First check)
+### 2. Validate Contract readiness
 
-Before generating any tasks, verify that every planned deliverable has Contract coverage.
+Before generating any tasks, run two checks. Resolve all issues from both before proceeding — do not stop between them.
 
-For each deliverable implied by the planning input, identify the CONTRACT section(s) that specify it — interface, rule, or data model. Coverage means the section specifies the _what_, not merely mentions that something exists.
+**Coverage check:** For each deliverable implied by the planning input, identify the CONTRACT section(s) that specify it — interface, rule, or data model. Coverage means the section specifies the _what_, not merely mentions that something exists.
 
-**If the planning input already contains proposed CONTRACT language** (e.g., the user points to a spec document with exact rule/interface text): surface that language directly as the proposed amendment — do not re-draft it.
+**Unknown check:** Scan CONTRACT.md for plan-blocking unknowns:
 
-**If unspecified work exists:**
+- Any `<!-- UNRESOLVED -->` marker
+- Any technology choice, external dependency, or interface without documented rationale or constraints
+- Any rule that references a concept defined nowhere in CONTRACT
 
-1. Draft the missing CONTRACT language for each gap (or extract it from the planning input).
-2. Present it to the human with the proposed language and two options:
-   - **"Apply it yourself"** — edit CONTRACT.md directly, then run: `/forge-plan "generate tasks for: CONTRACT#section/name, ..."` using the actual anchors for the added sections.
-   - **"Apply it for me"** — reply with approval and the agent will write the changes to CONTRACT.md, then immediately continue to generate tasks.
-3. Stop. Await the human's choice before proceeding.
+Classify each unknown:
 
-**If all work is covered:** proceed to step 3.
+- **Plan-blocking** — resolving it differently would change which tasks exist, their order, or their gates. Treat like a coverage gap.
+- **Implementation-detail** — only affects how one task executes internally. Defer to a `clarify` task; do not block here.
+
+**If coverage gaps or plan-blocking unknowns exist:** Draft the missing or resolved CONTRACT language. If the planning input already contains proposed language, extract it directly — do not re-draft. Write changes to CONTRACT.md, annotating inferred resolutions with `<!-- ASSUMED: reason -->`. Then continue immediately to step 3.
+
+**If all work is covered and no plan-blocking unknowns remain:** proceed to step 3.
 
 This is the Contract-First invariant — see CONTRACT#rules/contract-first.
 
@@ -72,7 +75,7 @@ Analyze VISION.md and CONTRACT.md to determine the full set of deliverables. For
 | ------------- | -------------------------------------------- | ----------------------------------- |
 | `scaffold`    | Setup, config, boilerplate                   | Structural file/content checks      |
 | `feature`     | Vertical slice of functionality              | Test suite + build                  |
-| `clarify`     | Resolve `<!-- UNRESOLVED -->` in CONTRACT.md | Contract updated, ambiguity removed |
+| `clarify`     | Resolve implementation-detail unknowns deferred from planning | Decision documented, unblocks dependent task |
 | `refactor`    | Improve structure, preserve behavior         | Existing tests still pass           |
 | `fix`         | Repair broken gate or bug                    | Original failing command now passes |
 | `investigate` | Diagnose issues, explore unknowns            | `manual:` gate                      |
