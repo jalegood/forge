@@ -19,7 +19,7 @@ Every task gets only the Contract sections it needs (not the whole spec), runs i
 
 ### 1. Bootstrap the pipeline
 
-```
+```text
 /forge-init
 ```
 
@@ -57,13 +57,13 @@ Run `/forge-plan`. Review the generated tasks. Edit anything that doesn't look r
 
 ### 5. Start building
 
-```
+```text
 /forge-next
 ```
 
 ## The Workflow Loop
 
-```
+```text
 1. /forge-next          → AI picks the next task, does the work, runs the gate
 2. You review           → Read the code and gate result. Does it match intent?
 3. On pass: commit      → One task, one commit.
@@ -74,6 +74,17 @@ Run `/forge-plan`. Review the generated tasks. Edit anything that doesn't look r
 **Why `/clear` between every task?** Fresh sessions give Claude full 200K reasoning capacity. Continued sessions degrade. The workplan and git history carry everything forward — conversation history is disposable.
 
 ## Commands
+
+### `/forge-init`
+
+Bootstraps a new Forge project by creating all required scaffold files. Safe to re-run — never overwrites existing files.
+
+- Creates `.forge/VISION.md` and `.forge/CONTRACT.md` stubs
+- Creates all six prompt templates under `.forge/templates/`
+- Creates `.claude/settings.json` with placeholder hook config
+- Appends the Forge integration block to `CLAUDE.md` (or creates it)
+
+Run this once in a new project before writing your Vision or Contract.
 
 ### `/forge-plan`
 
@@ -210,7 +221,7 @@ When the gate starts with `manual:`, Forge presents the description to you inste
 
 ## File Structure
 
-```
+```text
 project-root/
 ├── .forge/
 │   ├── VISION.md              # What, who, pillars (you own this)
@@ -226,6 +237,7 @@ project-root/
 │   └── tests/                 # Smoke tests for pipeline validation
 ├── .claude/
 │   ├── commands/              # Slash commands for Claude Code
+│   │   ├── forge-init.md
 │   │   ├── forge-plan.md
 │   │   ├── forge-next.md
 │   │   └── forge-status.md
