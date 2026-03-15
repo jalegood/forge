@@ -15,6 +15,8 @@ Forge operates on these file artifacts:
 | Commands  | `.claude/commands/forge-*.md` | Forge-managed          | Slash command definitions for Claude Code                     |
 | Settings  | `.claude/settings.json`       | Human-configured       | Hook definitions for deterministic enforcement                |
 | CLAUDE.md | `CLAUDE.md` (project root)    | Human-configured       | Minimal pipeline pointer (3 lines max)                        |
+| UX Spec   | `.forge/UX.md`                | Human (70%) / AI (30%) | Screen-level experience spec: flows, states, copy, interactions |
+| UX Gate   | `.forge/scripts/check-ux-spec.js` | Forge-managed      | Deterministic ux-spec gate — validates one screen by name     |
 
 ### Relationships
 
@@ -31,10 +33,60 @@ A context manifest is a list of Contract section references in a task's `Context
 - `CONTRACT#section-name` — references a top-level section (e.g., `CONTRACT#data-model`)
 - `CONTRACT#section-name/subsection` — references a subsection
 - For multi-file contracts: `filename#section-name` (e.g., `combat#rules/damage-calc`)
+- `UX#flows/flow-name/screen-name` — one screen spec from UX.md
+- `UX#flows/flow-name` — full flow including all screens from UX.md
+- `UX#global` — global copy tone and style notes from UX.md
 
-Resolution: parse the references, extract matching markdown sections (header through next same-level header), concatenate, inject into prompt template at the `{{context}}` slot.
+Resolution: parse the references, extract matching markdown sections (header through next same-level header), concatenate, inject into prompt template at the `{{context}}` slot. CONTRACT references resolve against `.forge/CONTRACT.md`; UX references resolve against `.forge/UX.md`.
 
-**Budget:** Resolved context must not exceed ~200 lines of Contract content per task. Exceeding this signals the Contract section is too large or the task scope is too broad.
+**Budget:** Resolved context must not exceed ~200 lines of Contract content per task. Exceeding this signals the Contract section is too large or the task scope is too broad. One screen per task.
+
+### UX.md Data Model
+
+UX.md is the screen-level experience spec. Structure:
+
+```markdown
+# UX Spec
+
+## Global
+
+### Copy Tone
+<!-- Voice and energy rules: name what's in bounds and out. -->
+
+### Style Notes
+<!-- Global interaction/aesthetic principles only. Screen-specific decisions belong on the screen. -->
+
+## Flows
+
+### Flow: [Name]
+
+**Entry:** [Screen + trigger]
+**Exit:** [Screen(s) + condition]
+**Emotional arc:** [e.g., anticipation → focus → satisfaction]
+
+#### Screen: [Name]
+
+**Purpose:** One sentence: what does this screen accomplish for the user?
+**Emotional intent:** What should the user FEEL at this moment? Be specific.
+**Design intention:** The specific decision that elevates this screen above a generic implementation.
+
+##### States
+
+| State | Trigger | Experience |
+| ----- | ------- | ---------- |
+| ...   | ...     | ...        |
+
+##### Edge Cases
+
+| Condition          | Behavior |
+| ------------------ | -------- |
+| Empty / first-time |          |
+| Error              |          |
+```
+
+**Mandatory fields on every screen:** `Emotional intent` and `Design intention`. Everything else is agent-determined per screen type.
+
+**Boundaries:** UX.md describes user experience. CONTRACT.md owns system state machines, data shapes, business rules, and API contracts. UX.md references CONTRACT.md — it does not duplicate it.
 
 ## State Machines
 
@@ -90,18 +142,20 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
 - **Does:**
   - Creates `.forge/VISION.md` if absent (stub template with What/Who/Pillars sections)
   - Creates `.forge/CONTRACT.md` if absent (stub template with all top-level sections)
-  - Creates `.forge/templates/` directory with all 6 template files if absent: scaffold.md, feature.md, clarify.md, refactor.md, fix.md, investigate.md
+  - Creates `.forge/templates/` directory with all 7 template files if absent: scaffold.md, feature.md, clarify.md, refactor.md, fix.md, investigate.md, ux-spec.md
+  - Creates `.forge/scripts/check-ux-spec.js` if absent (the ux-spec gate script)
+  - Creates `.forge/UX.md` if absent — stub with Global section (Copy Tone, Style Notes) and one placeholder Flow with one placeholder Screen, including mandatory fields as HTML comments
   - Writes `.claude/settings.json` if absent (PostToolUse lint hook; PreToolUse commit hook disabled by default)
   - Appends the Forge integration block to `CLAUDE.md` if not already present
   - Never overwrites any file that already exists
-  - On completion: tells the user to fill in VISION.md and CONTRACT.md, then run `/forge-plan`
+  - On completion: tells the user to fill in VISION.md, CONTRACT.md, and UX.md before running `/forge-plan`
 - **Outputs:** Scaffold files listed above
 - **When to run:** Once, at project setup. Safe to re-run — idempotent due to no-overwrite rule.
 - **Template refresh:** To update templates to the latest versions, delete `.forge/templates/` and re-run `/forge-init`.
 
 ### Command: `/forge-plan`
 
-- **Reads:** `.forge/VISION.md` (What/Who/Pillars format), `.forge/CONTRACT.md` (sections: Data Model, State Machines, Interfaces, Rules, Boundaries), `.forge/WORKPLAN.md` (if exists)
+- **Reads:** `.forge/VISION.md` (What/Who/Pillars format), `.forge/CONTRACT.md` (sections: Data Model, State Machines, Interfaces, Rules, Boundaries), `.forge/UX.md` (when present — Flows, screens), `.forge/WORKPLAN.md` (if exists)
 - **Does:**
   - Assumes scaffold has already run (via `/forge-init`). Always reads context and validates/generates the workplan.
   - Runs a two-check Contract readiness validation before generating any tasks:
@@ -109,20 +163,22 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
     2. **Unknown check** — scans CONTRACT.md for plan-blocking unknowns: `<!-- UNRESOLVED -->` markers, technology choices without documented rationale, external dependencies without constraints, rules referencing undefined concepts. Classifies each as *plan-blocking* (would change which tasks exist, their order, or their gates — treated like a coverage gap) or *implementation-detail* (only affects one task's internals — deferred to a `clarify` task). Both checks resolve together in a single pass; gaps and plan-blocking unknowns are written to CONTRACT.md with `<!-- ASSUMED: reason -->` annotations, then task generation proceeds immediately.
   - Regenerates only `pending` tasks; preserves `done` and `active` tasks exactly as-is.
   - Orders tasks as a dependency DAG — no task runs before its `Depends` entries are all `done`.
-- **Output task format:** Each task in WORKPLAN.md uses this structure: `## [TASK-XXX] Description` followed by fields — Status (`pending` for new tasks), Type (`scaffold|feature|clarify|refactor|fix|investigate`), Depends (`none` or comma-separated task IDs), Context (manifest references like `CONTRACT#section-name`), Gate (shell command or `manual:` prefix), Notes (empty for new tasks). Task IDs are sequential and unique (TASK-001, TASK-002, ...).
+  - **UX coverage:** When UX.md is present and has flows, every screen referenced in a planned flow must have a `ux-spec` task gated `done` before its `feature` task is unblocked. Missing screen specs are plan-blocking. When UX.md has flows but no screens yet, generates a flow-mapping `ux-spec` task first to enumerate all screens before any are individually specced. Gate for the mapping task: `grep -c "^#### Screen:" .forge/UX.md | awk '$1 >= N'` (N = expected count).
+  - **UX task DAG shape:** TASK-A (map all screens) → TASK-B, TASK-C, TASK-D (one ux-spec per screen, independent) → TASK-E, TASK-F, TASK-G (one feature per screen, depends only on its paired ux-spec).
+- **Output task format:** Each task in WORKPLAN.md uses this structure: `## [TASK-XXX] Description` followed by fields — Status (`pending` for new tasks), Type (`scaffold|feature|clarify|refactor|fix|investigate|ux-spec`), Depends (`none` or comma-separated task IDs), Context (manifest references like `CONTRACT#section-name` or `UX#flows/flow-name/screen-name`), Gate (shell command or `manual:` prefix), Notes (empty for new tasks). Task IDs are sequential and unique (TASK-001, TASK-002, ...).
 - **Task sizing:** One task per concern. If a description uses "and" connecting two distinct pieces of work, split it. Each task should complete in a single clean session.
-- **Manifest generation:** Each task's Context field must list all Contract sections needed to execute independently (see Manifest Completeness rule).
+- **Manifest generation:** Each task's Context field must list all Contract sections needed to execute independently (see Manifest Completeness rule). Context manifests for `ux-spec` tasks reference `UX#flows/flow-name` (the stub to complete). Context manifests for `feature` tasks implementing a screen reference `UX#flows/flow-name/screen-name` plus any `CONTRACT#` sections for data shapes the screen consumes.
 - **Outputs:** Updated `.forge/WORKPLAN.md`
 - **Human action required:** Review and edit the workplan before proceeding
 
 ### Command: `/forge-next`
 
-- **Reads:** `.forge/WORKPLAN.md`, `.forge/CONTRACT.md` (referenced sections only), `.forge/templates/`
+- **Reads:** `.forge/WORKPLAN.md`, `.forge/CONTRACT.md` (referenced sections only), `.forge/UX.md` (when referenced in context manifests), `.forge/templates/`
 - **Task format:** Parses WORKPLAN.md entries: `## [TASK-XXX] Description` followed by Status, Type, Depends, Context, Gate, Notes fields.
 - **Task selection:** If a task is already `active`, resumes it (the `Notes` field provides continuity from the previous session). Otherwise, finds the next unblocked `pending` task, or accepts a specific task ID (e.g., `/forge-next TASK-012`). A task is **unblocked** when its `Depends` field is `none` or all listed task IDs have status `done`. If a specified task has unmet dependencies, warns the human and asks for confirmation.
 - **Does:**
   1. Selects the target task (see Task selection above)
-  2. Resolves the context manifest: parses the `Context` field references (e.g., `CONTRACT#interfaces/command-forge-status`), extracts matching markdown sections from CONTRACT.md (each section runs from its header through the next same-level header), concatenates them
+  2. Resolves the context manifest: parses the `Context` field references (e.g., `CONTRACT#interfaces/command-forge-status`), extracts matching markdown sections from the appropriate file — CONTRACT.md for `CONTRACT#` references, UX.md for `UX#` references (each section runs from its header through the next same-level header), concatenates them
   3. Marks task `active` in WORKPLAN.md
   4. Loads the prompt template from `.forge/templates/{type}.md` matching the task's Type field. If the file does not exist, stop and tell the user: "Template file missing. Run `/forge-init` to create project templates." Do not proceed with inline fallbacks.
   5. Injects resolved context into the template at `{{context}}`, plus task details into `{{task_id}}`, `{{task_description}}`, `{{gate}}`
@@ -159,6 +215,7 @@ Templates are ~30-50 lines. They are injected fresh each session.
 | ------------- | ----------------------------------------- | ---------------------------------------- |
 | `scaffold`    | Project setup, config, boilerplate        | Structural checks                        |
 | `feature`     | Vertical slice of functionality           | Test suite + build                       |
+| `ux-spec`     | Author or complete a screen spec in UX.md. Produces no code. | `node .forge/scripts/check-ux-spec.js "Screen Name"` |
 | `clarify`     | Resolve implementation-detail unknowns deferred from planning | Decision documented, unblocks dependent task |
 | `refactor`    | Improve structure, preserve behavior      | Existing tests pass                      |
 | `fix`         | Repair broken gate or bug                 | Original failing command passes          |
@@ -314,12 +371,34 @@ Gates validate deliverable structure, not quality. Different deliverable types r
 | Code                        | Test suite / build command                              | `npm test && npm run build`                                         |
 | Config / JSON               | Parse validation + key check                            | `node -e "JSON.parse(require('fs').readFileSync('f.json','utf8'))"` |
 | Markdown artifacts          | Structural check (required sections, slots, line count) | `grep -q '{{context}}' file.md && test $(wc -l < file.md) -gt 10`   |
+| UX spec (UX.md)             | Mandatory fields + no placeholder language              | `node .forge/scripts/check-ux-spec.js "Screen Name"`                |
 | Human-judgment deliverables | `manual:` prefix — not automated                        | `manual: Verify the workflow completes 2-3 full cycles`             |
 
 **The `manual:` gate type:** When a gate value starts with `manual:`, `/forge-next` does not run a shell command. Instead, it presents the description to the human and asks for pass/fail confirmation. Use this for deliverables that cannot be structurally validated (e.g., end-to-end workflow validation, UX review).
 
 - Automated gates are always preferred. Use `manual:` only when no structural check is possible.
 - If a task seems to need a `manual:` gate, first consider whether it can be split into an automatable structural task and a smaller manual verification task.
+
+### UX-Spec-First
+
+No `feature` task implementing a screen may be `active` unless its corresponding `ux-spec` task is `done`. Enforced by the DAG: every screen `feature` task's `Depends` field must include its `ux-spec` task ID. `/forge-plan` generates this dependency automatically.
+
+The `feature` template, when given a context manifest containing `UX#` sections, must generate the `manual:` gate description as a checklist: one item per States row (the most testable aspect of the Experience cell) plus the Design intention. Every item references a specific spec value — no vague language.
+
+### UX Spec Precision
+
+Values that govern time, physics, or sensation in UX.md are always numeric or reference a named pattern:
+
+| Prohibited         | Required                              |
+| ------------------ | ------------------------------------- |
+| "smooth animation" | "ease-out 250ms"                      |
+| "fast transition"  | "slide-up 300ms spring(0.8)"          |
+| "subtle feedback"  | "opacity pulse 0→0.4→0 over 600ms"   |
+| "feels snappy"     | "spring tension:180 friction:12 200ms" |
+
+Prose is permitted only in Emotional intent, Design intention, and Copy Tone. All other cells involving measurable qualities are numeric or structured. `check-ux-spec.js` rejects vague terms (`smooth`, `fast`, `subtle`) at the gate.
+
+**Rationale:** The implementation agent translates spec cells to code constants. "Smooth" produces an invented value. "ease-out 250ms" produces `ANIMATION.TRANSITION_DURATION = 250`. Spec precision directly determines implementation precision.
 
 ## Boundaries
 

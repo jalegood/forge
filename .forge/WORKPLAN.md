@@ -128,18 +128,54 @@
 
 ## [TASK-014] End-to-end validation of forge-init entry point
 
-- **Status:** pending
+- **Status:** done
 - **Type:** investigate
 - **Depends:** TASK-012, TASK-013, TASK-014
 - **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#interfaces/command-forge-plan, CONTRACT#interfaces/command-forge-next, CONTRACT#state-machines/session-lifecycle
 - **Gate:** `manual: Simulate a fresh project setup: (1) verify forge-init creates all expected files without overwriting existing ones, (2) verify forge-plan runs lean (no scaffold output), (3) verify forge-next fails fast with a clear message if templates are missing, (4) run one full task through the pipeline to confirm the new entry point works end to end`
-- **Notes:**
+- **Notes:** Task completed by user
 
 ## [TASK-015] End-to-end manual validation of enhanced workflow
 
-- **Status:** pending
+- **Status:** done
 - **Type:** investigate
 - **Depends:** TASK-008, TASK-009, TASK-010
 - **Context:** CONTRACT#state-machines/session-lifecycle, CONTRACT#rules/session-boundary-protocol, CONTRACT#rules/test-first-convention, CONTRACT#rules/traceability
 - **Gate:** `manual: Complete 2-3 tasks through the full /forge-next → review → commit → /clear cycle. Verify: (1) feature/fix templates prompt test-first ordering, (2) completed task Notes contain a Files: line, (3) suggested commit message ends with (TASK-XXX)`
+- **Notes:** Task completed by user
+
+## [TASK-017] Update /forge-init to create UX artifacts
+
+- **Status:** pending
+- **Type:** scaffold
+- **Depends:** none
+- **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#data-model/ux.md-data-model, CONTRACT#rules/gate-patterns
+- **Gate:** `test -s .claude/commands/forge-init.md && grep -q "UX.md" .claude/commands/forge-init.md && grep -q "ux-spec.md" .claude/commands/forge-init.md && grep -q "check-ux-spec.js" .claude/commands/forge-init.md && echo "forge-init UX artifact creation present"`
+- **Notes:**
+
+## [TASK-018] Update /forge-plan to read UX.md and generate ux-spec task DAG
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-017
+- **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#data-model/context-manifest, CONTRACT#interfaces/task-types, CONTRACT#rules/ux-spec-first
+- **Gate:** `bash .forge/tests/smoke.sh && grep -qi "UX\.md\|ux-spec" .claude/commands/forge-plan.md && echo "forge-plan UX pipeline support present"`
+- **Notes:**
+
+## [TASK-019] Update /forge-next to resolve UX# context manifest references
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-017
+- **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#data-model/context-manifest
+- **Gate:** `bash .forge/tests/smoke.sh && grep -qi "UX#\|UX\.md" .claude/commands/forge-next.md && echo "forge-next UX# resolution present"`
+- **Notes:**
+
+## [TASK-020] End-to-end validation of UX pipeline
+
+- **Status:** pending
+- **Type:** investigate
+- **Depends:** TASK-017, TASK-018, TASK-019
+- **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#interfaces/command-forge-plan, CONTRACT#interfaces/command-forge-next, CONTRACT#rules/ux-spec-first, CONTRACT#data-model/ux.md-data-model
+- **Gate:** `manual: Simulate a full UX pipeline: (1) verify forge-init creates UX.md stub, ux-spec.md template, and check-ux-spec.js without overwriting existing files; (2) fill in a screen spec in UX.md, verify forge-plan generates a ux-spec task with the correct gate command; (3) run forge-next on the ux-spec task and verify it loads ux-spec.md template with UX# context resolved correctly; (4) verify check-ux-spec.js rejects an incomplete spec and passes a complete one`
 - **Notes:**
