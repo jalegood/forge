@@ -13,6 +13,7 @@ Read the following files in full:
 
 - **`.forge/VISION.md`** — What, Who, Pillars
 - **`.forge/CONTRACT.md`** — all sections: Data Model, State Machines, Interfaces, Rules, Boundaries
+- **`.forge/UX.md`** (if it exists) — Flows, screens, global copy tone
 - **`.forge/WORKPLAN.md`** (if it exists) — to identify tasks to preserve
 
 If VISION.md is still a template stub (contains `<!-- What this project builds`), stop and tell the user to fill in VISION.md and CONTRACT.md before running `/forge-plan`.
@@ -71,14 +72,29 @@ Analyze VISION.md and CONTRACT.md to determine the full set of deliverables. For
 
 **Task types:**
 
-| Type          | Purpose                                      | Gate style                          |
-| ------------- | -------------------------------------------- | ----------------------------------- |
-| `scaffold`    | Setup, config, boilerplate                   | Structural file/content checks      |
-| `feature`     | Vertical slice of functionality              | Test suite + build                  |
-| `clarify`     | Resolve implementation-detail unknowns deferred from planning | Decision documented, unblocks dependent task |
-| `refactor`    | Improve structure, preserve behavior         | Existing tests still pass           |
-| `fix`         | Repair broken gate or bug                    | Original failing command now passes |
-| `investigate` | Diagnose issues, explore unknowns            | `manual:` gate                      |
+| Type          | Purpose                                                       | Gate style                                           |
+| ------------- | ------------------------------------------------------------- | ---------------------------------------------------- |
+| `scaffold`    | Setup, config, boilerplate                                    | Structural file/content checks                       |
+| `feature`     | Vertical slice of functionality                               | Test suite + build                                   |
+| `ux-spec`     | Author or complete a screen spec in UX.md. Produces no code. | `node .forge/scripts/check-ux-spec.js "Screen Name"` |
+| `clarify`     | Resolve implementation-detail unknowns deferred from planning | Decision documented, unblocks dependent task         |
+| `refactor`    | Improve structure, preserve behavior                          | Existing tests still pass                            |
+| `fix`         | Repair broken gate or bug                                     | Original failing command now passes                  |
+| `investigate` | Diagnose issues, explore unknowns                             | `manual:` gate                                       |
+
+**UX coverage — apply when UX.md is present and has flows:**
+
+Every screen referenced in a planned flow must have a `ux-spec` task with status `done` before its corresponding `feature` task is unblocked. Missing screen specs are plan-blocking — generate `ux-spec` tasks for them now.
+
+UX task DAG shape:
+
+1. **If UX.md has flows but no screens yet** (no `#### Screen:` headings): generate one flow-mapping `ux-spec` task per flow. Its job is to enumerate all screens in UX.md. Gate: `grep -c "^#### Screen:" .forge/UX.md | awk '$1 >= N'` where N is the expected screen count. All per-screen `ux-spec` tasks depend on this mapping task.
+
+2. **If UX.md has flows with screens already defined**: generate one `ux-spec` task per screen (independent — no cross-screen dependencies), then one `feature` task per screen that depends only on its paired `ux-spec` task.
+
+DAG shape: `TASK-A (map screens)` → `TASK-B, TASK-C, TASK-D (one ux-spec per screen, parallel)` → `TASK-E, TASK-F, TASK-G (one feature per screen, depends only on its paired ux-spec)`.
+
+Every screen `feature` task's `Depends` field **must** include its paired `ux-spec` task ID. This is the UX-spec-first invariant.
 
 **Dependency DAG:** No task may appear before all of its `Depends` entries in the file. Within the same dependency level, order by implementation risk — lower risk first.
 
@@ -104,17 +120,28 @@ Do not generate a task with an incomplete manifest. The completeness test is the
 - `CONTRACT#section-name` — top-level section
 - `CONTRACT#section-name/subsection` — subsection
 - `filename#section-name` — for multi-file contracts
+- `UX#flows/flow-name/screen-name` — one screen spec from UX.md (use for `feature` tasks implementing a screen)
+- `UX#flows/flow-name` — full flow including all screens (use for `ux-spec` mapping tasks)
+- `UX#global` — global copy tone and style notes (include when copy or interaction style matters)
+
+**UX manifest rules:**
+
+- `ux-spec` tasks: context is `UX#flows/flow-name` (the flow stub the agent will complete)
+- `feature` tasks implementing a screen: context is `UX#flows/flow-name/screen-name` plus any `CONTRACT#` sections for data shapes the screen consumes
+- Do not reference `UX#` sections for non-screen tasks
 
 ### 6. Generate gates
 
 Each gate validates the deliverable structurally:
 
-| Deliverable       | Gate strategy                 | Example                                                             |
-| ----------------- | ----------------------------- | ------------------------------------------------------------------- |
-| Code              | Test suite + build            | `npm test && npm run build`                                         |
+| Deliverable       | Gate strategy                 | Example                                                                |
+| ----------------- | ----------------------------- | ---------------------------------------------------------------------- |
+| Code              | Test suite + build            | `npm test && npm run build`                                            |
 | Config/JSON       | Parse + key check             | `node -e "JSON.parse(require('fs').readFileSync('f.json','utf8'))"` |
-| Markdown artifact | Required content + line count | `grep -q '{{context}}' file.md && test $(wc -l < file.md) -gt 10`   |
-| Human judgment    | `manual:` prefix              | `manual: Verify the workflow completes 2-3 full cycles`             |
+| Markdown artifact | Required content + line count | `grep -q '{{context}}' file.md && test $(wc -l < file.md) -gt 10`      |
+| UX spec screen    | check-ux-spec.js              | `node .forge/scripts/check-ux-spec.js "Screen Name"`                   |
+| UX screen mapping | Screen count check            | `grep -c "^#### Screen:" .forge/UX.md \| awk '$1 >= N'`                |
+| Human judgment    | `manual:` prefix              | `manual: Verify the workflow completes 2-3 full cycles`                |
 
 Prefer automated gates. Use `manual:` only when no structural check is possible.
 

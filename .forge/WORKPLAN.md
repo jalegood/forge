@@ -155,12 +155,12 @@
 
 ## [TASK-018] Update /forge-plan to read UX.md and generate ux-spec task DAG
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-017
 - **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#data-model/context-manifest, CONTRACT#interfaces/task-types, CONTRACT#rules/ux-spec-first
 - **Gate:** `bash .forge/tests/smoke.sh && grep -qi "UX\.md\|ux-spec" .claude/commands/forge-plan.md && echo "forge-plan UX pipeline support present"`
-- **Notes:**
+- **Notes:** Files: .claude/commands/forge-plan.md, .forge/WORKPLAN.md
 
 ## [TASK-019] Update /forge-next to resolve UX# context manifest references
 
