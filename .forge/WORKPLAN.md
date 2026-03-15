@@ -146,12 +146,12 @@
 
 ## [TASK-017] Update /forge-init to create UX artifacts
 
-- **Status:** pending
+- **Status:** done
 - **Type:** scaffold
 - **Depends:** none
 - **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#data-model/ux.md-data-model, CONTRACT#rules/gate-patterns
 - **Gate:** `test -s .claude/commands/forge-init.md && grep -q "UX.md" .claude/commands/forge-init.md && grep -q "ux-spec.md" .claude/commands/forge-init.md && grep -q "check-ux-spec.js" .claude/commands/forge-init.md && echo "forge-init UX artifact creation present"`
-- **Notes:**
+- **Notes:** Files: .claude/commands/forge-init.md, .forge/templates/ux-spec.md, .forge/scripts/check-ux-spec.js, .forge/WORKPLAN.md
 
 ## [TASK-018] Update /forge-plan to read UX.md and generate ux-spec task DAG
 

@@ -59,7 +59,7 @@ Check if `.forge/CONTRACT.md` exists. If it does **not** exist, create it with t
 
 If it exists, skip — do not overwrite.
 
-### 3. Create `.forge/templates/` with all 6 template files if absent
+### 3. Create `.forge/templates/` with all 7 template files if absent
 
 Check for each of the following files. For any that do **not** exist, create them with the stub below. If a file exists, skip it — do not overwrite.
 
@@ -303,7 +303,196 @@ When the investigation is complete:
    - Any decisions or blockers encountered
 ```
 
-### 4. Create `.claude/settings.json` if absent
+**`.forge/templates/ux-spec.md`** — if absent, create:
+
+```markdown
+# UX Spec Task
+
+You are executing a **ux-spec** task. Your job is to author or complete a screen spec in UX.md. This task produces no code — only a completed screen specification.
+
+## Task
+
+**ID:** {{task_id}}
+**Description:** {{task_description}}
+**Gate:** `{{gate}}`
+
+## Contract Context
+
+The following sections are relevant to this task. The UX.md stub to complete is included below.
+
+{{context}}
+
+## Instructions
+
+1. **Read the stub.** Locate the screen referenced in the task description within `.forge/UX.md`.
+2. **Complete all mandatory fields.** Every screen must have `**Emotional intent:**` and `**Design intention:**` filled with specific, non-placeholder language.
+3. **Fill in States.** Every state row must have a specific, measurable Experience value. No vague terms like "smooth", "fast", or "subtle" — use numeric values (e.g., "ease-out 250ms") for anything involving time, physics, or sensation.
+4. **Fill in Edge Cases.** At minimum: Empty/first-time behavior and Error behavior.
+5. **Precision rule.** Prose is permitted only in Emotional intent, Design intention, and Copy Tone. All cells involving measurable qualities must be numeric or reference a named pattern.
+
+## Completion
+
+When the screen spec is complete:
+
+1. Run the gate command: `{{gate}}`
+2. If the gate **passes**: report success and suggest a commit message.
+3. If the gate **fails**: read the validation errors, fix the offending fields, and re-run.
+4. If you **cannot complete** the task in this session, update the `Notes` field in WORKPLAN.md with:
+   - What was completed
+   - What remains
+   - Any decisions or blockers encountered
+```
+
+### 4. Create `.forge/UX.md` if absent
+
+Check if `.forge/UX.md` exists. If it does **not** exist, create it with this stub:
+
+```markdown
+# UX Spec
+
+## Global
+
+### Copy Tone
+
+<!-- Voice and energy rules: name what's in bounds and out. -->
+
+### Style Notes
+
+<!-- Global interaction/aesthetic principles only. Screen-specific decisions belong on the screen. -->
+
+## Flows
+
+### Flow: [Name]
+
+**Entry:** [Screen + trigger]
+**Exit:** [Screen(s) + condition]
+**Emotional arc:** [e.g., anticipation → focus → satisfaction]
+
+#### Screen: [Name]
+
+**Purpose:** One sentence: what does this screen accomplish for the user?
+**Emotional intent:** <!-- What should the user FEEL at this moment? Be specific. -->
+**Design intention:** <!-- The specific decision that elevates this screen above a generic implementation. -->
+
+##### States
+
+| State | Trigger | Experience |
+| ----- | ------- | ---------- |
+|       |         |            |
+
+##### Edge Cases
+
+| Condition          | Behavior |
+| ------------------ | -------- |
+| Empty / first-time |          |
+| Error              |          |
+```
+
+If it exists, skip — do not overwrite.
+
+### 5. Create `.forge/scripts/check-ux-spec.js` if absent
+
+Check if `.forge/scripts/check-ux-spec.js` exists. If it does **not** exist, create `.forge/scripts/` directory if needed, then create `check-ux-spec.js` with:
+
+```javascript
+#!/usr/bin/env node
+// check-ux-spec.js — validate one screen spec in .forge/UX.md by screen name
+// Usage: node .forge/scripts/check-ux-spec.js "Screen Name"
+// Exit 0 = valid, Exit 1 = invalid (errors printed to stderr)
+
+const fs = require('fs');
+const path = require('path');
+
+const screenName = process.argv[2];
+if (!screenName) {
+  console.error('Usage: node .forge/scripts/check-ux-spec.js "Screen Name"');
+  process.exit(1);
+}
+
+const uxPath = path.join(process.cwd(), '.forge', 'UX.md');
+if (!fs.existsSync(uxPath)) {
+  console.error('Error: .forge/UX.md not found');
+  process.exit(1);
+}
+
+const content = fs.readFileSync(uxPath, 'utf8');
+
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Find the screen section
+const screenRegex = new RegExp(`^#### Screen: ${escapeRegex(screenName)}\\s*$`, 'm');
+const screenMatch = screenRegex.exec(content);
+if (!screenMatch) {
+  console.error(`Error: Screen "${screenName}" not found in UX.md`);
+  process.exit(1);
+}
+
+// Extract screen content through next heading at same or higher level
+const afterMatch = content.slice(screenMatch.index + screenMatch[0].length);
+const nextSectionMatch = /^#{1,4} /m.exec(afterMatch);
+const screenContent = nextSectionMatch ? afterMatch.slice(0, nextSectionMatch.index) : afterMatch;
+
+const errors = [];
+
+// Check mandatory fields are present and not placeholders
+const mandatoryFields = ['**Emotional intent:**', '**Design intention:**'];
+for (const field of mandatoryFields) {
+  const idx = screenContent.indexOf(field);
+  if (idx === -1) {
+    errors.push(`Missing mandatory field: ${field}`);
+  } else {
+    const afterField = screenContent.slice(idx + field.length).trim();
+    const firstLine = afterField.split('\n')[0].trim();
+    if (!firstLine || firstLine.startsWith('<!--') || firstLine === 'TODO' || firstLine === 'TBD') {
+      errors.push(`${field} is empty or placeholder`);
+    }
+  }
+}
+
+// Check States table exists and has at least one data row
+const statesMatch = /##### States([\s\S]*?)(?=##### |$)/m.exec(screenContent);
+if (!statesMatch) {
+  errors.push('Missing section: ##### States');
+} else {
+  const statesBody = statesMatch[1];
+  const dataRows = statesBody.split('\n').filter(line => {
+    const trimmed = line.trim();
+    return trimmed.startsWith('|') && !trimmed.includes('---') && !/^\|\s*State\s*\|/i.test(trimmed);
+  });
+  if (dataRows.length === 0) {
+    errors.push('States table has no data rows');
+  }
+
+  // Reject vague terms in States cells
+  const vagueTerms = ['smooth', 'fast', 'subtle', 'snappy', 'quick', 'slow', 'nice', 'clean', 'simple'];
+  for (const term of vagueTerms) {
+    const regex = new RegExp(`\\b${term}\\b`, 'i');
+    if (regex.test(statesBody)) {
+      errors.push(`Vague term "${term}" found in States table — use numeric/named values (e.g., "ease-out 250ms")`);
+    }
+  }
+}
+
+// Check Edge Cases section exists
+if (!screenContent.includes('##### Edge Cases')) {
+  errors.push('Missing section: ##### Edge Cases');
+}
+
+if (errors.length > 0) {
+  console.error(`Screen "${screenName}" spec validation failed:\n`);
+  errors.forEach(e => console.error(`  - ${e}`));
+  process.exit(1);
+}
+
+console.log(`Screen "${screenName}" spec is valid.`);
+process.exit(0);
+```
+
+If `.forge/scripts/check-ux-spec.js` exists, skip — do not overwrite.
+
+### 6. Create `.claude/settings.json` if absent
 
 Check if `.claude/settings.json` exists. If it does **not** exist, create `.claude/` directory if needed, then create `settings.json` with:
 
@@ -340,7 +529,7 @@ Check if `.claude/settings.json` exists. If it does **not** exist, create `.clau
 
 If `.claude/settings.json` exists, skip — do not overwrite.
 
-### 5. Append Forge integration block to `CLAUDE.md` if absent
+### 7. Append Forge integration block to `CLAUDE.md` if absent
 
 Check if `CLAUDE.md` exists in the project root.
 
@@ -356,7 +545,7 @@ Check if `CLAUDE.md` exists in the project root.
 
 - If `CLAUDE.md` exists, check whether it already contains `Pipeline: .forge/`. If it does, skip — do not append. If it does not contain that line, append the integration block to the end of the file (preceded by a blank line).
 
-### 6. Report completion
+### 8. Report completion
 
 After creating all files, tell the user:
 
@@ -370,13 +559,17 @@ Forge initialized. Files created (existing files were not overwritten):
 - .forge/templates/clarify.md
 - .forge/templates/refactor.md
 - .forge/templates/investigate.md
+- .forge/templates/ux-spec.md
+- .forge/UX.md
+- .forge/scripts/check-ux-spec.js
 - .claude/settings.json
 - CLAUDE.md (integration block)
 
 Next steps:
 1. Fill in .forge/VISION.md with your project's What, Who, and Pillars.
 2. Fill in .forge/CONTRACT.md with your project's interfaces, rules, and data model.
-3. Run /forge-plan to generate a task workplan.
+3. Fill in .forge/UX.md with your screen flows and specs.
+4. Run /forge-plan to generate a task workplan.
 ```
 
 Only list files that were actually created or modified (not skipped). If all files already existed, say: "All Forge files already exist. Nothing was changed."
