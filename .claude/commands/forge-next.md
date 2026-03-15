@@ -54,11 +54,16 @@ If no argument and no active task:
 
 Parse the selected task's `Context` field into a list of references. Each reference uses the format:
 
-- `CONTRACT#section-name` — a top-level section
+- `CONTRACT#section-name` — a top-level section from `.forge/CONTRACT.md`
 - `CONTRACT#section-name/subsection` — a subsection within a parent
 - `filename#section-name` — for multi-file contracts (file is `.forge/filename.md`)
+- `UX#global` — the `## Global` section from `.forge/UX.md`
+- `UX#flows/flow-name` — a full flow (header through end of flow) from `.forge/UX.md`
+- `UX#flows/flow-name/screen-name` — one screen spec from `.forge/UX.md`
 
-**For each reference, extract the matching markdown section from the contract file:**
+**Source file routing:** `CONTRACT#` references resolve against `.forge/CONTRACT.md`. `UX#` references resolve against `.forge/UX.md`.
+
+**For each reference, extract the matching markdown section from the appropriate file:**
 
 1. **Slugify and match headers.** To match a reference segment to a markdown heading:
    - Take the heading text (strip `#` markers, formatting characters like backticks, asterisks)
@@ -72,9 +77,25 @@ Parse the selected task's `Context` field into a list of references. Each refere
    - `task-lifecycle` matches `### Task Lifecycle`
    - `context-manifest` matches `### Context Manifest`
 
+   **UX.md heading patterns** use prefixed labels — strip the prefix when slugifying:
+   - `flow-name` matches `### Flow: Flow Name` (strip "Flow: " prefix, slugify "Flow Name" → `flow-name`)
+   - `screen-name` matches `#### Screen: Screen Name` (strip "Screen: " prefix, slugify "Screen Name" → `screen-name`)
+   - `global` matches `## Global`
+
 2. **Navigate nested references.** For `CONTRACT#parent/child`:
    - First find the heading matching `parent` (e.g., `## Interfaces`)
    - Then within that section, find the sub-heading matching `child` (e.g., `### Command: /forge-next`)
+
+   For `UX#flows/flow-name`:
+   - Find `## Flows` in UX.md, then within it find `### Flow:` whose name slugifies to `flow-name`
+   - Extract from that `### Flow:` heading through the next `###` or `##` or `#`
+
+   For `UX#flows/flow-name/screen-name`:
+   - Navigate to the flow as above, then within it find `#### Screen:` whose name slugifies to `screen-name`
+   - Extract from that `#### Screen:` heading through the next `####`, `###`, `##`, or `#`
+
+   For `UX#global`:
+   - Find `## Global` in UX.md and extract through the next `##` or `#`
 
 3. **Extract section content.** Capture everything from the matched heading (inclusive) through just before the next heading at the **same level or higher**. A `###` section ends at the next `###`, `##`, or `#`.
 

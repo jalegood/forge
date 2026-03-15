@@ -164,12 +164,12 @@
 
 ## [TASK-019] Update /forge-next to resolve UX# context manifest references
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-017
 - **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#data-model/context-manifest
 - **Gate:** `bash .forge/tests/smoke.sh && grep -qi "UX#\|UX\.md" .claude/commands/forge-next.md && echo "forge-next UX# resolution present"`
-- **Notes:**
+- **Notes:** Files: .claude/commands/forge-next.md, .forge/WORKPLAN.md
 
 ## [TASK-020] End-to-end validation of UX pipeline
 
