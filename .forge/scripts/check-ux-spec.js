@@ -55,7 +55,7 @@ for (const field of mandatoryFields) {
 }
 
 // Check States table exists and has at least one data row
-const statesMatch = /##### States([\s\S]*?)(?=##### |$)/m.exec(screenContent);
+const statesMatch = /##### States([\s\S]*?)(?=##### |$)/.exec(screenContent);
 if (!statesMatch) {
   errors.push('Missing section: ##### States');
 } else {
