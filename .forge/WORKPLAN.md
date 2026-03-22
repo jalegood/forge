@@ -191,12 +191,12 @@
 
 ## [TASK-022] Update /forge-plan to include DESIGN# refs in feature manifests
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-021
 - **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#data-model/design.md-data-model, CONTRACT#data-model/context-manifest
 - **Gate:** `bash .forge/tests/smoke.sh && grep -qi "DESIGN#\|DESIGN\.md" .claude/commands/forge-plan.md && echo "forge-plan DESIGN# support present"`
-- **Notes:**
+- **Notes:** Files: .claude/commands/forge-plan.md, .forge/WORKPLAN.md
 
 ## [TASK-023] Update /forge-next to resolve DESIGN# context manifest references
 

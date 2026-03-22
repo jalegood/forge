@@ -14,6 +14,7 @@ Read the following files in full:
 - **`.forge/VISION.md`** — What, Who, Pillars
 - **`.forge/CONTRACT.md`** — all sections: Data Model, State Machines, Interfaces, Rules, Boundaries
 - **`.forge/UX.md`** (if it exists) — Flows, screens, global copy tone
+- **`.forge/DESIGN.md`** (if it exists) — tokens, components, style notes
 - **`.forge/WORKPLAN.md`** (if it exists) — to identify tasks to preserve
 
 If VISION.md is still a template stub (contains `<!-- What this project builds`), stop and tell the user to fill in VISION.md and CONTRACT.md before running `/forge-plan`.
@@ -123,12 +124,21 @@ Do not generate a task with an incomplete manifest. The completeness test is the
 - `UX#flows/flow-name/screen-name` — one screen spec from UX.md (use for `feature` tasks implementing a screen)
 - `UX#flows/flow-name` — full flow including all screens (use for `ux-spec` mapping tasks)
 - `UX#global` — global copy tone and style notes (include when copy or interaction style matters)
+- `DESIGN#section-name` — top-level section of DESIGN.md (e.g., `DESIGN#tokens`)
+- `DESIGN#section-name/subsection` — subsection of DESIGN.md (e.g., `DESIGN#components/button`)
 
 **UX manifest rules:**
 
 - `ux-spec` tasks: context is `UX#flows/flow-name` (the flow stub the agent will complete)
 - `feature` tasks implementing a screen: context is `UX#flows/flow-name/screen-name` plus any `CONTRACT#` sections for data shapes the screen consumes
 - Do not reference `UX#` sections for non-screen tasks
+
+**DESIGN manifest rules:**
+
+- When DESIGN.md is present and has a `## Tokens` section, `feature` tasks implementing a screen **must** include `DESIGN#tokens` in their context manifests.
+- When DESIGN.md has a component spec relevant to the screen (a `### [Component Name]` subsection under `## Components`), widen the manifest to also include `DESIGN#components/[name]` for each relevant component.
+- Do not reference `DESIGN#` for non-screen tasks (`scaffold`, `ux-spec`, `clarify`, `investigate`).
+- Do not gate on DESIGN.md presence — if the file is absent, simply omit DESIGN# refs.
 
 ### 6. Generate gates
 
