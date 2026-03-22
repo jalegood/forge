@@ -173,9 +173,45 @@
 
 ## [TASK-020] End-to-end validation of UX pipeline
 
-- **Status:** pending
+- **Status:** done
 - **Type:** investigate
 - **Depends:** TASK-017, TASK-018, TASK-019
 - **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#interfaces/command-forge-plan, CONTRACT#interfaces/command-forge-next, CONTRACT#rules/ux-spec-first, CONTRACT#data-model/ux.md-data-model
 - **Gate:** `manual: Simulate a full UX pipeline: (1) verify forge-init creates UX.md stub, ux-spec.md template, and check-ux-spec.js without overwriting existing files; (2) fill in a screen spec in UX.md, verify forge-plan generates a ux-spec task with the correct gate command; (3) run forge-next on the ux-spec task and verify it loads ux-spec.md template with UX# context resolved correctly; (4) verify check-ux-spec.js rejects an incomplete spec and passes a complete one`
+- **Notes:**
+
+## [TASK-021] Update /forge-init to create DESIGN.md stub
+
+- **Status:** done
+- **Type:** scaffold
+- **Depends:** TASK-020
+- **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#data-model/design.md-data-model
+- **Gate:** `test -s .claude/commands/forge-init.md && grep -q "DESIGN.md" .claude/commands/forge-init.md && echo "forge-init DESIGN.md creation present"`
+- **Notes:** Files: .claude/commands/forge-init.md, .forge/WORKPLAN.md
+
+## [TASK-022] Update /forge-plan to include DESIGN# refs in feature manifests
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-021
+- **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#data-model/design.md-data-model, CONTRACT#data-model/context-manifest
+- **Gate:** `bash .forge/tests/smoke.sh && grep -qi "DESIGN#\|DESIGN\.md" .claude/commands/forge-plan.md && echo "forge-plan DESIGN# support present"`
+- **Notes:**
+
+## [TASK-023] Update /forge-next to resolve DESIGN# context manifest references
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-021
+- **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#data-model/context-manifest, CONTRACT#data-model/design.md-data-model
+- **Gate:** `bash .forge/tests/smoke.sh && grep -qi "DESIGN#\|DESIGN\.md" .claude/commands/forge-next.md && echo "forge-next DESIGN# resolution present"`
+- **Notes:**
+
+## [TASK-024] End-to-end validation of DESIGN.md pipeline
+
+- **Status:** pending
+- **Type:** investigate
+- **Depends:** TASK-021, TASK-022, TASK-023
+- **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#interfaces/command-forge-plan, CONTRACT#interfaces/command-forge-next, CONTRACT#data-model/design.md-data-model
+- **Gate:** `manual: Simulate a full DESIGN.md pipeline: (1) verify forge-init creates DESIGN.md stub without overwriting existing files; (2) populate DESIGN.md with tokens, verify forge-plan includes DESIGN#tokens in a feature task context manifest; (3) verify forge-next resolves DESIGN# references correctly from DESIGN.md; (4) verify a feature task referencing both UX# and DESIGN# receives both resolved contexts`
 - **Notes:**

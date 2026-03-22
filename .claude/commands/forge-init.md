@@ -390,7 +390,45 @@ Check if `.forge/UX.md` exists. If it does **not** exist, create it with this st
 
 If it exists, skip — do not overwrite.
 
-### 5. Create `.forge/scripts/check-ux-spec.js` if absent
+### 5. Create `.forge/DESIGN.md` if absent
+
+Check if `.forge/DESIGN.md` exists. If it does **not** exist, create it with this stub:
+
+```markdown
+# Design System
+
+## Tokens
+
+### Colors
+
+<!-- Seed colors, semantic color roles (e.g., primary, surface, error) -->
+
+### Typography
+
+<!-- Type scale: font families, sizes, weights, line heights -->
+
+### Spacing
+
+<!-- Base unit and named sizes (e.g., sm: 8px, md: 16px, lg: 24px) -->
+
+### Radius
+
+<!-- Corner radius values by component tier -->
+
+## Components
+
+### [Component Name]
+
+<!-- Visual spec: default state, variants, token references -->
+
+## Style Notes
+
+<!-- Aesthetic rationale and cross-cutting component rules -->
+```
+
+If it exists, skip — do not overwrite.
+
+### 6. Create `.forge/scripts/check-ux-spec.js` if absent
 
 Check if `.forge/scripts/check-ux-spec.js` exists. If it does **not** exist, create `.forge/scripts/` directory if needed, then create `check-ux-spec.js` with:
 
@@ -492,7 +530,7 @@ process.exit(0);
 
 If `.forge/scripts/check-ux-spec.js` exists, skip — do not overwrite.
 
-### 6. Create `.claude/settings.json` if absent
+### 7. Create `.claude/settings.json` if absent
 
 Check if `.claude/settings.json` exists. If it does **not** exist, create `.claude/` directory if needed, then create `settings.json` with:
 
@@ -529,7 +567,7 @@ Check if `.claude/settings.json` exists. If it does **not** exist, create `.clau
 
 If `.claude/settings.json` exists, skip — do not overwrite.
 
-### 7. Append Forge integration block to `CLAUDE.md` if absent
+### 8. Append Forge integration block to `CLAUDE.md` if absent
 
 Check if `CLAUDE.md` exists in the project root.
 
@@ -545,11 +583,11 @@ Check if `CLAUDE.md` exists in the project root.
 
 - If `CLAUDE.md` exists, check whether it already contains `Pipeline: .forge/`. If it does, skip — do not append. If it does not contain that line, append the integration block to the end of the file (preceded by a blank line).
 
-### 8. Report completion
+### 9. Report completion
 
 After creating all files, tell the user:
 
-```
+```text
 Forge initialized. Files created (existing files were not overwritten):
 - .forge/VISION.md
 - .forge/CONTRACT.md
@@ -561,6 +599,7 @@ Forge initialized. Files created (existing files were not overwritten):
 - .forge/templates/investigate.md
 - .forge/templates/ux-spec.md
 - .forge/UX.md
+- .forge/DESIGN.md
 - .forge/scripts/check-ux-spec.js
 - .claude/settings.json
 - CLAUDE.md (integration block)
@@ -569,7 +608,8 @@ Next steps:
 1. Fill in .forge/VISION.md with your project's What, Who, and Pillars.
 2. Fill in .forge/CONTRACT.md with your project's interfaces, rules, and data model.
 3. Fill in .forge/UX.md with your screen flows and specs.
-4. Run /forge-plan to generate a task workplan.
+4. Fill in .forge/DESIGN.md with your design tokens and component specs (or generate with Stitch).
+5. Run /forge-plan to generate a task workplan.
 ```
 
 Only list files that were actually created or modified (not skipped). If all files already existed, say: "All Forge files already exist. Nothing was changed."
