@@ -60,8 +60,10 @@ Parse the selected task's `Context` field into a list of references. Each refere
 - `UX#global` — the `## Global` section from `.forge/UX.md`
 - `UX#flows/flow-name` — a full flow (header through end of flow) from `.forge/UX.md`
 - `UX#flows/flow-name/screen-name` — one screen spec from `.forge/UX.md`
+- `DESIGN#section-name` — a top-level section from `.forge/DESIGN.md` (e.g., `DESIGN#tokens`)
+- `DESIGN#section-name/subsection` — a subsection within DESIGN.md (e.g., `DESIGN#components/button`)
 
-**Source file routing:** `CONTRACT#` references resolve against `.forge/CONTRACT.md`. `UX#` references resolve against `.forge/UX.md`.
+**Source file routing:** `CONTRACT#` references resolve against `.forge/CONTRACT.md`. `UX#` references resolve against `.forge/UX.md`. `DESIGN#` references resolve against `.forge/DESIGN.md`.
 
 **For each reference, extract the matching markdown section from the appropriate file:**
 
@@ -96,6 +98,14 @@ Parse the selected task's `Context` field into a list of references. Each refere
 
    For `UX#global`:
    - Find `## Global` in UX.md and extract through the next `##` or `#`
+
+   For `DESIGN#section-name`:
+   - Find the heading matching `section-name` in DESIGN.md using standard slug matching (no prefix stripping — headings are plain text like `## Tokens`, `## Components`)
+   - Extract from that heading through the next same-level or higher heading
+
+   For `DESIGN#section-name/subsection`:
+   - Same nested navigation as `CONTRACT#parent/child`, but resolved against `.forge/DESIGN.md`
+   - First find the heading matching `section-name`, then within it find the sub-heading matching `subsection`
 
 3. **Extract section content.** Capture everything from the matched heading (inclusive) through just before the next heading at the **same level or higher**. A `###` section ends at the next `###`, `##`, or `#`.
 

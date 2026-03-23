@@ -200,12 +200,12 @@
 
 ## [TASK-023] Update /forge-next to resolve DESIGN# context manifest references
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-021
 - **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#data-model/context-manifest, CONTRACT#data-model/design.md-data-model
 - **Gate:** `bash .forge/tests/smoke.sh && grep -qi "DESIGN#\|DESIGN\.md" .claude/commands/forge-next.md && echo "forge-next DESIGN# resolution present"`
-- **Notes:**
+- **Notes:** Files: .claude/commands/forge-next.md, .forge/WORKPLAN.md
 
 ## [TASK-024] End-to-end validation of DESIGN.md pipeline
 
