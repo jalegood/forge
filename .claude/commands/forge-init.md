@@ -608,7 +608,7 @@ Next steps:
 1. Fill in .forge/VISION.md with your project's What, Who, and Pillars.
 2. Fill in .forge/CONTRACT.md with your project's interfaces, rules, and data model.
 3. Fill in .forge/UX.md with your screen flows and specs.
-4. Fill in .forge/DESIGN.md with your design tokens and component specs (or generate with Stitch).
+4. Fill in .forge/DESIGN.md with your design tokens and component specs (or generate with a design tool).
 5. Run /forge-plan to generate a task workplan.
 ```
 

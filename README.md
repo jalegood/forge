@@ -17,15 +17,25 @@ Every task gets only the Contract sections it needs (not the whole spec), runs i
 
 ## Quick Start
 
-### 1. Bootstrap the pipeline
+### 1. Copy the commands
+
+Copy `.claude/commands/` from this repo into your project:
+
+```text
+cp -r .claude/commands/ /path/to/your-project/.claude/commands/
+```
+
+That's the only thing you need to copy. Everything else — templates, scripts, stub files, hook config — is created by `/forge-init` in the next step.
+
+### 2. Bootstrap the pipeline
 
 ```text
 /forge-init
 ```
 
-This creates all required scaffold files — `.forge/VISION.md`, `.forge/CONTRACT.md`, prompt templates, hook config, and a `CLAUDE.md` integration block. Safe to re-run: existing files are never overwritten.
+This creates all required scaffold files — `.forge/VISION.md`, `.forge/CONTRACT.md`, `.forge/UX.md`, `.forge/DESIGN.md`, prompt templates, gate scripts, hook config, and a `CLAUDE.md` integration block. Safe to re-run: existing files are never overwritten.
 
-### 2. Write your Vision
+### 3. Write your Vision
 
 Edit `.forge/VISION.md`:
 
@@ -39,7 +49,7 @@ Pillars:
 - [Non-negotiable principle 3]
 ```
 
-### 3. Write your Contract
+### 4. Write your Contract
 
 Edit `.forge/CONTRACT.md` with these sections:
 
@@ -51,11 +61,18 @@ Edit `.forge/CONTRACT.md` with these sections:
 
 Every statement should be testable. If something is ambiguous, mark it with `<!-- UNRESOLVED: ... -->`.
 
-### 4. Generate the Workplan
+Two optional spec files feed into the pipeline alongside the Contract:
+
+- **`.forge/UX.md`** — screen-level experience spec: flows, states, copy, emotional intent. `/forge-plan` generates `ux-spec` tasks (one per screen) that gate feature tasks — no feature task for a screen can run until its `ux-spec` task is done.
+- **`.forge/DESIGN.md`** — visual design system: tokens, typography, spacing, component specs. Hand-author it or generate it with a design tool. Feature tasks automatically reference `DESIGN#tokens` and relevant component sections when implementing screens.
+
+Fill these in before running `/forge-plan` if you want the pipeline to include UX and design context.
+
+### 5. Generate the Workplan
 
 Run `/forge-plan`. Review the generated tasks. Edit anything that doesn't look right.
 
-### 5. Start building
+### 6. Start building
 
 ```text
 /forge-next
@@ -107,14 +124,15 @@ Read-only progress summary: done/active/pending/blocked counts, next unblocked t
 
 ## Task Types
 
-| Type          | Purpose                                     | Typical Gate                             |
-| ------------- | ------------------------------------------- | ---------------------------------------- |
-| `scaffold`    | Project setup, config, boilerplate          | Structure checks                         |
-| `feature`     | Vertical slice of functionality             | `npm test && npm run build`              |
-| `clarify`     | Resolve a `<!-- UNRESOLVED -->` in Contract | Contract updated, ambiguity removed      |
-| `refactor`    | Improve structure, preserve behavior        | Existing tests pass                      |
-| `fix`         | Repair a broken gate or bug                 | Original failing command passes          |
-| `investigate` | Diagnose issues, explore unknowns           | `manual:` — findings documented in Notes |
+| Type          | Purpose                                     | Typical Gate                                          |
+| ------------- | ------------------------------------------- | ----------------------------------------------------- |
+| `scaffold`    | Project setup, config, boilerplate          | Structure checks                                      |
+| `feature`     | Vertical slice of functionality             | `npm test && npm run build`                           |
+| `ux-spec`     | Author or complete a screen spec in UX.md   | `node .forge/scripts/check-ux-spec.js "Screen Name"` |
+| `clarify`     | Resolve a `<!-- UNRESOLVED -->` in Contract | Contract updated, ambiguity removed                   |
+| `refactor`    | Improve structure, preserve behavior        | Existing tests pass                                   |
+| `fix`         | Repair a broken gate or bug                 | Original failing command passes                       |
+| `investigate` | Diagnose issues, explore unknowns           | `manual:` — findings documented in Notes              |
 
 ## Common Scenarios
 
@@ -226,17 +244,22 @@ project-root/
 ├── .forge/
 │   ├── VISION.md              # What, who, pillars (you own this)
 │   ├── CONTRACT.md            # Hard constraints and interfaces (you own this)
+│   ├── UX.md                  # Screen-level experience spec (optional)
+│   ├── DESIGN.md              # Visual design system: tokens, components (optional)
 │   ├── WORKPLAN.md            # Task DAG (AI generates, you review)
 │   ├── templates/             # Prompt templates per task type
 │   │   ├── scaffold.md
 │   │   ├── feature.md
+│   │   ├── ux-spec.md
 │   │   ├── clarify.md
 │   │   ├── refactor.md
 │   │   ├── fix.md
 │   │   └── investigate.md
+│   ├── scripts/
+│   │   └── check-ux-spec.js   # Gate script for ux-spec tasks
 │   └── tests/                 # Smoke tests for pipeline validation
 ├── .claude/
-│   ├── commands/              # Slash commands for Claude Code
+│   ├── commands/              # Slash commands — copy these from Forge repo
 │   │   ├── forge-init.md
 │   │   ├── forge-plan.md
 │   │   ├── forge-next.md
