@@ -85,6 +85,8 @@ Analyze VISION.md and CONTRACT.md to determine the full set of deliverables. For
 
 **UX coverage — apply when UX.md is present and has flows:**
 
+**Stub detection first:** a `### Flow:` or `#### Screen:` heading only counts toward "has flows" / "has screens" if its name is not the literal forge-init stub placeholder `[Name]`. An untouched `.forge/UX.md` still contains `### Flow: [Name]` and `#### Screen: [Name]` — treat those as absent, not as real content. This applies before every check below, including the "no `#### Screen:` headings" test in step 1.
+
 Every screen referenced in a planned flow must have a `ux-spec` task with status `done` before its corresponding `feature` task is unblocked. Missing screen specs are plan-blocking — generate `ux-spec` tasks for them now.
 
 UX task DAG shape:
@@ -135,8 +137,9 @@ Do not generate a task with an incomplete manifest. The completeness test is the
 
 **DESIGN manifest rules:**
 
-- When DESIGN.md is present and has a `## Tokens` section, `feature` tasks implementing a screen **must** include `DESIGN#tokens` in their context manifests.
-- When DESIGN.md has a component spec relevant to the screen (a `### [Component Name]` subsection under `## Components`), widen the manifest to also include `DESIGN#components/[name]` for each relevant component.
+- **Stub detection first:** a `## Tokens` section only counts as present if it contains something beyond the forge-init stub's HTML-comment placeholders (`<!-- Seed colors... -->` etc. with no real values below them). A `### [Component Name]` heading with the literal bracket text is not a real component — never widen a manifest based on it. An untouched `.forge/DESIGN.md` must never trigger `DESIGN#tokens` or `DESIGN#components/*` inclusion.
+- When DESIGN.md is present and has a `## Tokens` section with real content, `feature` tasks implementing a screen **must** include `DESIGN#tokens` in their context manifests.
+- When DESIGN.md has a real (non-placeholder) component spec relevant to the screen (a `### ComponentName` subsection under `## Components`), widen the manifest to also include `DESIGN#components/[name]` for each relevant component.
 - Do not reference `DESIGN#` for non-screen tasks (`scaffold`, `ux-spec`, `clarify`, `investigate`).
 - Do not gate on DESIGN.md presence — if the file is absent, simply omit DESIGN# refs.
 

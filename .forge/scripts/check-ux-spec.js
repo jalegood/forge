@@ -68,12 +68,17 @@ if (!statesMatch) {
     errors.push('States table has no data rows');
   }
 
-  // Reject vague terms in States cells
+  // Reject vague terms in the Experience column only (3rd cell) — State/Trigger labels
+  // may legitimately contain words like "slow" or "fast" without violating precision.
+  const experienceCells = dataRows.map(row => {
+    const cells = row.split('|');
+    return cells[3] !== undefined ? cells[3].trim() : '';
+  });
   const vagueTerms = ['smooth', 'fast', 'subtle', 'snappy', 'quick', 'slow', 'nice', 'clean', 'simple'];
   for (const term of vagueTerms) {
     const regex = new RegExp(`\\b${term}\\b`, 'i');
-    if (regex.test(statesBody)) {
-      errors.push(`Vague term "${term}" found in States table — use numeric/named values (e.g., "ease-out 250ms")`);
+    if (experienceCells.some(cell => regex.test(cell))) {
+      errors.push(`Vague term "${term}" found in States table Experience column — use numeric/named values (e.g., "ease-out 250ms")`);
     }
   }
 }

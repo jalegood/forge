@@ -64,7 +64,7 @@ Every statement should be testable. If something is ambiguous, mark it with `<!-
 Two optional spec files feed into the pipeline alongside the Contract:
 
 - **`.forge/UX.md`** — screen-level experience spec: flows, states, copy, emotional intent. `/forge-plan` generates `ux-spec` tasks (one per screen) that gate feature tasks — no feature task for a screen can run until its `ux-spec` task is done.
-- **`.forge/DESIGN.md`** — visual design system: tokens, typography, spacing, component specs. Hand-author it or generate it with a design tool. Feature tasks automatically reference `DESIGN#tokens` and relevant component sections when implementing screens.
+- **`.forge/DESIGN.md`** — visual design system: tokens, typography, spacing, component specs. Hand-authored markdown — copy in values from whatever source you use. Feature tasks automatically reference `DESIGN#tokens` and relevant component sections when implementing screens.
 
 Fill these in before running `/forge-plan` if you want the pipeline to include UX and design context.
 

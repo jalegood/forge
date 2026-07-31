@@ -343,7 +343,14 @@ When the screen spec is complete:
    - Any decisions or blockers encountered
 ```
 
-### 4. Create `.forge/UX.md` if absent
+### 4. Ask whether the project has a user-facing interface, then create `.forge/UX.md` if needed
+
+Ask the human: **"Does this project have a user-facing interface (UI/UX)?"**
+
+If the answer is unclear, ask again — do not guess a default.
+
+- **If no:** skip this step, step 5 (`DESIGN.md`), and step 6 (`check-ux-spec.js`) entirely. Do not create `.forge/UX.md`, `.forge/DESIGN.md`, or `.forge/scripts/check-ux-spec.js`. Proceed to step 7.
+- **If yes:** continue below.
 
 Check if `.forge/UX.md` exists. If it does **not** exist, create it with this stub:
 
@@ -356,7 +363,7 @@ Check if `.forge/UX.md` exists. If it does **not** exist, create it with this st
 
 <!-- Voice and energy rules: name what's in bounds and out. -->
 
-### Style Notes
+### Interaction Notes
 
 <!-- Global interaction/aesthetic principles only. Screen-specific decisions belong on the screen. -->
 
@@ -380,6 +387,8 @@ Check if `.forge/UX.md` exists. If it does **not** exist, create it with this st
 | ----- | ------- | ---------- |
 |       |         |            |
 
+<!-- Example: | Loading | Fetch triggered | Skeleton fade-in, opacity 0→1 over 200ms | -->
+
 ##### Edge Cases
 
 | Condition          | Behavior |
@@ -392,6 +401,8 @@ If it exists, skip — do not overwrite.
 
 ### 5. Create `.forge/DESIGN.md` if absent
 
+Only run this step if step 4 was answered "yes". If it was answered "no", this step was already skipped.
+
 Check if `.forge/DESIGN.md` exists. If it does **not** exist, create it with this stub:
 
 ```markdown
@@ -402,6 +413,7 @@ Check if `.forge/DESIGN.md` exists. If it does **not** exist, create it with thi
 ### Colors
 
 <!-- Seed colors, semantic color roles (e.g., primary, surface, error) -->
+<!-- Example: primary: #4F46E5, surface: #FFFFFF, error: #DC2626 -->
 
 ### Typography
 
@@ -429,6 +441,8 @@ Check if `.forge/DESIGN.md` exists. If it does **not** exist, create it with thi
 If it exists, skip — do not overwrite.
 
 ### 6. Create `.forge/scripts/check-ux-spec.js` if absent
+
+Only run this step if step 4 was answered "yes". If it was answered "no", this step was already skipped.
 
 Check if `.forge/scripts/check-ux-spec.js` exists. If it does **not** exist, create `.forge/scripts/` directory if needed, then create `check-ux-spec.js` with:
 
@@ -503,12 +517,17 @@ if (!statesMatch) {
     errors.push('States table has no data rows');
   }
 
-  // Reject vague terms in States cells
+  // Reject vague terms in the Experience column only (3rd cell) — State/Trigger labels
+  // may legitimately contain words like "slow" or "fast" without violating precision.
+  const experienceCells = dataRows.map(row => {
+    const cells = row.split('|');
+    return cells[3] !== undefined ? cells[3].trim() : '';
+  });
   const vagueTerms = ['smooth', 'fast', 'subtle', 'snappy', 'quick', 'slow', 'nice', 'clean', 'simple'];
   for (const term of vagueTerms) {
     const regex = new RegExp(`\\b${term}\\b`, 'i');
-    if (regex.test(statesBody)) {
-      errors.push(`Vague term "${term}" found in States table — use numeric/named values (e.g., "ease-out 250ms")`);
+    if (experienceCells.some(cell => regex.test(cell))) {
+      errors.push(`Vague term "${term}" found in States table Experience column — use numeric/named values (e.g., "ease-out 250ms")`);
     }
   }
 }
@@ -585,31 +604,31 @@ Check if `CLAUDE.md` exists in the project root.
 
 ### 9. Report completion
 
-After creating all files, tell the user:
+After creating all files, tell the user which files were created (existing files were not overwritten), listing only from this set — and only the ones actually created or modified, not skipped:
 
-```text
-Forge initialized. Files created (existing files were not overwritten):
-- .forge/VISION.md
-- .forge/CONTRACT.md
-- .forge/templates/scaffold.md
-- .forge/templates/feature.md
-- .forge/templates/fix.md
-- .forge/templates/clarify.md
-- .forge/templates/refactor.md
-- .forge/templates/investigate.md
-- .forge/templates/ux-spec.md
-- .forge/UX.md
-- .forge/DESIGN.md
-- .forge/scripts/check-ux-spec.js
-- .claude/settings.json
-- CLAUDE.md (integration block)
+- `.forge/VISION.md`
+- `.forge/CONTRACT.md`
+- `.forge/templates/scaffold.md`
+- `.forge/templates/feature.md`
+- `.forge/templates/fix.md`
+- `.forge/templates/clarify.md`
+- `.forge/templates/refactor.md`
+- `.forge/templates/investigate.md`
+- `.forge/templates/ux-spec.md`
+- `.forge/UX.md` (only if step 4 was answered "yes")
+- `.forge/DESIGN.md` (only if step 4 was answered "yes")
+- `.forge/scripts/check-ux-spec.js` (only if step 4 was answered "yes")
+- `.claude/settings.json`
+- `CLAUDE.md` (integration block)
 
-Next steps:
-1. Fill in .forge/VISION.md with your project's What, Who, and Pillars.
-2. Fill in .forge/CONTRACT.md with your project's interfaces, rules, and data model.
-3. Fill in .forge/UX.md with your screen flows and specs.
-4. Fill in .forge/DESIGN.md with your design tokens and component specs (or generate with a design tool).
-5. Run /forge-plan to generate a task workplan.
-```
+Then list next steps, numbered, including only the items that apply:
 
-Only list files that were actually created or modified (not skipped). If all files already existed, say: "All Forge files already exist. Nothing was changed."
+1. Fill in `.forge/VISION.md` with your project's What, Who, and Pillars.
+2. Fill in `.forge/CONTRACT.md` with your project's interfaces, rules, and data model.
+3. Fill in `.forge/UX.md` with your screen flows and specs. — **only if step 4 was answered "yes"**
+4. Fill in `.forge/DESIGN.md` with your design tokens and component specs. — **only if step 4 was answered "yes"**
+5. Run `/forge-plan` to generate a task workplan.
+
+Renumber the remaining steps sequentially if step 3 or 4 above was omitted, so the list has no gaps.
+
+If all applicable files already existed, say: "All Forge files already exist. Nothing was changed."

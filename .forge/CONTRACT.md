@@ -15,9 +15,14 @@ Forge operates on these file artifacts:
 | Commands  | `.claude/commands/forge-*.md` | Forge-managed          | Slash command definitions for Claude Code                     |
 | Settings  | `.claude/settings.json`       | Human-configured       | Hook definitions for deterministic enforcement                |
 | CLAUDE.md | `CLAUDE.md` (project root)    | Human-configured       | Minimal pipeline pointer (3 lines max)                        |
-| UX Spec   | `.forge/UX.md`                | Human (70%) / AI (30%) | Screen-level experience spec: flows, states, copy, interactions |
-| UX Gate   | `.forge/scripts/check-ux-spec.js` | Forge-managed      | Deterministic ux-spec gate — validates one screen by name     |
-| DESIGN.md | `.forge/DESIGN.md`            | Human (tool-assisted) | Visual design system: tokens, typography, spacing, component specs. Generated with a design tool or hand-authored. <!-- ASSUMED: tool-agnostic markdown artifact mirrors UX.md pattern --> |
+| UX Spec   | `.forge/UX.md`                | Human (70%) / AI (30%) | Screen-level experience spec: flows, states, copy, interactions. Created only if the project has a user-facing interface (see Interfaces/`/forge-init`). |
+| UX Gate   | `.forge/scripts/check-ux-spec.js` | Forge-managed      | Deterministic ux-spec gate — validates one screen by name. Created only if the project has a user-facing interface. |
+| DESIGN.md | `.forge/DESIGN.md`            | Human (100%) | Visual design system: tokens, typography, spacing, component specs. Hand-authored markdown. Created only if the project has a user-facing interface. <!-- ASSUMED: tool-agnostic markdown artifact mirrors UX.md pattern --> |
+| Spec      | `.forge/SPEC.md`, `.forge/specs/*.md` | Human (60%) / AI (40%) | Behavioral spec: what the system should do — requirements, acceptance criteria, flows, rationale. Lives beside the Contract; Contract wins on conflict |
+| Status    | `.forge/STATUS.md`            | AI (60%) / Human (40%) | Living project log: open questions, decisions, risks, blockers          |
+| Workplan Lint | `.forge/scripts/check-workplan.js` | Forge-managed    | Deterministic workplan invariant checker                                 |
+| Spec Gate | `.forge/scripts/check-spec.js` | Forge-managed         | Deterministic spec readiness gate                                        |
+| Version   | `.forge/VERSION`              | Forge-managed          | Engine version stamp + canonical repo pointer, consumed by `/forge-sync` |
 
 ### Relationships
 
@@ -26,6 +31,8 @@ Forge operates on these file artifacts:
 - Workplan feeds Execution (commands read workplan to find and execute tasks).
 - Templates shape Execution (task type determines which template is injected).
 - Hooks enforce invariants independently of all other artifacts.
+- Spec feeds Workplan alongside Contract (behavior detail from SPEC, hard constraints from CONTRACT; Contract wins on conflict — see Rules/Spec Precedence).
+- Status logs open questions, decisions, risks, and blockers across all layers; checkpoint review packets embed it.
 
 ### Context Manifest
 
@@ -39,8 +46,11 @@ A context manifest is a list of Contract section references in a task's `Context
 - `UX#global` — global copy tone and style notes from UX.md
 - `DESIGN#section-name` — references a top-level section of DESIGN.md (e.g., `DESIGN#tokens`) <!-- ASSUMED: same resolution pattern as UX# -->
 - `DESIGN#section-name/subsection` — references a subsection (e.g., `DESIGN#components/button`)
+- `SPEC#section-name` — references a top-level section of SPEC.md (e.g., `SPEC#requirements`)
+- `SPEC#section-name/subsection` — references a subsection (e.g., `SPEC#requirements/req-login`)
+- `specs/name#section-name` — references a section of a per-feature spec file `.forge/specs/name.md`
 
-Resolution: parse the references, extract matching markdown sections (header through next same-level header), concatenate, inject into prompt template at the `{{context}}` slot. CONTRACT references resolve against `.forge/CONTRACT.md`; UX references resolve against `.forge/UX.md`; DESIGN references resolve against `.forge/DESIGN.md`.
+Resolution: parse the references, extract matching markdown sections (header through next same-level header), concatenate, inject into prompt template at the `{{context}}` slot. CONTRACT references resolve against `.forge/CONTRACT.md`; UX references resolve against `.forge/UX.md`; DESIGN references resolve against `.forge/DESIGN.md`; SPEC references resolve against `.forge/SPEC.md`; `specs/name#` references resolve against `.forge/specs/name.md`.
 
 **Budget:** Resolved context must not exceed ~200 lines of Contract content per task. Exceeding this signals the Contract section is too large or the task scope is too broad. One screen per task.
 
@@ -56,7 +66,7 @@ UX.md is the screen-level experience spec. Structure:
 ### Copy Tone
 <!-- Voice and energy rules: name what's in bounds and out. -->
 
-### Style Notes
+### Interaction Notes
 <!-- Global interaction/aesthetic principles only. Screen-specific decisions belong on the screen. -->
 
 ## Flows
@@ -78,6 +88,7 @@ UX.md is the screen-level experience spec. Structure:
 | State | Trigger | Experience |
 | ----- | ------- | ---------- |
 | ...   | ...     | ...        |
+<!-- Example: | Loading | Fetch triggered | Skeleton fade-in, opacity 0→1 over 200ms | -->
 
 ##### Edge Cases
 
@@ -104,6 +115,7 @@ DESIGN.md is the visual design system spec. It captures design tokens and compon
 
 ### Colors
 <!-- Seed colors, semantic color roles (e.g., primary, surface, error) -->
+<!-- Example: primary: #4F46E5, surface: #FFFFFF, error: #DC2626 -->
 
 ### Typography
 <!-- Type scale: font families, sizes, weights, line heights -->
@@ -123,9 +135,70 @@ DESIGN.md is the visual design system spec. It captures design tokens and compon
 <!-- Aesthetic rationale and cross-component rules -->
 ```
 
-**Authoring:** DESIGN.md may be generated by a design tool, exported from other design tools, or hand-authored. Forge treats it as a file artifact with a defined structure — no dependency on any specific tool.
+**Authoring:** DESIGN.md is hand-authored markdown — copy in values from whatever source you use (a design tool export, your own conventions, or by hand). Forge treats it as a file artifact with a defined structure; there is no tool integration.
 
 **Boundaries:** DESIGN.md owns visual system decisions — tokens, component visual specs. UX.md owns behavioral decisions — flows, states, interactions, copy, emotional intent. Feature tasks that implement a screen reference both when applicable. DESIGN.md does not duplicate token values that appear in code — it specifies intent; implementation maps intent to constants.
+
+### SPEC Data Model
+
+SPEC.md is the behavioral specification: what the system should do and why. It lives beside the Contract and carries meaningfully different information — the Contract states hard constraints and interfaces (testable invariants); the Spec states intended behavior, acceptance criteria, and rationale. Structure:
+
+```markdown
+# Spec
+
+## Overview
+
+<!-- What this feature/system does, in one paragraph. Why it exists. -->
+
+## Requirements
+
+### [REQ-slug] Requirement Name
+
+<!-- EARS-style statement: WHEN <trigger>, THE SYSTEM SHALL <response>. -->
+<!-- Acceptance criteria: bullet list, each independently testable. -->
+
+## Flows
+
+<!-- Behavioral sequences that span requirements. References UX.md screens where applicable. -->
+
+## Non-Goals
+
+<!-- What this spec deliberately excludes. Prevents scope creep during execution. -->
+```
+
+**Scaling:** Small projects use a single `.forge/SPEC.md`. When SPEC.md exceeds ~300 lines, split into per-feature files under `.forge/specs/` (e.g., `.forge/specs/auth.md`), referenced as `specs/auth#requirements`. <!-- ASSUMED: 300-line threshold mirrors the Contract's scoped-planning guidance -->
+
+**Boundaries:** CONTRACT.md owns hard constraints — data shapes, interfaces, invariants, state machines. SPEC.md owns behavior — requirements, acceptance criteria, flows, rationale. UX.md owns screen-level experience. SPEC references CONTRACT concepts; it never redefines them. Open questions raised while speccing go to STATUS.md, not inline prose.
+
+### STATUS.md Data Model
+
+STATUS.md is the living project log — the single place for open questions, decisions, risks, and blockers. Structure:
+
+```markdown
+# Status
+
+## Open Questions
+
+| ID | Question | Blocking? | Raised |
+| -- | -------- | --------- | ------ |
+
+## Decisions
+
+| Date | Decision | Why | Alternatives rejected |
+| ---- | -------- | --- | --------------------- |
+
+## Risks
+
+| Risk | Impact | Mitigation |
+| ---- | ------ | ---------- |
+
+## Blockers
+
+| Blocker | Blocking tasks | Needs |
+| ------- | -------------- | ----- |
+```
+
+**Writers:** `/forge-spec` appends open questions raised during intake. `clarify` tasks move resolved questions to Decisions (dated, with rationale). `/forge-next` appends a Blockers row when marking a task `blocked`. The human edits freely. **Readers:** `/forge-status` surfaces open questions and blockers; `checkpoint` review packets embed the file. A status file nothing reads goes stale — these integrations are mandatory, not optional.
 
 ## State Machines
 
@@ -177,25 +250,31 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
 
 ### Command: `/forge-init`
 
-- **Reads:** nothing (creates from built-in templates only)
+- **Reads:** nothing (creates from built-in templates only). Asks the human one interactive question before creating UX/DESIGN artifacts (see below) — this is a chat prompt, not a file read.
 - **Does:**
   - Creates `.forge/VISION.md` if absent (stub template with What/Who/Pillars sections)
   - Creates `.forge/CONTRACT.md` if absent (stub template with all top-level sections)
-  - Creates `.forge/templates/` directory with all 7 template files if absent: scaffold.md, feature.md, clarify.md, refactor.md, fix.md, investigate.md, ux-spec.md
-  - Creates `.forge/scripts/check-ux-spec.js` if absent (the ux-spec gate script)
-  - Creates `.forge/UX.md` if absent — stub with Global section (Copy Tone, Style Notes) and one placeholder Flow with one placeholder Screen, including mandatory fields as HTML comments
-  - Creates `.forge/DESIGN.md` if absent — stub with Tokens (Colors, Typography, Spacing, Radius) and Components sections, each with HTML comment placeholders <!-- ASSUMED: mirrors UX.md stub pattern; generated with a design tool or hand-authored -->
+  - Creates `.forge/templates/` directory with all 8 template files if absent: scaffold.md, feature.md, clarify.md, refactor.md, fix.md, investigate.md, ux-spec.md, checkpoint.md
+  - Creates `.forge/scripts/check-workplan.js` if absent (the workplan lint script)
+  - Creates `.forge/scripts/check-spec.js` if absent (the spec readiness gate script)
+  - Creates `.forge/SPEC.md` if absent (stub with Overview, Requirements, Flows, Non-Goals sections)
+  - Creates `.forge/STATUS.md` if absent (stub with Open Questions, Decisions, Risks, Blockers tables)
+  - Creates `.forge/VERSION` if absent (engine version stamp + canonical repo URL)
+  - **Asks the human:** "Does this project have a user-facing interface (UI/UX)?" before touching any UX/DESIGN artifact. If the answer is unclear, ask again — do not guess. <!-- ASSUMED: single yes/no gate at init time; per-artifact granularity or re-asking later is left to a future task -->
+    - **If yes:** creates `.forge/UX.md` if absent — stub with Global section (Copy Tone, Interaction Notes) and one placeholder Flow with one placeholder Screen, including mandatory fields as HTML comments; creates `.forge/DESIGN.md` if absent — stub with Tokens (Colors, Typography, Spacing, Radius) and Components sections, each with HTML comment placeholders; creates `.forge/scripts/check-ux-spec.js` if absent (the ux-spec gate script)
+    - **If no:** skips all three — does not create `.forge/UX.md`, `.forge/DESIGN.md`, or `.forge/scripts/check-ux-spec.js`. Downstream, `/forge-plan` already treats these as optional ("if it exists" / "do not gate on DESIGN.md presence") so no other command needs to change.
+    - **Changing the answer later:** re-running `/forge-init` asks the question again. Since the no-overwrite rule only skips files that already exist, answering "yes" on a later run creates the three files at that point; answering "no" after they already exist has no effect (existing files are never deleted).
   - Writes `.claude/settings.json` if absent (PostToolUse lint hook; PreToolUse commit hook disabled by default)
   - Appends the Forge integration block to `CLAUDE.md` if not already present
   - Never overwrites any file that already exists
-  - On completion: tells the user to fill in VISION.md, CONTRACT.md, and UX.md before running `/forge-plan`
-- **Outputs:** Scaffold files listed above
+  - On completion: tells the user to fill in VISION.md, CONTRACT.md, and UX.md (if created) before running `/forge-plan`
+- **Outputs:** Scaffold files listed above (UX.md, DESIGN.md, check-ux-spec.js conditional on the interactive answer)
 - **When to run:** Once, at project setup. Safe to re-run — idempotent due to no-overwrite rule.
 - **Template refresh:** To update templates to the latest versions, delete `.forge/templates/` and re-run `/forge-init`.
 
 ### Command: `/forge-plan`
 
-- **Reads:** `.forge/VISION.md` (What/Who/Pillars format), `.forge/CONTRACT.md` (sections: Data Model, State Machines, Interfaces, Rules, Boundaries), `.forge/UX.md` (when present — Flows, screens), `.forge/DESIGN.md` (when present — tokens, components), `.forge/WORKPLAN.md` (if exists)
+- **Reads:** `.forge/VISION.md` (What/Who/Pillars format), `.forge/CONTRACT.md` (sections: Data Model, State Machines, Interfaces, Rules, Boundaries), `.forge/SPEC.md` and `.forge/specs/*.md` (when present — requirements, acceptance criteria), `.forge/UX.md` (when present — Flows, screens), `.forge/DESIGN.md` (when present — tokens, components), `.forge/STATUS.md` (when present — blocking open questions), `.forge/WORKPLAN.md` (if exists)
 - **Does:**
   - Assumes scaffold has already run (via `/forge-init`). Always reads context and validates/generates the workplan.
   - Runs a two-check Contract readiness validation before generating any tasks:
@@ -203,9 +282,14 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
     2. **Unknown check** — scans CONTRACT.md for plan-blocking unknowns: `<!-- UNRESOLVED -->` markers, technology choices without documented rationale, external dependencies without constraints, rules referencing undefined concepts. Classifies each as *plan-blocking* (would change which tasks exist, their order, or their gates — treated like a coverage gap) or *implementation-detail* (only affects one task's internals — deferred to a `clarify` task). Both checks resolve together in a single pass; gaps and plan-blocking unknowns are written to CONTRACT.md with `<!-- ASSUMED: reason -->` annotations, then task generation proceeds immediately.
   - Regenerates only `pending` tasks; preserves `done` and `active` tasks exactly as-is.
   - Orders tasks as a dependency DAG — no task runs before its `Depends` entries are all `done`.
-  - **UX coverage:** When UX.md is present and has flows, every screen referenced in a planned flow must have a `ux-spec` task gated `done` before its `feature` task is unblocked. Missing screen specs are plan-blocking. When UX.md has flows but no screens yet, generates a flow-mapping `ux-spec` task first to enumerate all screens before any are individually specced. Gate for the mapping task: `grep -c "^#### Screen:" .forge/UX.md | awk '$1 >= N'` (N = expected count).
+  - **UX coverage:** When UX.md is present and has flows, every screen referenced in a planned flow must have a `ux-spec` task gated `done` before its `feature` task is unblocked. Missing screen specs are plan-blocking. When UX.md has flows but no screens yet, generates a flow-mapping `ux-spec` task first to enumerate all screens before any are individually specced. Gate for the mapping task: `grep -c "^#### Screen:" .forge/UX.md | awk '$1 >= N'` (N = expected count). **Stub detection:** a `### Flow:` or `#### Screen:` heading counts toward "has flows"/"has screens" only if its name is not the literal forge-init stub placeholder (`[Name]`) — the untouched stub must never be treated as authored content. <!-- ASSUMED: closes the stub-vs-real-content gap found during TASK-024; same detection principle as the VISION.md stub check in step 1 -->
+  - **DESIGN coverage stub detection:** likewise, a `## Tokens` or `### [Component Name]` heading counts as present only if it contains something beyond the forge-init stub's HTML-comment placeholders and literal bracket component name. An untouched DESIGN.md stub must never trigger `DESIGN#tokens`/`DESIGN#components/*` manifest inclusion. <!-- ASSUMED: mirrors the UX.md stub-detection fix -->
+
   - **UX task DAG shape:** TASK-A (map all screens) → TASK-B, TASK-C, TASK-D (one ux-spec per screen, independent) → TASK-E, TASK-F, TASK-G (one feature per screen, depends only on its paired ux-spec).
   - **DESIGN coverage:** When DESIGN.md is present and has tokens, feature tasks implementing screens include `DESIGN#tokens` in their context manifests. When DESIGN.md has component specs relevant to a screen, widen to include `DESIGN#components/[name]`. <!-- ASSUMED: additive to existing manifest rules; does not gate on DESIGN.md presence -->
+  - **SPEC coverage:** When SPEC.md (or `.forge/specs/`) is present, `feature` and `fix` task manifests include the `SPEC#` requirement sections their deliverable implements, alongside the `CONTRACT#` sections that constrain it. The manifest completeness test spans both files — behavior detail without its constraint, or constraint without its behavior, fails the test (see Rules/Spec Precedence).
+  - **Checkpoint cadence:** Inserts a `checkpoint` task at each dependency-phase boundary or after every 5 consecutive non-checkpoint tasks, whichever comes first, listing the span's tasks in `Depends` (see Rules/Checkpoint Cadence). <!-- ASSUMED: cadence of 5 -->
+  - **Workplan lint:** After writing WORKPLAN.md, runs `node .forge/scripts/check-workplan.js`. A nonzero exit means the generated plan violates an invariant — fix and re-run before reporting completion.
 - **Output task format:** Each task in WORKPLAN.md uses this structure: `## [TASK-XXX] Description` followed by fields — Status (`pending` for new tasks), Type (`scaffold|feature|clarify|refactor|fix|investigate|ux-spec`), Depends (`none` or comma-separated task IDs), Context (manifest references like `CONTRACT#section-name` or `UX#flows/flow-name/screen-name`), Gate (shell command or `manual:` prefix), Notes (empty for new tasks). Task IDs are sequential and unique (TASK-001, TASK-002, ...).
 - **Task sizing:** One task per concern. If a description uses "and" connecting two distinct pieces of work, split it. Each task should complete in a single clean session.
 - **Manifest generation:** Each task's Context field must list all Contract sections needed to execute independently (see Manifest Completeness rule). Context manifests for `ux-spec` tasks reference `UX#flows/flow-name` (the stub to complete). Context manifests for `feature` tasks implementing a screen reference `UX#flows/flow-name/screen-name` plus any `CONTRACT#` sections for data shapes the screen consumes.
@@ -214,12 +298,12 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
 
 ### Command: `/forge-next`
 
-- **Reads:** `.forge/WORKPLAN.md`, `.forge/CONTRACT.md` (referenced sections only), `.forge/UX.md` (when referenced in context manifests), `.forge/DESIGN.md` (when referenced in context manifests), `.forge/templates/`
+- **Reads:** `.forge/WORKPLAN.md`, `.forge/CONTRACT.md` (referenced sections only), `.forge/SPEC.md` and `.forge/specs/*.md` (when referenced in context manifests), `.forge/UX.md` (when referenced in context manifests), `.forge/DESIGN.md` (when referenced in context manifests), `.forge/STATUS.md` (checkpoint tasks only), `.forge/templates/`
 - **Task format:** Parses WORKPLAN.md entries: `## [TASK-XXX] Description` followed by Status, Type, Depends, Context, Gate, Notes fields.
 - **Task selection:** If a task is already `active`, resumes it (the `Notes` field provides continuity from the previous session). Otherwise, finds the next unblocked `pending` task, or accepts a specific task ID (e.g., `/forge-next TASK-012`). A task is **unblocked** when its `Depends` field is `none` or all listed task IDs have status `done`. If a specified task has unmet dependencies, warns the human and asks for confirmation.
 - **Does:**
   1. Selects the target task (see Task selection above)
-  2. Resolves the context manifest: parses the `Context` field references (e.g., `CONTRACT#interfaces/command-forge-status`), extracts matching markdown sections from the appropriate file — CONTRACT.md for `CONTRACT#` references, UX.md for `UX#` references, DESIGN.md for `DESIGN#` references (each section runs from its header through the next same-level header), concatenates them
+  2. Resolves the context manifest: parses the `Context` field references (e.g., `CONTRACT#interfaces/command-forge-status`), extracts matching markdown sections from the appropriate file — CONTRACT.md for `CONTRACT#` references, UX.md for `UX#` references, DESIGN.md for `DESIGN#` references, SPEC.md for `SPEC#` references, `.forge/specs/name.md` for `specs/name#` references (each section runs from its header through the next same-level header), concatenates them
   3. Marks task `active` in WORKPLAN.md
   4. Loads the prompt template from `.forge/templates/{type}.md` matching the task's Type field. If the file does not exist, stop and tell the user: "Template file missing. Run `/forge-init` to create project templates." Do not proceed with inline fallbacks.
   5. Injects resolved context into the template at `{{context}}`, plus task details into `{{task_id}}`, `{{task_description}}`, `{{gate}}`
@@ -227,17 +311,44 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
   7. Runs the gate command. If the gate starts with `manual:`, presents the description to the human and asks for pass/fail confirmation instead of running a shell command.
   8. On pass: marks `done`, runs `git diff --name-only HEAD` (or staged files if not yet committed) to collect touched files, appends `Files: <comma-separated list>` to the task's Notes field, suggests commit message ending with `(TASK-XXX)`
   9. On fail: keeps `active`, writes diagnostic to `Notes`
+- **Checkpoint tasks:** When the selected task's Type is `checkpoint`, execution means assembling the review packet (see Rules/Checkpoint Cadence): tasks completed since the last checkpoint (from WORKPLAN Notes/Files and `git log`), gate results, manual test steps if any exist, and the current STATUS.md open questions and risks. The gate is always `manual:` — present the packet and wait for human pass/fail. On block: appends a row to STATUS.md Blockers.
+- **Workplan lint:** After any write to WORKPLAN.md, runs `node .forge/scripts/check-workplan.js`; a nonzero exit blocks proceeding until fixed.
 - **Outputs:** Executed code changes, gate result, updated WORKPLAN.md
 
 ### Command: `/forge-status`
 
-- **Reads:** `.forge/WORKPLAN.md`
+- **Reads:** `.forge/WORKPLAN.md`, `.forge/STATUS.md` (when present)
 - **Task format:** Parses task entries: `## [TASK-XXX] Description` followed by Status, Type, Depends, Context, Gate, Notes fields.
 - **Does:**
   - Counts tasks by status: `pending`, `active`, `done`, `blocked`
   - Identifies next unblocked task: first `pending` task whose `Depends` are all `done` or `none`
   - Lists any `clarify`-type tasks that are `pending` or `active` (these need human decisions)
-- **Outputs:** Progress summary to the user — task counts by status, next unblocked task ID and description, clarify tasks awaiting input (if any). Read-only — no file modifications, no side effects.
+  - Surfaces STATUS.md items when present: open questions (flagging any marked Blocking), and blockers
+- **Outputs:** Progress summary to the user — task counts by status, next unblocked task ID and description, clarify tasks awaiting input (if any), open questions and blockers from STATUS.md (if any). Read-only — no file modifications, no side effects.
+
+### Command: `/forge-spec`
+
+- **Reads:** Raw planning input (idea text, pasted ticket, or file reference provided as arguments), `.forge/VISION.md`, `.forge/CONTRACT.md`, existing `.forge/SPEC.md` / `.forge/specs/*.md`, `.forge/STATUS.md`
+- **Does:**
+  - Runs a structured intake interview **before drafting**: asks the clarifying questions a senior engineer would ask — target user, success criteria, edge cases, integration points, non-goals. Does not proceed on unstated assumptions when a question would resolve them.
+  - Drafts the spec per the SPEC Data Model: Overview, Requirements with EARS-style statements (`WHEN <trigger>, THE SYSTEM SHALL <response>`) and testable acceptance criteria, Flows, Non-Goals.
+  - Annotates every inference with `<!-- ASSUMED: reason -->` and every unresolvable unknown with `<!-- UNRESOLVED: ... -->`.
+  - Appends unresolved unknowns to STATUS.md Open Questions.
+  - Runs `node .forge/scripts/check-spec.js <file>` and fixes structural failures before reporting.
+- **Outputs:** `.forge/SPEC.md` or `.forge/specs/<feature>.md`, updated `.forge/STATUS.md`
+- **Human action required:** Answer interview questions; review the spec before `/forge-plan` consumes it. `/forge-plan` treats a spec with unresolved plan-blocking questions as a coverage gap.
+
+### Command: `/forge-sync`
+
+- **Reads:** `.forge/VERSION` (line 1: engine version; line 2: canonical repo URL <!-- ASSUMED: VERSION file carries the repo pointer -->), the canonical Forge repository
+- **Does:**
+  - Fetches the canonical versions of Forge-managed files: `.claude/commands/forge-*.md`, `.forge/templates/*.md`, `.forge/scripts/check-*.js`
+  - Diffs each against the local copy and presents a per-file summary: unchanged, local-only customization, upstream-updated, or conflicting
+  - Applies only the updates the human approves, file by file
+  - **Never touches project-owned artifacts:** VISION.md, CONTRACT.md, SPEC.md, specs/, WORKPLAN.md, STATUS.md, UX.md, DESIGN.md
+  - Updates `.forge/VERSION` after a successful sync
+- **Outputs:** Updated Forge-managed files (approved subset), updated `.forge/VERSION`
+- **Human action required:** Approve or decline each file update. Local customizations are never silently overwritten.
 
 ### Prompt Template Interface
 
@@ -261,6 +372,7 @@ Templates are ~30-50 lines. They are injected fresh each session.
 | `refactor`    | Improve structure, preserve behavior      | Existing tests pass                      |
 | `fix`         | Repair broken gate or bug                 | Original failing command passes          |
 | `investigate` | Diagnose issues, explore unknowns         | `manual:` — findings documented in Notes |
+| `checkpoint`  | Pause point closing an unattended span. Assembles a review packet: work done, gate results, manual test steps, STATUS excerpt. Produces no code. | `manual:` — human approves the span |
 
 Each type has a corresponding prompt template in `.forge/templates/`. The task type determines which template `/forge-next` loads for execution.
 
@@ -271,7 +383,7 @@ Exactly 3 lines in the project's CLAUDE.md:
 ```markdown
 ## Forge
 
-- Pipeline: .forge/ (VISION.md, CONTRACT.md, WORKPLAN.md)
+- Pipeline: .forge/ (VISION.md, CONTRACT.md, SPEC.md, WORKPLAN.md, STATUS.md)
 - Workflow: /forge-next → review → commit → /clear
 - Do not modify CONTRACT.md without asking first
 ```
@@ -441,22 +553,66 @@ Prose is permitted only in Emotional intent, Design intention, and Copy Tone. Al
 
 **Rationale:** The implementation agent translates spec cells to code constants. "Smooth" produces an invented value. "ease-out 250ms" produces `ANIMATION.TRANSITION_DURATION = 250`. Spec precision directly determines implementation precision.
 
+### Spec Precedence
+
+CONTRACT.md and SPEC.md live side by side and carry different information: the Contract states what must be true (constraints, interfaces, invariants); the Spec states what the system should do (behavior, acceptance criteria, rationale).
+
+- **Where they conflict, the Contract wins.** A conflict is not silently resolved — it is logged as an Open Question in STATUS.md and resolved via a `clarify` task that amends one of the two documents.
+- **Neither document duplicates the other.** SPEC references Contract concepts by name; it never redefines data shapes or interfaces. If drafting the Spec requires restating a constraint, that constraint belongs in the Contract and the Spec points to it.
+- **Manifest completeness spans both.** A `feature` task manifest that pulls a SPEC requirement without the CONTRACT sections constraining it — or vice versa — fails the completeness test. `/forge-plan` verifies both directions.
+
+### Workplan Lint
+
+WORKPLAN.md invariants are enforced deterministically by `.forge/scripts/check-workplan.js`, not by instruction-following. The script validates:
+
+1. Every task has all required fields with valid values (Status, Type, Depends, Context, Gate).
+2. Task IDs are unique; every `Depends` entry references an existing task that appears earlier in the file.
+3. No dependency cycles.
+4. At most one task has status `active`.
+5. Every Context reference resolves to an existing heading in its source file.
+6. `feature` and `fix` gates invoke a test command — not solely structural checks (grep, ls, test -f).
+7. `checkpoint` and `investigate` gates use the `manual:` prefix.
+
+`/forge-plan` and `/forge-next` run the script after any WORKPLAN.md write; a nonzero exit blocks proceeding. It may additionally be wired as a PostToolUse hook for edits made outside the commands.
+
+### Checkpoint Cadence
+
+Checkpoints concentrate human review at span boundaries instead of every task.
+
+- `/forge-plan` inserts a `checkpoint` task at each dependency-phase boundary, or after every 5 consecutive non-checkpoint tasks, whichever comes first. <!-- ASSUMED: cadence of 5; tune per project -->
+- A checkpoint's `Depends` lists every task in its span. Downstream tasks depend on the checkpoint, so the DAG halts there until the human passes it.
+- The checkpoint review packet contains: tasks completed in the span (descriptions, Files lines), gate results and test pass state, manual verification steps if any exist, and the current STATUS.md Open Questions and Risks.
+- A failed checkpoint produces `fix` tasks (or a workplan edit / branch rollback) before the pipeline continues. The packet names the span's starting commit so rollback is one git command.
+
+### Unattended Execution
+
+Between checkpoints, the loop (e.g., repeated headless `/forge-next` invocations) may run without per-task human review, under these conditions — all mandatory:
+
+1. **Work branch only.** Never on the default branch. The branch is the blast radius.
+2. **One commit per task**, message ending `(TASK-XXX)` — the rhythm does not change, only who approves it. Commits during an unattended span do not require per-commit human review; the checkpoint reviews the span.
+3. **No pushing.** Publishing is always human.
+4. **Hard stops.** The loop halts at: a `checkpoint` task, a `clarify` task, any task entering `blocked`, or a second consecutive gate failure on the same task.
+5. **Merge is human.** The span reaches the default branch only through checkpoint approval and a human merge.
+
 ## Boundaries
 
 ### What Forge Does Not Do
 
-- **No sub-agents.** Unreliable context inheritance, 7x token cost.
+- **No sub-agent dependence.** Fresh top-level sessions are the unit of execution. Sub-agents may assist within a task, but the pipeline never requires them to function. <!-- Amended v0.3: the original blanket ban's rationale (broken parallelism, 7x token cost) is dated -->
 - **No hidden state.** Everything is readable markdown files.
 - **No conversation continuity dependence.** Every session is self-contained.
-- **No auto-commit or auto-push.** The human is the final gate.
+- **No auto-merge, no auto-push.** Unattended spans may auto-commit to a work branch (see Rules/Unattended Execution); merging to the default branch and pushing remain human actions. The human is the final gate.
 - **No lock-in.** The files are useful even without the commands.
 
 ### What Requires Human Approval
 
 - Any modification to CONTRACT.md — approval occurs through Claude Code's native file-write confirmation. `/forge-plan` may write `<!-- ASSUMED: reason -->` annotations directly during validation; substantive amendments (outside of planning) follow the Contract Amendment Protocol.
 - Workplan review after `/forge-plan` generates or regenerates tasks.
-- The commit step after gate passes — human reviews code before committing.
+- The commit step after gate passes — human reviews code before committing. During unattended spans this review moves to the checkpoint (see Rules/Unattended Execution).
 - Resolving `clarify` tasks (these require human decisions).
+- Passing `checkpoint` tasks — the review packet requires explicit human approval.
+- Merging an unattended work branch to the default branch.
+- Applying `/forge-sync` updates — approved file by file.
 
 ### Hook Configuration
 
@@ -469,6 +625,5 @@ This avoids broken hooks on first run while ensuring deterministic enforcement i
 
 ### Platform Constraints
 
-- Slash commands have a character budget — excess commands may be silently excluded.
-- Forge uses exactly 4 commands to minimize budget consumption: forge-init, forge-plan, forge-next, forge-status.
+- Forge ships 6 commands: forge-init, forge-plan, forge-next, forge-status, forge-spec, forge-sync. Commands stay few and lean by design. <!-- Amended v0.3: the 2025-era slash-command character budget concern has eased; leanness is retained as a principle, not a workaround -->
 - Users should run `/context` to verify commands loaded if behavior seems wrong.

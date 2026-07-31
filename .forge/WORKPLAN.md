@@ -207,11 +207,208 @@
 - **Gate:** `bash .forge/tests/smoke.sh && grep -qi "DESIGN#\|DESIGN\.md" .claude/commands/forge-next.md && echo "forge-next DESIGN# resolution present"`
 - **Notes:** Files: .claude/commands/forge-next.md, .forge/WORKPLAN.md
 
+## [TASK-042] Make /forge-init interactive: ask about user-facing UI, skip UX/DESIGN artifacts when not needed
+
+- **Status:** done
+- **Type:** scaffold
+- **Depends:** none
+- **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#data-model/artifacts
+- **Gate:** `test -s .claude/commands/forge-init.md && grep -qi "user-facing" .claude/commands/forge-init.md && grep -qi "does this project have a user-facing interface" .claude/commands/forge-init.md && grep -q "UX.md" .claude/commands/forge-init.md && grep -q "DESIGN.md" .claude/commands/forge-init.md && grep -qi "skip" .claude/commands/forge-init.md && echo "forge-init interactive UX/DESIGN gating present"`
+- **Notes:** Ask before creating any of UX.md, DESIGN.md, check-ux-spec.js. Yes: create all three as before (existing stub content unchanged). No: skip all three, no other file's creation logic changes. Re-running forge-init re-asks; no-overwrite rule handles the rest — answering yes later creates the files then, answering no after they exist is a no-op. Step 9's completion report/next-steps now list UX.md/DESIGN.md conditionally on step 4's answer, with numbering closed up when they're omitted. Gate passed.
+  Files: .claude/commands/forge-init.md, .forge/CONTRACT.md, .forge/WORKPLAN.md
+
 ## [TASK-024] End-to-end validation of DESIGN.md pipeline
+
+- **Status:** done
+- **Type:** investigate
+- **Depends:** TASK-021, TASK-022, TASK-023, TASK-042
+- **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#interfaces/command-forge-plan, CONTRACT#interfaces/command-forge-next, CONTRACT#data-model/design.md-data-model
+- **Gate:** `manual: Simulate a full DESIGN.md pipeline: (0) verify forge-init asks whether the project has a user-facing interface, creates UX.md/DESIGN.md/check-ux-spec.js only when answered yes, and cleanly skips all three when answered no; (1) verify forge-init creates DESIGN.md stub without overwriting existing files (yes branch); (2) populate DESIGN.md with tokens, verify forge-plan includes DESIGN#tokens in a feature task context manifest; (3) verify forge-next resolves DESIGN# references correctly from DESIGN.md; (4) verify a feature task referencing both UX# and DESIGN# receives both resolved contexts`
+- **Notes:** Pipeline wiring (steps 0-4) confirmed correct by inspection and by re-running forge-init's actual stub content and forge-plan's own detection commands. Widened into a holistic design/UX review per human request; found 2 confirmed live bugs and 3 quality/clarity smells:
+  (A) CONFIRMED BUG: forge-plan's UX/DESIGN coverage checks have no stub-detection guard (unlike VISION.md's `<!-- What this project builds` check) — an untouched UX.md/DESIGN.md stub's literal `[Name]`/`[Component Name]` bracket headings pass every "has a real flow/screen/component" test verbatim (`grep -c "^#### Screen:"` on the raw stub returns 1). Silently generates a ux-spec task for a screen named "[Name]" and injects placeholder-comment noise into manifests.
+  (B) CONFIRMED BUG: check-ux-spec.js's vague-term scan runs against the whole States table body, not just the Experience column. Verified false positive: a fully precise, rule-compliant screen with State label "Slow network" was rejected for containing "slow", even though the word appeared outside the column the rule is meant to police.
+  (C) SMELL: "generated with a design tool" language in CONTRACT.md/README.md/forge-init.md is vestigial post-Stitch-removal — no mechanism backs it. Human confirmed it "never seemed to matter" in practice. Resolution agreed: simple rewording, not a new tool-integration mechanism.
+  (D) SMELL: UX.md's `Global > Style Notes` and DESIGN.md's top-level `Style Notes` share an identical heading for overlapping subject matter, inviting duplication despite the Boundaries rule trying to separate ownership.
+  (E) SMELL: neither stub includes a filled worked example demonstrating the numeric-precision convention in situ.
+  Human approved lumping follow-ups per efficiency preference — see TASK-043 (bug fixes A+B) and TASK-044 (documentation polish C+D+E) added via /forge-plan.
+  Files: .forge/WORKPLAN.md
+
+## [TASK-043] Fix confirmed UX/DESIGN pipeline bugs: stub-detection guard + check-ux-spec.js column scoping
+
+- **Status:** done
+- **Type:** fix
+- **Depends:** none
+- **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#rules/ux-spec-precision, CONTRACT#rules/ux-spec-first
+- **Gate:** `bash .forge/tests/smoke.sh && bash .forge/tests/test-check-ux-spec.sh && grep -qi "stub" .claude/commands/forge-plan.md && echo "UX/DESIGN pipeline bugs fixed"`
+- **Notes:** Two confirmed bugs from TASK-024's investigation, lumped per human direction to cut corners:
+  (1) forge-plan.md's UX/DESIGN coverage checks must treat literal forge-init stub placeholders (`### Flow: [Name]`, `#### Screen: [Name]`, `### [Component Name]`, a content-free `## Tokens`) as NOT present — see CONTRACT#interfaces/command-forge-plan's "UX coverage" and "DESIGN coverage stub detection" bullets (amended by this planning session). Verified live: `grep -c "^#### Screen:"` on the raw, untouched forge-init stub returns 1. Update forge-plan.md's UX coverage and DESIGN coverage instructions to explicitly exclude these literal placeholder headings before counting flows/screens/components/tokens as real.
+  (2) `.forge/scripts/check-ux-spec.js`'s vague-term scan currently matches against the whole States table body (`statesBody`). Scope it to the Experience column only (3rd `|`-delimited cell of each data row) — State and Trigger labels legitimately contain words like "slow"/"fast" without violating CONTRACT#rules/ux-spec-precision, which governs only cells describing time/physics/sensation (i.e., Experience). Verified live: a screen with State `"Slow network"` and a fully precise Experience value (`"opacity 0→1 over 200ms"`) was incorrectly rejected for containing "slow".
+  Create `.forge/tests/test-check-ux-spec.sh` (mirrors the pattern used by TASK-025's `test-check-workplan.sh` / TASK-030's `test-check-spec.sh`): one fixture where a non-Experience column contains a "vague" word (must now PASS), one fixture where the Experience column itself contains a vague word like "smooth" (must still FAIL). Gate passed. Also patched forge-init.md's embedded copy of check-ux-spec.js — it's the canonical source new projects bootstrap from, so fixing only the locally-deployed script would have left the bug shipping to every future `/forge-init`.
+  Files: .claude/commands/forge-init.md, .claude/commands/forge-plan.md, .forge/CONTRACT.md, .forge/scripts/check-ux-spec.js, .forge/tests/test-check-ux-spec.sh, .forge/WORKPLAN.md
+
+## [TASK-044] Polish DESIGN/UX documentation smells: design-tool wording, duplicate heading name, worked examples
+
+- **Status:** done
+- **Type:** refactor
+- **Depends:** none
+- **Context:** CONTRACT#data-model/artifacts, CONTRACT#data-model/design.md-data-model, CONTRACT#data-model/ux.md-data-model, CONTRACT#interfaces/command-forge-init
+- **Gate:** `bash .forge/tests/smoke.sh && ! grep -qiE "generated with a design tool|tool-assisted|generate it with a design tool" .forge/CONTRACT.md README.md .claude/commands/forge-init.md && grep -q "Interaction Notes" .claude/commands/forge-init.md && grep -qE "ease-out|spring\(" .claude/commands/forge-init.md && echo "DESIGN/UX doc polish complete"`
+- **Notes:** Three smells from TASK-024, lumped per human direction. Human confirmed a simple rewording is fine for (1) — no new tool-integration mechanism needed.
+  (1) Remove the vestigial "design tool" framing left over from the removed Google Stitch integration (see `945243a Remove Google Stitch references from design-system docs` — this finishes that cleanup). Replace with plain "hand-authored" language. Locations: CONTRACT.md Artifacts table DESIGN.md row (also change Owner column from "Human (tool-assisted)" to "Human (100%)"), CONTRACT.md's DESIGN.md Data Model "Authoring" paragraph, README.md's DESIGN.md description line, forge-init.md's step-9 next-steps line. Keep it simple, e.g.: "DESIGN.md is hand-authored markdown — copy in values from whatever source you use."
+  (2) Rename UX.md's Global-section `### Style Notes` to `### Interaction Notes` (in forge-init.md's UX.md stub block and CONTRACT.md's UX.md Data Model structure block) to disambiguate from DESIGN.md's top-level `## Style Notes`. Leave DESIGN.md's heading as-is — it's the better fit for "Style Notes." Update the Boundaries prose too if it names the old heading.
+  (3) Add ONE filled worked example to each stub in forge-init.md, as an HTML comment beneath the relevant table/section — NOT a live data row, since a real row would falsely satisfy check-ux-spec.js's "has data rows" check for an otherwise-unfilled screen, recreating the exact stub-detection problem TASK-043 fixes. E.g., under UX.md's States table: `<!-- Example: | Loading | Fetch triggered | Skeleton fade-in, opacity 0→1 over 200ms | -->`. Under DESIGN.md's Colors: `<!-- Example: primary: #4F46E5, surface: #FFFFFF, error: #DC2626 -->`.
+  Gate passed. All three items done: reworded design-tool language to plain "hand-authored" framing in CONTRACT.md (Artifacts table + Authoring paragraph, Owner changed to "Human (100%)"), README.md, and forge-init.md's next-steps line; renamed UX.md's Global "Style Notes" to "Interaction Notes" in both forge-init.md's stub and CONTRACT.md's mirrored structure block (DESIGN.md's "Style Notes" left as-is); added HTML-comment worked examples to both stubs in forge-init.md and to CONTRACT.md's illustrative structure blocks.
+  Files: .claude/commands/forge-init.md, .forge/CONTRACT.md, README.md, .forge/WORKPLAN.md
+
+## [TASK-025] Create check-workplan.js lint script with test fixtures
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** none
+- **Context:** CONTRACT#rules/workplan-lint, CONTRACT#state-machines/task-lifecycle, CONTRACT#data-model/context-manifest, CONTRACT#interfaces/task-types
+- **Gate:** `bash .forge/tests/test-check-workplan.sh`
+- **Notes:** Test script exercises: exit 0 on the current .forge/WORKPLAN.md, exit 1 on fixtures seeding each invariant violation (missing field, unknown dep, forward dep, cycle, two active tasks, unresolvable Context ref, feature gate without test command, checkpoint gate without manual: prefix). Known issue: done tasks TASK-012 and TASK-014 contain self-referencing Depends typos — the script must treat violations in done tasks as warnings, errors only for pending/active tasks, so the current workplan passes.
+
+## [TASK-026] Wire check-workplan.js into /forge-plan and /forge-next
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-025
+- **Context:** CONTRACT#rules/workplan-lint, CONTRACT#interfaces/command-forge-plan, CONTRACT#interfaces/command-forge-next
+- **Gate:** `bash .forge/tests/smoke.sh && grep -q "check-workplan" .claude/commands/forge-plan.md && grep -q "check-workplan" .claude/commands/forge-next.md && echo "workplan lint wired"`
+- **Notes:** Both commands run the script after any WORKPLAN.md write; nonzero exit blocks proceeding.
+
+## [TASK-027] Update /forge-init to create SPEC.md stub
+
+- **Status:** pending
+- **Type:** scaffold
+- **Depends:** none
+- **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#data-model/spec-data-model
+- **Gate:** `test -s .claude/commands/forge-init.md && grep -q "SPEC.md" .claude/commands/forge-init.md && echo "forge-init SPEC stub present"`
+- **Notes:** Stub follows the SPEC Data Model: Overview, Requirements (with REQ-slug/EARS comment guidance), Flows, Non-Goals. Mention the ~300-line split threshold to .forge/specs/ in a stub comment.
+
+## [TASK-028] Update /forge-plan to read SPEC and emit SPEC# refs in manifests
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-027
+- **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#data-model/spec-data-model, CONTRACT#data-model/context-manifest, CONTRACT#rules/spec-precedence
+- **Gate:** `bash .forge/tests/smoke.sh && grep -q "SPEC#" .claude/commands/forge-plan.md && echo "forge-plan SPEC support present"`
+- **Notes:** Completeness test spans SPEC and CONTRACT: behavior without constraint or constraint without behavior fails. Spec conflicts with CONTRACT are logged to STATUS.md Open Questions and become clarify tasks.
+
+## [TASK-029] Update /forge-next to resolve SPEC# and specs/name# context references
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-027
+- **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#data-model/context-manifest, CONTRACT#data-model/spec-data-model
+- **Gate:** `bash .forge/tests/smoke.sh && grep -q "SPEC#" .claude/commands/forge-next.md && echo "forge-next SPEC# resolution present"`
+- **Notes:** Same slug-matching resolution as CONTRACT#; specs/name# routes to .forge/specs/name.md.
+
+## [TASK-030] Create check-spec.js spec readiness gate script
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-027
+- **Context:** CONTRACT#data-model/spec-data-model, CONTRACT#rules/gate-patterns
+- **Gate:** `bash .forge/tests/test-check-spec.sh`
+- **Notes:** Validates a spec file: required sections present (Overview, Requirements, Non-Goals), at least one REQ with acceptance criteria, no unresolved `<!-- UNRESOLVED -->` markers above threshold (default: zero blocking), no placeholder/TODO text in Requirements. Mirrors check-ux-spec.js structure.
+
+## [TASK-031] Update /forge-init to create STATUS.md stub
+
+- **Status:** pending
+- **Type:** scaffold
+- **Depends:** none
+- **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#data-model/status.md-data-model
+- **Gate:** `grep -q "STATUS.md" .claude/commands/forge-init.md && echo "forge-init STATUS stub present"`
+- **Notes:** Four-table stub per the STATUS.md Data Model. This repo's own .forge/STATUS.md is the reference instance.
+
+## [TASK-032] Create /forge-spec intake command
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-030, TASK-031
+- **Context:** CONTRACT#interfaces/command-forge-spec, CONTRACT#data-model/spec-data-model, CONTRACT#data-model/status.md-data-model
+- **Gate:** `test -s .claude/commands/forge-spec.md && grep -q "ASSUMED" .claude/commands/forge-spec.md && grep -q "STATUS.md" .claude/commands/forge-spec.md && grep -q "check-spec" .claude/commands/forge-spec.md && grep -qi "interview" .claude/commands/forge-spec.md && echo "forge-spec command valid"`
+- **Notes:** Interview-before-draft is the point — unasked questions become propagated assumptions. Accepts raw idea text or pasted ticket as $ARGUMENTS.
+
+## [TASK-033] Update /forge-status to surface STATUS.md items
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-031
+- **Context:** CONTRACT#interfaces/command-forge-status, CONTRACT#data-model/status.md-data-model
+- **Gate:** `bash .forge/tests/smoke.sh && grep -q "STATUS.md" .claude/commands/forge-status.md && echo "forge-status STATUS integration present"`
+- **Notes:** Surfaces open questions (flag Blocking ones) and blockers. Remains read-only.
+
+## [TASK-034] Update clarify template to log decisions to STATUS.md
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-031
+- **Context:** CONTRACT#data-model/status.md-data-model, CONTRACT#interfaces/prompt-template-interface
+- **Gate:** `bash .forge/tests/smoke.sh && grep -q "STATUS.md" .forge/templates/clarify.md && echo "clarify template logs decisions"`
+- **Notes:** On resolution: move the question from Open Questions to Decisions with date, rationale, and rejected alternatives.
+
+## [TASK-035] Create checkpoint.md template and add to /forge-init template set
+
+- **Status:** pending
+- **Type:** scaffold
+- **Depends:** TASK-031
+- **Context:** CONTRACT#interfaces/task-types, CONTRACT#interfaces/prompt-template-interface, CONTRACT#rules/checkpoint-cadence
+- **Gate:** `test -s .forge/templates/checkpoint.md && grep -q "checkpoint.md" .claude/commands/forge-init.md && echo "checkpoint template present"`
+- **Notes:** Template instructs: assemble review packet (span tasks + Files lines, gate results, manual test steps, STATUS excerpt, span starting commit for rollback), present, wait for manual pass/fail. Produces no code.
+
+## [TASK-036] Update /forge-plan to insert checkpoint tasks at cadence
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-035
+- **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#rules/checkpoint-cadence, CONTRACT#interfaces/task-types
+- **Gate:** `bash .forge/tests/smoke.sh && grep -qi "checkpoint" .claude/commands/forge-plan.md && echo "forge-plan checkpoint cadence present"`
+- **Notes:** Phase boundary or every 5 non-checkpoint tasks, whichever first; checkpoint Depends lists the full span; downstream tasks depend on the checkpoint.
+
+## [TASK-037] Update /forge-next to execute checkpoint tasks with review packet
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-035
+- **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#data-model/status.md-data-model
+- **Gate:** `bash .forge/tests/smoke.sh && grep -qi "checkpoint" .claude/commands/forge-next.md && grep -qi "review packet" .claude/commands/forge-next.md && echo "forge-next checkpoint execution present"`
+- **Notes:** Checkpoint gates are always manual:. On block, append a STATUS.md Blockers row.
+
+## [TASK-038] Create /forge-sync command and .forge/VERSION stamp
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** none
+- **Context:** CONTRACT#interfaces/command-forge-sync, CONTRACT#data-model/artifacts
+- **Gate:** `test -s .claude/commands/forge-sync.md && test -s .forge/VERSION && grep -q "VERSION" .claude/commands/forge-sync.md && grep -qi "never" .claude/commands/forge-sync.md && echo "forge-sync command valid"`
+- **Notes:** VERSION line 1 = engine version (start at 0.3.0), line 2 = canonical repo URL. Sync diffs Forge-managed files only; project-owned artifacts are untouchable; per-file human approval.
+
+## [TASK-039] End-to-end validation of v0.3 pipeline
 
 - **Status:** pending
 - **Type:** investigate
-- **Depends:** TASK-021, TASK-022, TASK-023
-- **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#interfaces/command-forge-plan, CONTRACT#interfaces/command-forge-next, CONTRACT#data-model/design.md-data-model
-- **Gate:** `manual: Simulate a full DESIGN.md pipeline: (1) verify forge-init creates DESIGN.md stub without overwriting existing files; (2) populate DESIGN.md with tokens, verify forge-plan includes DESIGN#tokens in a feature task context manifest; (3) verify forge-next resolves DESIGN# references correctly from DESIGN.md; (4) verify a feature task referencing both UX# and DESIGN# receives both resolved contexts`
+- **Depends:** TASK-026, TASK-029, TASK-032, TASK-033, TASK-034, TASK-036, TASK-037, TASK-038
+- **Context:** CONTRACT#interfaces/command-forge-spec, CONTRACT#rules/workplan-lint, CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#rules/spec-precedence
+- **Gate:** `manual: In a scratch project: (1) forge-init creates SPEC.md, STATUS.md, checkpoint.md, both check scripts, and VERSION without overwriting; (2) forge-spec runs an intake interview and produces a spec that passes check-spec.js with open questions logged to STATUS.md; (3) forge-plan emits SPEC# manifests and a checkpoint task, and check-workplan.js passes; (4) forge-next resolves SPEC# refs and executes a checkpoint with a complete review packet; (5) forge-status surfaces STATUS.md items; (6) simulate a 2-3 task unattended span on a work branch honoring the hard stops`
 - **Notes:**
+
+## [TASK-040] Update README and CLAUDE.md for v0.3
+
+- **Status:** pending
+- **Type:** scaffold
+- **Depends:** TASK-039
+- **Context:** CONTRACT#interfaces/claudemd-integration-block, CONTRACT#boundaries/platform-constraints, CONTRACT#rules/unattended-execution
+- **Gate:** `grep -q "forge-spec" README.md && grep -q "forge-sync" README.md && grep -qi "checkpoint" README.md && grep -q "SPEC.md" CLAUDE.md && echo "docs updated"`
+- **Notes:** README: new commands, checkpoint/unattended workflow section, SPEC and STATUS in file structure, template count 7→8. CLAUDE.md: update Pipeline line per amended integration block.
+
+## [TASK-041] Investigate plugin packaging for Forge distribution
+
+- **Status:** pending
+- **Type:** investigate
+- **Depends:** TASK-040
+- **Context:** CONTRACT#boundaries/platform-constraints, CONTRACT#interfaces/command-forge-sync
+- **Gate:** `manual: Findings documented in Notes — plugin structure (commands/skills/hooks bundling), marketplace hosting options, migration path from copied commands, template override resolution order (project .forge/templates/ over plugin defaults), and whether /forge-sync is subsumed or retained`
+- **Notes:** Tracked as STATUS.md Q-001. Decision gate for v0.4 scope.
