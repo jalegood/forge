@@ -12,7 +12,7 @@ Read `.forge/WORKPLAN.md` and report project progress. This is a **read-only** c
    ## [TASK-XXX] Description
 
    - **Status:** pending | active | done | blocked
-   - **Type:** scaffold | feature | clarify | refactor | fix | investigate
+   - **Type:** scaffold | feature | clarify | refactor | fix | investigate | ux-spec | checkpoint
    - **Depends:** none | comma-separated TASK-IDs
    - **Context:** manifest references
    - **Gate:** shell command or manual: prefix

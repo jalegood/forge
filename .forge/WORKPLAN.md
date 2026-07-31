@@ -260,6 +260,16 @@
   Gate passed. All three items done: reworded design-tool language to plain "hand-authored" framing in CONTRACT.md (Artifacts table + Authoring paragraph, Owner changed to "Human (100%)"), README.md, and forge-init.md's next-steps line; renamed UX.md's Global "Style Notes" to "Interaction Notes" in both forge-init.md's stub and CONTRACT.md's mirrored structure block (DESIGN.md's "Style Notes" left as-is); added HTML-comment worked examples to both stubs in forge-init.md and to CONTRACT.md's illustrative structure blocks.
   Files: .claude/commands/forge-init.md, .forge/CONTRACT.md, README.md, .forge/WORKPLAN.md
 
+## [TASK-045] Make ux-spec.md template creation conditional on forge-init's user-facing UI question
+
+- **Status:** done
+- **Type:** fix
+- **Depends:** none
+- **Context:** CONTRACT#interfaces/command-forge-init
+- **Gate:** `test -s .claude/commands/forge-init.md && grep -q "ux-spec.md" .claude/commands/forge-init.md && ! (awk '/### 3\. Create/,/### 4\./' .claude/commands/forge-init.md | grep -qi "ux-spec.md") && echo "ux-spec.md creation is now conditional"`
+- **Notes:** Follow-up to TASK-042, which made UX.md/DESIGN.md/check-ux-spec.js conditional on the "does this project have a user-facing interface" question but missed `.forge/templates/ux-spec.md` — step 3 (template creation) runs before step 4 (the question) and creates all 7 templates unconditionally, including ux-spec.md. For a "no" answer, this template is permanently dead weight: forge-plan can never generate a `ux-spec` task without UX.md present with real flows. Fixed: moved ux-spec.md's creation out of step 3's unconditional list into step 4's "if yes" branch alongside UX.md/DESIGN.md/check-ux-spec.js; updated step 3's heading (7→6 unconditional templates) and step 9's completion report list; updated CONTRACT.md's interfaces/command-forge-init "Does" bullets to match. Also caught and fixed a weak gate command during verification: the original `grep -qv` check only proved *some* line in range lacked the string, not that the string was absent — replaced with a proper negated match.
+  Files: .claude/commands/forge-init.md, .forge/CONTRACT.md, .forge/WORKPLAN.md
+
 ## [TASK-025] Create check-workplan.js lint script with test fixtures
 
 - **Status:** pending
@@ -267,7 +277,7 @@
 - **Depends:** none
 - **Context:** CONTRACT#rules/workplan-lint, CONTRACT#state-machines/task-lifecycle, CONTRACT#data-model/context-manifest, CONTRACT#interfaces/task-types
 - **Gate:** `bash .forge/tests/test-check-workplan.sh`
-- **Notes:** Test script exercises: exit 0 on the current .forge/WORKPLAN.md, exit 1 on fixtures seeding each invariant violation (missing field, unknown dep, forward dep, cycle, two active tasks, unresolvable Context ref, feature gate without test command, checkpoint gate without manual: prefix). Known issue: done tasks TASK-012 and TASK-014 contain self-referencing Depends typos — the script must treat violations in done tasks as warnings, errors only for pending/active tasks, so the current workplan passes.
+- **Notes:** Test script exercises: exit 0 on the current .forge/WORKPLAN.md, exit 1 on fixtures seeding each invariant violation (missing field, unknown dep, forward dep, cycle, two active tasks, unresolvable Context ref, feature gate without test command, checkpoint gate without manual: prefix). Known issue: done tasks TASK-012 and TASK-014 contain self-referencing Depends typos — the script must treat violations in done tasks as warnings, errors only for pending/active tasks, so the current workplan passes. Second known issue: task IDs are NOT monotonic in file order (TASK-016 precedes TASK-014; TASK-042/043/044 precede TASK-024 and the whole TASK-025..041 block; TASK-046 sits between TASK-038 and TASK-039, while the lower-numbered TASK-045 sits far earlier). Invariant 2 must therefore compare **file position**, never ID ordinal — a linter that infers order from the ID number will report false cycles across the existing workplan.
 
 ## [TASK-026] Wire check-workplan.js into /forge-plan and /forge-next
 
@@ -386,11 +396,20 @@
 - **Gate:** `test -s .claude/commands/forge-sync.md && test -s .forge/VERSION && grep -q "VERSION" .claude/commands/forge-sync.md && grep -qi "never" .claude/commands/forge-sync.md && echo "forge-sync command valid"`
 - **Notes:** VERSION line 1 = engine version (start at 0.3.0), line 2 = canonical repo URL. Sync diffs Forge-managed files only; project-owned artifacts are untouchable; per-file human approval.
 
+## [TASK-046] Checkpoint: v0.3 machinery complete
+
+- **Status:** pending
+- **Type:** checkpoint
+- **Depends:** TASK-026, TASK-028, TASK-029, TASK-032, TASK-033, TASK-034, TASK-036, TASK-037, TASK-038
+- **Context:** CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#data-model/status.md-data-model
+- **Gate:** `manual: Review the v0.3 build span before validation and docs. Packet must contain: each task completed in the span with its description and Files line, the gate result for each, check-workplan.js output on the current workplan, current STATUS.md Open Questions and Risks, and the span's starting commit for rollback.`
+- **Notes:** First executable checkpoint in Forge's history — executing it is itself the live validation that TASK-035 and TASK-037 work. Span is 14 tasks, over the cadence of 5: v0.3's own plan predates its checkpoint machinery, so this is the only position where a checkpoint is executable (see STATUS.md Decisions, 2026-07-31). Normal cadence applies from v0.4. Depends lists the span's leaf tasks, which transitively cover all of TASK-025..038.
+
 ## [TASK-039] End-to-end validation of v0.3 pipeline
 
 - **Status:** pending
 - **Type:** investigate
-- **Depends:** TASK-026, TASK-029, TASK-032, TASK-033, TASK-034, TASK-036, TASK-037, TASK-038
+- **Depends:** TASK-046
 - **Context:** CONTRACT#interfaces/command-forge-spec, CONTRACT#rules/workplan-lint, CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#rules/spec-precedence
 - **Gate:** `manual: In a scratch project: (1) forge-init creates SPEC.md, STATUS.md, checkpoint.md, both check scripts, and VERSION without overwriting; (2) forge-spec runs an intake interview and produces a spec that passes check-spec.js with open questions logged to STATUS.md; (3) forge-plan emits SPEC# manifests and a checkpoint task, and check-workplan.js passes; (4) forge-next resolves SPEC# refs and executes a checkpoint with a complete review packet; (5) forge-status surfaces STATUS.md items; (6) simulate a 2-3 task unattended span on a work branch honoring the hard stops`
 - **Notes:**

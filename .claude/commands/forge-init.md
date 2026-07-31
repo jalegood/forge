@@ -59,7 +59,7 @@ Check if `.forge/CONTRACT.md` exists. If it does **not** exist, create it with t
 
 If it exists, skip — do not overwrite.
 
-### 3. Create `.forge/templates/` with all 7 template files if absent
+### 3. Create `.forge/templates/` with all 6 template files if absent
 
 Check for each of the following files. For any that do **not** exist, create them with the stub below. If a file exists, skip it — do not overwrite.
 
@@ -303,46 +303,6 @@ When the investigation is complete:
    - Any decisions or blockers encountered
 ```
 
-**`.forge/templates/ux-spec.md`** — if absent, create:
-
-```markdown
-# UX Spec Task
-
-You are executing a **ux-spec** task. Your job is to author or complete a screen spec in UX.md. This task produces no code — only a completed screen specification.
-
-## Task
-
-**ID:** {{task_id}}
-**Description:** {{task_description}}
-**Gate:** `{{gate}}`
-
-## Contract Context
-
-The following sections are relevant to this task. The UX.md stub to complete is included below.
-
-{{context}}
-
-## Instructions
-
-1. **Read the stub.** Locate the screen referenced in the task description within `.forge/UX.md`.
-2. **Complete all mandatory fields.** Every screen must have `**Emotional intent:**` and `**Design intention:**` filled with specific, non-placeholder language.
-3. **Fill in States.** Every state row must have a specific, measurable Experience value. No vague terms like "smooth", "fast", or "subtle" — use numeric values (e.g., "ease-out 250ms") for anything involving time, physics, or sensation.
-4. **Fill in Edge Cases.** At minimum: Empty/first-time behavior and Error behavior.
-5. **Precision rule.** Prose is permitted only in Emotional intent, Design intention, and Copy Tone. All cells involving measurable qualities must be numeric or reference a named pattern.
-
-## Completion
-
-When the screen spec is complete:
-
-1. Run the gate command: `{{gate}}`
-2. If the gate **passes**: report success and suggest a commit message.
-3. If the gate **fails**: read the validation errors, fix the offending fields, and re-run.
-4. If you **cannot complete** the task in this session, update the `Notes` field in WORKPLAN.md with:
-   - What was completed
-   - What remains
-   - Any decisions or blockers encountered
-```
-
 ### 4. Ask whether the project has a user-facing interface, then create `.forge/UX.md` if needed
 
 Ask the human: **"Does this project have a user-facing interface (UI/UX)?"**
@@ -395,6 +355,48 @@ Check if `.forge/UX.md` exists. If it does **not** exist, create it with this st
 | ------------------ | -------- |
 | Empty / first-time |          |
 | Error              |          |
+```
+
+If it exists, skip — do not overwrite.
+
+Also create `.forge/templates/ux-spec.md` if absent (only reached when step 4 was answered "yes" — skipped otherwise):
+
+```markdown
+# UX Spec Task
+
+You are executing a **ux-spec** task. Your job is to author or complete a screen spec in UX.md. This task produces no code — only a completed screen specification.
+
+## Task
+
+**ID:** {{task_id}}
+**Description:** {{task_description}}
+**Gate:** `{{gate}}`
+
+## Contract Context
+
+The following sections are relevant to this task. The UX.md stub to complete is included below.
+
+{{context}}
+
+## Instructions
+
+1. **Read the stub.** Locate the screen referenced in the task description within `.forge/UX.md`.
+2. **Complete all mandatory fields.** Every screen must have `**Emotional intent:**` and `**Design intention:**` filled with specific, non-placeholder language.
+3. **Fill in States.** Every state row must have a specific, measurable Experience value. No vague terms like "smooth", "fast", or "subtle" — use numeric values (e.g., "ease-out 250ms") for anything involving time, physics, or sensation.
+4. **Fill in Edge Cases.** At minimum: Empty/first-time behavior and Error behavior.
+5. **Precision rule.** Prose is permitted only in Emotional intent, Design intention, and Copy Tone. All cells involving measurable qualities must be numeric or reference a named pattern.
+
+## Completion
+
+When the screen spec is complete:
+
+1. Run the gate command: `{{gate}}`
+2. If the gate **passes**: report success and suggest a commit message.
+3. If the gate **fails**: read the validation errors, fix the offending fields, and re-run.
+4. If you **cannot complete** the task in this session, update the `Notes` field in WORKPLAN.md with:
+   - What was completed
+   - What remains
+   - Any decisions or blockers encountered
 ```
 
 If it exists, skip — do not overwrite.
@@ -614,8 +616,8 @@ After creating all files, tell the user which files were created (existing files
 - `.forge/templates/clarify.md`
 - `.forge/templates/refactor.md`
 - `.forge/templates/investigate.md`
-- `.forge/templates/ux-spec.md`
 - `.forge/UX.md` (only if step 4 was answered "yes")
+- `.forge/templates/ux-spec.md` (only if step 4 was answered "yes")
 - `.forge/DESIGN.md` (only if step 4 was answered "yes")
 - `.forge/scripts/check-ux-spec.js` (only if step 4 was answered "yes")
 - `.claude/settings.json`

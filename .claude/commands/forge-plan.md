@@ -56,7 +56,7 @@ Analyze VISION.md and CONTRACT.md to determine the full set of deliverables. For
 ## [TASK-XXX] Description
 
 - **Status:** pending
-- **Type:** scaffold | feature | clarify | refactor | fix | investigate
+- **Type:** scaffold | feature | clarify | refactor | fix | investigate | ux-spec | checkpoint
 - **Depends:** none | TASK-001, TASK-002
 - **Context:** CONTRACT#section-name, CONTRACT#section-name/subsection
 - **Gate:** shell command or manual: description
