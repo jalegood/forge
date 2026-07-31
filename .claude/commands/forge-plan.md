@@ -63,7 +63,9 @@ Analyze VISION.md and CONTRACT.md to determine the full set of deliverables. For
 - **Notes:**
 ```
 
-**Task ID assignment:** Sequential integers, TASK-001 onward. On subsequent runs, new tasks continue from the highest existing ID + 1.
+**Task ID assignment:** Unique IDs from a monotonic counter — `max(existing) + 1`, recomputed against the current file on every write, never inferred from the last ID you read earlier in the session. Gaps are normal (deleted or abandoned tasks). IDs carry no ordering meaning.
+
+**Task placement:** Place each new task block so that every task in its `Depends` appears earlier in the file. This is a hard requirement, not a formatting preference — file order must remain a valid topological sort of the DAG. A task whose dependencies are all `done` may go at the end; a task that an existing `pending` task depends on must be inserted above that task, not appended. See CONTRACT#rules/task-ordering.
 
 **Task sizing rules:**
 

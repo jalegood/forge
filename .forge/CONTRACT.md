@@ -290,7 +290,7 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
   - **SPEC coverage:** When SPEC.md (or `.forge/specs/`) is present, `feature` and `fix` task manifests include the `SPEC#` requirement sections their deliverable implements, alongside the `CONTRACT#` sections that constrain it. The manifest completeness test spans both files — behavior detail without its constraint, or constraint without its behavior, fails the test (see Rules/Spec Precedence).
   - **Checkpoint cadence:** Inserts a `checkpoint` task at each dependency-phase boundary or after every 5 consecutive non-checkpoint tasks, whichever comes first, listing the span's tasks in `Depends` (see Rules/Checkpoint Cadence). <!-- ASSUMED: cadence of 5 -->
   - **Workplan lint:** After writing WORKPLAN.md, runs `node .forge/scripts/check-workplan.js`. A nonzero exit means the generated plan violates an invariant — fix and re-run before reporting completion.
-- **Output task format:** Each task in WORKPLAN.md uses this structure: `## [TASK-XXX] Description` followed by fields — Status (`pending` for new tasks), Type (`scaffold|feature|clarify|refactor|fix|investigate|ux-spec|checkpoint`), Depends (`none` or comma-separated task IDs), Context (manifest references like `CONTRACT#section-name` or `UX#flows/flow-name/screen-name`), Gate (shell command or `manual:` prefix), Notes (empty for new tasks). Task IDs are sequential and unique (TASK-001, TASK-002, ...).
+- **Output task format:** Each task in WORKPLAN.md uses this structure: `## [TASK-XXX] Description` followed by fields — Status (`pending` for new tasks), Type (`scaffold|feature|clarify|refactor|fix|investigate|ux-spec|checkpoint`), Depends (`none` or comma-separated task IDs), Context (manifest references like `CONTRACT#section-name` or `UX#flows/flow-name/screen-name`), Gate (shell command or `manual:` prefix), Notes (empty for new tasks). Task IDs are unique and assigned from a monotonic counter: the next ID is `max(existing) + 1`, computed at write time against the current file — never inferred from the last ID read earlier in the session. Gaps are normal (deleted or abandoned tasks). An ID's ordinal carries no ordering meaning; see Rules/Task Ordering.
 - **Task sizing:** One task per concern. If a description uses "and" connecting two distinct pieces of work, split it. Each task should complete in a single clean session.
 - **Manifest generation:** Each task's Context field must list all Contract sections needed to execute independently (see Manifest Completeness rule). Context manifests for `ux-spec` tasks reference `UX#flows/flow-name` (the stub to complete). Context manifests for `feature` tasks implementing a screen reference `UX#flows/flow-name/screen-name` plus any `CONTRACT#` sections for data shapes the screen consumes.
 - **Outputs:** Updated `.forge/WORKPLAN.md`
@@ -458,7 +458,19 @@ Splitting mid-session is a normal workflow event, not a failure.
 
 - WORKPLAN.md is a single file with a unified DAG, even when the Contract is split across multiple files.
 - `forge-plan` preserves `done` and `active` tasks on re-run; only regenerates `pending` tasks.
-- Task IDs are sequential and unique (TASK-001, TASK-002, ...).
+- Task IDs, file position, and the dependency DAG encode three different orderings — see Rules/Task Ordering.
+
+### Task Ordering
+
+Three orderings coexist in WORKPLAN.md; only one is normative.
+
+- **`Depends` (the DAG)** is the sole source of execution order. Every other ordering derives from it or carries no meaning.
+- **File position** is a maintained projection of the DAG: among `pending` and `active` tasks, every `Depends` entry must appear earlier in the file. File order is therefore always a valid topological sort. This is what lets a human read WORKPLAN.md top to bottom without tooling, and it makes a misplaced insertion detectable rather than silent. Violations among `done` tasks are frozen history — the linter reports them as warnings, and they are not rewritten to satisfy the rule.
+- **ID ordinal** is identity only. IDs are never renumbered and never used to infer order. Inserting a task means placing it correctly in the file, not renumbering its neighbors.
+
+Adding a task therefore has two independent obligations: mint a unique ID (see Interfaces/`/forge-plan`), and place the block so its dependencies precede it.
+
+**Known limitation:** `max(existing) + 1` is racy. Two sessions minting against different snapshots of WORKPLAN.md will pick the same ID — a scenario v0.3 makes more likely, not less, since parallel sessions and unattended spans are the point. This is detected by Workplan Lint's uniqueness check rather than prevented, which is deliberate: an ID collision is a merge problem, and Forge resolves merge problems at the checkpoint and the human merge.
 
 ### Contract-First
 
@@ -566,8 +578,8 @@ CONTRACT.md and SPEC.md live side by side and carry different information: the C
 WORKPLAN.md invariants are enforced deterministically by `.forge/scripts/check-workplan.js`, not by instruction-following. The script validates:
 
 1. Every task has all required fields with valid values (Status, Type, Depends, Context, Gate).
-2. Task IDs are unique; every `Depends` entry references an existing task that appears earlier in the file.
-3. No dependency cycles.
+2. Task IDs are unique; every `Depends` entry references an existing task. For `pending` and `active` tasks, each `Depends` entry must additionally appear earlier in the file (Rules/Task Ordering); the same violation in a `done` task is reported as a warning, not an error.
+3. No dependency cycles, checked across the whole graph. Invariant 2's file-order check is scoped to non-`done` tasks and therefore does **not** subsume this one — a cycle confined to `done` tasks escapes invariant 2 entirely.
 4. At most one task has status `active`.
 5. Every Context reference resolves to an existing heading in its source file.
 6. `feature` and `fix` gates invoke a test command — not solely structural checks (grep, ls, test -f).
