@@ -22,6 +22,7 @@ Forge operates on these file artifacts:
 | Status    | `.forge/STATUS.md`            | AI (60%) / Human (40%) | Living project log: open questions, decisions, risks, blockers          |
 | Workplan Lint | `.forge/scripts/check-workplan.js` | Forge-managed    | Deterministic workplan invariant checker                                 |
 | Spec Gate | `.forge/scripts/check-spec.js` | Forge-managed         | Deterministic spec readiness gate                                        |
+| Unattended Guards | `.forge/scripts/guard-push.sh`, `.forge/scripts/guard-branch.sh`, `.forge/scripts/guard-secrets.sh` | Forge-managed | Deterministic PreToolUse hooks: block `git push`, block off-branch commits during unattended runs, block commits matching common secret patterns |
 | Version   | `.forge/VERSION`              | Forge-managed          | Engine version stamp + canonical repo pointer, consumed by `/forge-sync` |
 
 ### Relationships
@@ -264,7 +265,8 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
     - **If yes:** creates `.forge/UX.md` if absent — stub with Global section (Copy Tone, Interaction Notes) and one placeholder Flow with one placeholder Screen, including mandatory fields as HTML comments; creates `.forge/templates/ux-spec.md` if absent (the ux-spec prompt template — pointless boilerplate without UX.md, so it's gated here rather than with the other 7 unconditional templates); creates `.forge/DESIGN.md` if absent — stub with Tokens (Colors, Typography, Spacing, Radius) and Components sections, each with HTML comment placeholders; creates `.forge/scripts/check-ux-spec.js` if absent (the ux-spec gate script)
     - **If no:** skips all four — does not create `.forge/UX.md`, `.forge/templates/ux-spec.md`, `.forge/DESIGN.md`, or `.forge/scripts/check-ux-spec.js`. Downstream, `/forge-plan` already treats these as optional ("if it exists" / "do not gate on DESIGN.md presence") so no other command needs to change.
     - **Changing the answer later:** re-running `/forge-init` asks the question again. Since the no-overwrite rule only skips files that already exist, answering "yes" on a later run creates the four files at that point; answering "no" after they already exist has no effect (existing files are never deleted).
-  - Writes `.claude/settings.json` if absent (PostToolUse lint hook; PreToolUse commit hook disabled by default)
+  - Writes `.claude/settings.json` if absent (PostToolUse lint hook; PreToolUse commit hook disabled by default; PreToolUse unattended-execution guards — push guard, branch guard, secret guard — enabled by default, see Boundaries#hook-configuration) <!-- ASSUMED: new projects should ship the guards by default, same as the dogfood instance -->
+  - Creates `.forge/scripts/guard-push.sh`, `.forge/scripts/guard-branch.sh`, `.forge/scripts/guard-secrets.sh` if absent (the unattended-execution guard scripts referenced by the settings.json hooks above)
   - Appends the Forge integration block to `CLAUDE.md` if not already present
   - Never overwrites any file that already exists
   - On completion: tells the user to fill in VISION.md, CONTRACT.md, and UX.md (if created) before running `/forge-plan`
@@ -606,6 +608,8 @@ Between checkpoints, the loop (e.g., repeated headless `/forge-next` invocations
 4. **Hard stops.** The loop halts at: a `checkpoint` task, a `clarify` task, any task entering `blocked`, or a second consecutive gate failure on the same task.
 5. **Merge is human.** The span reaches the default branch only through checkpoint approval and a human merge.
 
+Rules 1 and 3 are mechanically enforced by the branch guard and push guard hooks, not by instruction-following alone (see Boundaries#hook-configuration). <!-- ASSUMED: ties policy to its enforcing mechanism, per Design Principle #2 -->
+
 ## Boundaries
 
 ### What Forge Does Not Do
@@ -632,6 +636,12 @@ Between checkpoints, the loop (e.g., repeated headless `/forge-next` invocations
 
 - **PostToolUse (file edit):** Auto-lint/format after every file write (~200ms, non-blocking). Configured for the detected tech stack, or a no-op placeholder if no linter is detected.
 - **PreToolUse (git commit):** Block commits unless test suite passes (exit 0 required). **Disabled by default** — enabled by a later workplan task after test infrastructure exists.
+- **PreToolUse (unattended-execution guards):** Three deterministic checks, **enabled by default** — unlike the test-gate hook above, these do not depend on test infrastructure existing:
+  1. **Push guard** (`guard-push.sh`) — blocks any Bash command matching `git push`. Always active; publishing is human-only (see Boundaries#what-forge-does-not-do).
+  2. **Branch guard** (`guard-branch.sh`) — when the environment variable `FORGE_UNATTENDED=1` is set, blocks `git commit` if the current branch is the repository's default branch. Inert in ordinary interactive sessions. The headless/looped invocation driving an unattended span (see Rules#unattended-execution) sets `FORGE_UNATTENDED=1` before invoking `/forge-next`.
+  3. **Secret guard** (`guard-secrets.sh`) — blocks `git commit` when the staged diff matches a conservative set of common secret patterns (cloud access keys, private-key headers, common API-key prefixes). A floor, not a substitute for a dedicated scanner.
+
+  Each guard reads the tool call via Claude Code's PreToolUse hook stdin contract and exits nonzero to block. <!-- ASSUMED: hook I/O contract (stdin JSON with tool_input.command, nonzero exit blocks) per Claude Code's documented PreToolUse hook behavior -->
 
 This avoids broken hooks on first run while ensuring deterministic enforcement is available as early as possible. The human may edit `settings.json` at any time to adjust hook behavior.
 

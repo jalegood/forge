@@ -272,12 +272,16 @@
 
 ## [TASK-025] Create check-workplan.js lint script with test fixtures
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** none
 - **Context:** CONTRACT#rules/workplan-lint, CONTRACT#rules/task-ordering, CONTRACT#state-machines/task-lifecycle, CONTRACT#data-model/context-manifest, CONTRACT#interfaces/task-types
 - **Gate:** `bash .forge/tests/test-check-workplan.sh`
 - **Notes:** Test script exercises: exit 0 on the current .forge/WORKPLAN.md, exit 1 on fixtures seeding each invariant violation (missing field, unknown dep, forward dep, cycle, two active tasks, unresolvable Context ref, feature gate without test command, checkpoint gate without manual: prefix). Known issue: done tasks TASK-012 and TASK-014 contain self-referencing Depends typos — the script must treat violations in done tasks as warnings, errors only for pending/active tasks, so the current workplan passes. Second known issue: task IDs are NOT monotonic in file order (TASK-016 precedes TASK-014; TASK-042/043/044 precede TASK-024 and the whole TASK-025..041 block; TASK-046 sits between TASK-038 and TASK-039, while the lower-numbered TASK-045 sits far earlier). Invariant 2 must therefore compare **file position**, never ID ordinal — a linter that infers order from the ID number will report false cycles across the existing workplan. See CONTRACT#rules/task-ordering for the full three-ordering model. Invariants 2 and 3 are NOT redundant despite the overlap: invariant 2's file-order check is scoped to pending/active tasks, so a cycle confined to done tasks (exactly TASK-012 and TASK-014's self-deps) escapes it — invariant 3 must run real cycle detection over the whole graph, reporting done-task cycles as warnings. Do not delete invariant 3 as dead code. Baseline for the exit-0 fixture: the current workplan has 46 tasks, zero file-order violations, 4 ID-vs-file-position inversions, and 2 done-task self-deps.
+
+  Implementation notes for future maintainers: (1) `.forge/CONTRACT.md` uses CRLF line endings — the script normalizes `\r\n`→`\n` on every file it reads before regexing, otherwise a bare `\r` at end-of-line breaks non-multiline `$`-anchored matches. (2) CONTRACT.md's illustrative fenced code blocks (e.g. the UX.md/DESIGN.md structure examples under Data Model) contain literal `#`-prefixed lines like `## Global` — `parseHeadings` must skip lines between ``` fences or those get parsed as real headings and prematurely close enclosing sections. (3) Context-manifest matching compacts both the reference segment and the heading text to bare lowercase alnum (strip everything else, no hyphens) before comparing — this tolerates the mixed "x.md-data-model" vs "xmd-integration-block" punctuation conventions already present in this file's own hand-written Context fields; a strict hyphen-preserving slugify (matching /forge-next's documented algorithm literally) breaks on `CLAUDE.md`-derived refs. (4) Invariant 6 (feature/fix gates need a test command) exempts gates whose only file targets are non-code (e.g. `.md` command/template files, `.forge/VERSION`) per CONTRACT#rules/gate-patterns, which designates structural checks as correct for markdown artifacts — without this, TASK-003/004/032/038's legitimate structural gates would false-positive. (5) Severity policy extends the done-task "frozen history" warning-not-error treatment (explicit in the Contract for invariants 2 and 3) to invariants 6 and 7 as well, for consistency; invariants 1, 4, and 5 have no status exemption. None of this required a CONTRACT.md amendment — it's implementation detail resolving ambiguity already visible by reading the whole file, not new policy.
+
+  Files: .forge/scripts/check-workplan.js, .forge/tests/test-check-workplan.sh, .forge/WORKPLAN.md
 
 ## [TASK-026] Wire check-workplan.js into /forge-plan and /forge-next
 
@@ -396,14 +400,34 @@
 - **Gate:** `test -s .claude/commands/forge-sync.md && test -s .forge/VERSION && grep -q "VERSION" .claude/commands/forge-sync.md && grep -qi "never" .claude/commands/forge-sync.md && echo "forge-sync command valid"`
 - **Notes:** VERSION line 1 = engine version (start at 0.3.0), line 2 = canonical repo URL. Sync diffs Forge-managed files only; project-owned artifacts are untouchable; per-file human approval.
 
+## [TASK-047] Create unattended-execution guard hooks and wire into settings.json
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** none
+- **Context:** CONTRACT#boundaries/hook-configuration, CONTRACT#rules/unattended-execution, CONTRACT#interfaces/command-forge-init, CONTRACT#data-model/artifacts
+- **Gate:** `bash .forge/tests/test-guard-hooks.sh`
+- **Notes:** Three deterministic PreToolUse guard scripts per CONTRACT#boundaries/hook-configuration:
+  1. `.forge/scripts/guard-push.sh` — blocks any Bash command matching `git push`, unconditionally.
+  2. `.forge/scripts/guard-branch.sh` — blocks `git commit` when `FORGE_UNATTENDED=1` is set AND the current branch equals the repo's default branch; no-op otherwise (ordinary interactive sessions are untouched).
+  3. `.forge/scripts/guard-secrets.sh` — blocks `git commit` when the staged diff matches a conservative secret-pattern list (cloud access keys, private-key headers, common API-key prefixes).
+
+  `FORGE_UNATTENDED=1` must be set by the headless-loop launcher script itself (e.g. the `while ... claude -p "/forge-next" ... done` wrapper), never by a human typing `export` before a run. This is deliberate, not an implementation detail to skip: per human discussion (2026-07-31), this project is used both at work (branch-protected — direct main commits already impossible server-side) and on personal projects (direct main commits are the normal, human-reviewed, interactive habit). Making the flag manual would mean a forgotten `export` before an unattended run silently falls back to normal main-committing behavior — exactly the one case where nobody is watching to catch it. Sourcing the flag from the launcher script instead removes the "did I remember" failure mode in both directions: ordinary interactive `/forge-next` never has it set (guard stays inert, personal-project workflow untouched), and every unattended invocation has it set automatically (guard is always live). Building the launcher/wrapper script itself is out of scope for this task — it's a future task once headless looping is built; this task only defines and documents the convention the wrapper must follow (see CONTRACT#boundaries/hook-configuration).
+
+  Wire all three into `.claude/settings.json`'s `PreToolUse` array (Bash matcher), alongside the existing PostToolUse lint hook — do not remove or reorder it. Also update `.claude/commands/forge-init.md`'s settings.json-creation step so new projects get all three guards by default (per CONTRACT#interfaces/command-forge-init), following the TASK-043 precedent of keeping forge-init.md's embedded canonical copies in sync with the locally-deployed scripts.
+
+  Test script `.forge/tests/test-guard-hooks.sh` (mirrors TASK-025/TASK-030's fixture pattern) exercises, per guard: push guard blocks a `git push` command and passes one without; branch guard blocks only when both `FORGE_UNATTENDED=1` is set and the current branch is the default-branch fixture, passes when either condition is false; secret guard blocks a fixture staged diff containing a known secret pattern and passes a clean fixture diff. Each script reads the PreToolUse hook's stdin JSON contract (`tool_input.command`) and exits nonzero to block.
+
+  Origin: identified during a risk discussion on auto-commit during unattended execution (2026-07-31) — CONTRACT already specified the unattended-execution policy (work-branch-only, no-push, hard-stops) but nothing mechanically enforced it. Coverage gap resolved in CONTRACT.md by this planning pass before this task was generated (Boundaries#hook-configuration, Data Model#artifacts, Interfaces#command-forge-init).
+
 ## [TASK-046] Checkpoint: v0.3 machinery complete
 
 - **Status:** pending
 - **Type:** checkpoint
-- **Depends:** TASK-026, TASK-028, TASK-029, TASK-032, TASK-033, TASK-034, TASK-036, TASK-037, TASK-038
+- **Depends:** TASK-026, TASK-028, TASK-029, TASK-032, TASK-033, TASK-034, TASK-036, TASK-037, TASK-038, TASK-047
 - **Context:** CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#data-model/status.md-data-model
 - **Gate:** `manual: Review the v0.3 build span before validation and docs. Packet must contain: each task completed in the span with its description and Files line, the gate result for each, check-workplan.js output on the current workplan, current STATUS.md Open Questions and Risks, and the span's starting commit for rollback.`
-- **Notes:** First executable checkpoint in Forge's history — executing it is itself the live validation that TASK-035 and TASK-037 work. Span is 14 tasks, over the cadence of 5: v0.3's own plan predates its checkpoint machinery, so this is the only position where a checkpoint is executable (see STATUS.md Decisions, 2026-07-31). Normal cadence applies from v0.4. Depends lists the span's leaf tasks, which transitively cover all of TASK-025..038.
+- **Notes:** First executable checkpoint in Forge's history — executing it is itself the live validation that TASK-035 and TASK-037 work. Span is 15 tasks, over the cadence of 5: v0.3's own plan predates its checkpoint machinery, so this is the only position where a checkpoint is executable (see STATUS.md Decisions, 2026-07-31). Normal cadence applies from v0.4. Depends lists the span's leaf tasks, which transitively cover all of TASK-025..038 plus TASK-047 (added in a later planning pass the same day — the guard hooks are part of v0.3's unattended-execution machinery and must be reviewed in the same checkpoint, not deferred to v0.4).
 
 ## [TASK-039] End-to-end validation of v0.3 pipeline
 
