@@ -177,6 +177,8 @@ Write to `.forge/WORKPLAN.md`:
 1. All `done` and `active` tasks, in their original order, byte-for-byte identical.
 2. All newly generated `pending` tasks, ordered by the dependency DAG.
 
+**Workplan lint:** After writing, run `node .forge/scripts/check-workplan.js`. A nonzero exit means the generated plan violates an invariant — diagnose the reported violation, fix WORKPLAN.md, and re-run the script. Repeat until it exits 0 before proceeding to step 8.
+
 ### 8. Report and prompt human review
 
 Tell the user:

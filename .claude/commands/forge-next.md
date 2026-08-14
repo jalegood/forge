@@ -123,6 +123,8 @@ Change `- **Status:** pending` to `- **Status:** active` for this task.
 
 Do this **before** beginning execution — if the session is interrupted, the task should already be marked active.
 
+**Workplan lint:** Immediately after writing, run `node .forge/scripts/check-workplan.js`. A nonzero exit blocks proceeding — diagnose the reported violation, fix WORKPLAN.md, and re-run the script until it exits 0 before continuing to step 5.
+
 ### 5. Load and fill the prompt template
 
 1. Read `.forge/templates/{type}.md` where `{type}` is the task's Type field (e.g., `feature`, `scaffold`, `clarify`). If the file does not exist, stop and tell the user: "Template file missing. Run `/forge-init` to create project templates." Do not proceed with inline fallbacks.
@@ -202,6 +204,8 @@ If during execution you determine the task cannot proceed — a dependency is mi
    - Any decisions made or blockers encountered
 3. Report the current state to the user.
 4. The human will commit partial progress or stash, then run `/clear`.
+
+**Workplan lint:** Whichever branch above applies, run `node .forge/scripts/check-workplan.js` immediately after writing WORKPLAN.md. A nonzero exit blocks proceeding — diagnose the reported violation, fix WORKPLAN.md, and re-run the script until it exits 0 before reporting to the user.
 
 ## Constraints
 

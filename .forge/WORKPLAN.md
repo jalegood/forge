@@ -285,12 +285,14 @@
 
 ## [TASK-026] Wire check-workplan.js into /forge-plan and /forge-next
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-025
 - **Context:** CONTRACT#rules/workplan-lint, CONTRACT#interfaces/command-forge-plan, CONTRACT#interfaces/command-forge-next
 - **Gate:** `bash .forge/tests/smoke.sh && grep -q "check-workplan" .claude/commands/forge-plan.md && grep -q "check-workplan" .claude/commands/forge-next.md && echo "workplan lint wired"`
 - **Notes:** Both commands run the script after any WORKPLAN.md write; nonzero exit blocks proceeding.
+  Wired at each write point: forge-plan.md's step 7 (Write WORKPLAN.md); forge-next.md's step 4 (mark active) and step 8 (mark done/blocked/notes-update, covering all three result branches). Each site instructs re-running the script until it exits 0 before proceeding. Verified live: `node .forge/scripts/check-workplan.js` on the current workplan exits 0 with only the 4 expected done-task frozen-history warnings (TASK-012/TASK-014 self-deps) noted in TASK-025.
+  Files: .claude/commands/forge-next.md, .claude/commands/forge-plan.md, .forge/WORKPLAN.md
 
 ## [TASK-027] Update /forge-init to create SPEC.md stub
 
