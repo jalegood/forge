@@ -306,12 +306,14 @@
 
 ## [TASK-028] Update /forge-plan to read SPEC and emit SPEC# refs in manifests
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-027
 - **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#data-model/spec-data-model, CONTRACT#data-model/context-manifest, CONTRACT#rules/spec-precedence
 - **Gate:** `bash .forge/tests/smoke.sh && grep -q "SPEC#" .claude/commands/forge-plan.md && echo "forge-plan SPEC support present"`
 - **Notes:** Completeness test spans SPEC and CONTRACT: behavior without constraint or constraint without behavior fails. Spec conflicts with CONTRACT are logged to STATUS.md Open Questions and become clarify tasks.
+  Implemented: step 1 now reads SPEC.md/specs/*.md/STATUS.md when present. Step 2 adds a Spec conflict check — SPEC vs CONTRACT disagreements are logged to STATUS.md Open Questions and produce a `clarify` task (Contract wins per spec-precedence), not silently resolved. Step 4 adds a SPEC coverage block mirroring UX/DESIGN's pattern, including stub detection for the literal `### [REQ-slug] Requirement Name` placeholder from forge-init's SPEC.md stub — an unedited stub counts as zero requirements. Step 5 adds `SPEC#`/`specs/name#` to the reference format list and a SPEC manifest rules block: `feature`/`fix` tasks implementing a requirement must carry both `SPEC#requirements/req-slug` and the constraining `CONTRACT#` sections together (completeness test explicitly extended to span both files, per CONTRACT#rules/spec-precedence). No changes needed to step 6 (gates) — SPEC-referencing tasks are still `feature`/`fix` and use the existing test-suite gate style. Gate passed.
+  Files: .claude/commands/forge-plan.md, .forge/WORKPLAN.md
 
 ## [TASK-029] Update /forge-next to resolve SPEC# and specs/name# context references
 

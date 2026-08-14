@@ -13,8 +13,11 @@ Read the following files in full:
 
 - **`.forge/VISION.md`** — What, Who, Pillars
 - **`.forge/CONTRACT.md`** — all sections: Data Model, State Machines, Interfaces, Rules, Boundaries
+- **`.forge/SPEC.md`** (if it exists) — Overview, Requirements, Flows, Non-Goals
+- **`.forge/specs/*.md`** (if any exist) — same structure as SPEC.md, per feature
 - **`.forge/UX.md`** (if it exists) — Flows, screens, global copy tone
 - **`.forge/DESIGN.md`** (if it exists) — tokens, components, style notes
+- **`.forge/STATUS.md`** (if it exists) — blocking open questions
 - **`.forge/WORKPLAN.md`** (if it exists) — to identify tasks to preserve
 
 If VISION.md is still a template stub (contains `<!-- What this project builds`), stop and tell the user to fill in VISION.md and CONTRACT.md before running `/forge-plan`.
@@ -41,6 +44,12 @@ Classify each unknown:
 **If all work is covered and no plan-blocking unknowns remain:** proceed to step 3.
 
 This is the Contract-First invariant — see CONTRACT#rules/contract-first.
+
+**Spec conflict check (when SPEC.md or `.forge/specs/*.md` exist):** Compare each requirement's stated behavior against the CONTRACT sections that constrain the same deliverable. Where SPEC and CONTRACT disagree — a requirement implies a data shape, interface, or rule that CONTRACT states differently — the Contract wins (CONTRACT#rules/spec-precedence). Do not silently resolve the conflict in either document:
+
+1. Append a row to `.forge/STATUS.md` Open Questions describing the conflict (which SPEC requirement, which CONTRACT section, what disagrees).
+2. Generate a `clarify` task to resolve it (amend SPEC.md or CONTRACT.md, whichever is wrong) before any task implementing the conflicting requirement is unblocked.
+3. Do not generate a `feature`/`fix` task for a requirement with an unresolved conflict — it is plan-blocking for that requirement only, not for the whole plan.
 
 ### 3. Identify tasks to preserve
 
@@ -101,6 +110,12 @@ DAG shape: `TASK-A (map screens)` → `TASK-B, TASK-C, TASK-D (one ux-spec per s
 
 Every screen `feature` task's `Depends` field **must** include its paired `ux-spec` task ID. This is the UX-spec-first invariant.
 
+**SPEC coverage — apply when SPEC.md or `.forge/specs/*.md` is present:**
+
+**Stub detection first:** a `### [REQ-slug] Requirement Name` heading only counts as a real requirement if `[REQ-slug]` has been replaced with an actual slug — the untouched forge-init stub still contains that literal bracket text. Treat an unedited stub as having zero requirements, the same way an unedited VISION.md stub blocks planning in step 1.
+
+Every requirement that implies a `feature` or `fix` deliverable gets a task whose manifest includes the requirement's `SPEC#requirements/req-slug` section (see step 5). A requirement is not itself a separate task type — it is coverage input to the `feature`/`fix` tasks it implies, the same way a Contract interface section is.
+
 **Dependency DAG:** No task may appear before all of its `Depends` entries in the file. Within the same dependency level, order by implementation risk — lower risk first.
 
 ### 5. Generate context manifests
@@ -118,6 +133,8 @@ If the answer is no — a referenced concept is defined elsewhere, a data format
 
 Do not generate a task with an incomplete manifest. The completeness test is the primary quality gate on the workplan — incomplete manifests cause cascading failures in every downstream session.
 
+**The test spans SPEC and CONTRACT together** when both exist (CONTRACT#rules/spec-precedence): a manifest that pulls a SPEC requirement's behavior without the CONTRACT sections constraining it, or a CONTRACT constraint without the SPEC requirement describing the behavior it governs, fails the completeness test just as much as a missing UX or DESIGN reference does.
+
 **Context budget:** Resolved context must not exceed ~200 lines of Contract content per task. If a single task's manifest exceeds this, the task scope is too broad or the Contract section needs splitting.
 
 **Reference format:**
@@ -130,6 +147,9 @@ Do not generate a task with an incomplete manifest. The completeness test is the
 - `UX#global` — global copy tone and style notes (include when copy or interaction style matters)
 - `DESIGN#section-name` — top-level section of DESIGN.md (e.g., `DESIGN#tokens`)
 - `DESIGN#section-name/subsection` — subsection of DESIGN.md (e.g., `DESIGN#components/button`)
+- `SPEC#section-name` — top-level section of SPEC.md (e.g., `SPEC#requirements`)
+- `SPEC#section-name/subsection` — subsection of SPEC.md (e.g., `SPEC#requirements/req-login`)
+- `specs/name#section-name` — section of a per-feature spec file `.forge/specs/name.md` (used once SPEC.md has been split per the ~300-line threshold)
 
 **UX manifest rules:**
 
@@ -144,6 +164,14 @@ Do not generate a task with an incomplete manifest. The completeness test is the
 - When DESIGN.md has a real (non-placeholder) component spec relevant to the screen (a `### ComponentName` subsection under `## Components`), widen the manifest to also include `DESIGN#components/[name]` for each relevant component.
 - Do not reference `DESIGN#` for non-screen tasks (`scaffold`, `ux-spec`, `clarify`, `investigate`).
 - Do not gate on DESIGN.md presence — if the file is absent, simply omit DESIGN# refs.
+
+**SPEC manifest rules:**
+
+- **Stub detection first:** same as the SPEC coverage check in step 4 — a `### [REQ-slug] Requirement Name` heading with the literal bracket text is not a real requirement. Never reference it.
+- `feature` and `fix` tasks whose deliverable implements a SPEC requirement **must** include that requirement's `SPEC#requirements/req-slug` section (or `specs/name#requirements/req-slug` once split) in their context manifest, alongside the `CONTRACT#` sections constraining the same deliverable. Behavior and constraint travel together — see the completeness test above.
+- Once SPEC.md exceeds ~300 lines and is split into `.forge/specs/*.md`, reference the per-feature file (`specs/auth#requirements/req-login`) instead of `SPEC#`.
+- Do not reference `SPEC#` for tasks with no corresponding requirement (`scaffold`, `ux-spec`, `clarify`, `investigate`).
+- Do not gate task generation on SPEC.md presence — if neither SPEC.md nor `.forge/specs/` exists, simply omit SPEC# refs; CONTRACT.md alone remains sufficient coverage per Contract-First.
 
 ### 6. Generate gates
 
