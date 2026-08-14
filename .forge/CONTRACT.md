@@ -197,9 +197,25 @@ STATUS.md is the living project log — the single place for open questions, dec
 
 | Blocker | Blocking tasks | Needs |
 | ------- | -------------- | ----- |
+
+## Observations
+
+| ID | Raised by | Kind | Severity | Observation | Disposition |
+| -- | --------- | ---- | -------- | ----------- | ----------- |
 ```
 
 **Writers:** `/forge-spec` appends open questions raised during intake. `clarify` tasks move resolved questions to Decisions (dated, with rationale). `/forge-next` appends a Blockers row when marking a task `blocked`. The human edits freely. **Readers:** `/forge-status` surfaces open questions and blockers; `checkpoint` review packets embed the file. A status file nothing reads goes stale — these integrations are mandatory, not optional.
+
+**Observations:** Any task may append an Observations row for something noticed but outside its scope. The governing test is: **if the fix is covered by this task's gate and belongs in this task's diff, make it — no observation needed. Otherwise log one line and move on.** The channel exists to capture what would otherwise be lost, not to intercept what would otherwise be fixed.
+
+Constraints, all mandatory:
+
+- **One line per observation.** A pointer, not a report.
+- **No observation auto-spawns a task.** Only a human promotes one, at a checkpoint or ad hoc. Agents never create `clarify` or `investigate` tasks from their own observations.
+- **More than three observations from a single task collapse into one `foundation` observation.** Volume of small complaints is itself the signal that the foundation is wrong; recording it as volume buries that signal.
+- **`foundation` severity** means the spec, contract, or approach is suspect and continuing to build compounds debt. Everything else is `normal`.
+
+**Observation readers:** `/forge-next` reports open `foundation` rows before selecting a task — this is the primary loop closure, because `/forge-next` is the command that actually runs every session. `checkpoint` packets list all open rows for triage. `/forge-status` lists them. `/forge-plan` consumes `accepted` rows as planning input when it happens to run — secondary, never the only path.
 
 ## State Machines
 
@@ -292,6 +308,7 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
   - **SPEC coverage:** When SPEC.md (or `.forge/specs/`) is present, `feature` and `fix` task manifests include the `SPEC#` requirement sections their deliverable implements, alongside the `CONTRACT#` sections that constrain it. The manifest completeness test spans both files — behavior detail without its constraint, or constraint without its behavior, fails the test (see Rules/Spec Precedence).
   - **Checkpoint cadence:** Inserts a `checkpoint` task at each dependency-phase boundary or after every 5 consecutive non-checkpoint tasks, whichever comes first, listing the span's tasks in `Depends` (see Rules/Checkpoint Cadence). <!-- ASSUMED: cadence of 5 -->
   - **Workplan lint:** After writing WORKPLAN.md, runs `node .forge/scripts/check-workplan.js`. A nonzero exit means the generated plan violates an invariant — fix and re-run before reporting completion.
+  - **Observation intake:** Consumes STATUS.md Observations rows marked `accepted` as planning input. Each becomes a candidate task, subject to the same Contract-First coverage requirement as any other deliverable. Rows marked `open` or `declined` are not planned.
 - **Output task format:** Each task in WORKPLAN.md uses this structure: `## [TASK-XXX] Description` followed by fields — Status (`pending` for new tasks), Type (`scaffold|feature|clarify|refactor|fix|investigate|ux-spec|checkpoint`), Depends (`none` or comma-separated task IDs), Context (manifest references like `CONTRACT#section-name` or `UX#flows/flow-name/screen-name`), Gate (shell command or `manual:` prefix), Notes (empty for new tasks). Task IDs are unique and assigned from a monotonic counter: the next ID is `max(existing) + 1`, computed at write time against the current file — never inferred from the last ID read earlier in the session. Gaps are normal (deleted or abandoned tasks). An ID's ordinal carries no ordering meaning; see Rules/Task Ordering.
 - **Task sizing:** One task per concern. If a description uses "and" connecting two distinct pieces of work, split it. Each task should complete in a single clean session.
 - **Manifest generation:** Each task's Context field must list all Contract sections needed to execute independently (see Manifest Completeness rule). Context manifests for `ux-spec` tasks reference `UX#flows/flow-name` (the stub to complete). Context manifests for `feature` tasks implementing a screen reference `UX#flows/flow-name/screen-name` plus any `CONTRACT#` sections for data shapes the screen consumes.
@@ -315,6 +332,7 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
   9. On fail: keeps `active`, writes diagnostic to `Notes`
 - **Checkpoint tasks:** When the selected task's Type is `checkpoint`, execution means assembling the review packet (see Rules/Checkpoint Cadence): tasks completed since the last checkpoint (from WORKPLAN Notes/Files and `git log`), gate results, manual test steps if any exist, and the current STATUS.md open questions and risks. The gate is always `manual:` — present the packet and wait for human pass/fail. On block: appends a row to STATUS.md Blockers.
 - **Workplan lint:** After any write to WORKPLAN.md, runs `node .forge/scripts/check-workplan.js`; a nonzero exit blocks proceeding until fixed.
+- **Observations:** Before selecting a task, reads STATUS.md Observations and reports every `open` row with `foundation` severity. On task completion, appends any observation rows the execution produced, per Data Model/STATUS.md Data Model. Never promotes an observation to a task.
 - **Outputs:** Executed code changes, gate result, updated WORKPLAN.md
 
 ### Command: `/forge-status`
@@ -325,6 +343,7 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
   - Counts tasks by status: `pending`, `active`, `done`, `blocked`
   - Identifies next unblocked task: first `pending` task whose `Depends` are all `done` or `none`
   - Lists any `clarify`-type tasks that are `pending` or `active` (these need human decisions)
+  - Surfaces STATUS.md Observations: `open` rows, `foundation` severity listed first
   - Surfaces STATUS.md items when present: open questions (flagging any marked Blocking), and blockers
 - **Outputs:** Progress summary to the user — task counts by status, next unblocked task ID and description, clarify tasks awaiting input (if any), open questions and blockers from STATUS.md (if any). Read-only — no file modifications, no side effects.
 
@@ -360,6 +379,7 @@ Each template in `.forge/templates/` must contain:
 - Task-type-specific instructions
 - A reminder to run the gate command before reporting completion
 - An instruction to update `Notes` if work is incomplete
+- An instruction to record out-of-scope findings as STATUS.md Observations rows, applying the in-scope fix test rather than logging reflexively
 
 Templates are ~30-50 lines. They are injected fresh each session.
 
@@ -605,7 +625,7 @@ Between checkpoints, the loop (e.g., repeated headless `/forge-next` invocations
 1. **Work branch only.** Never on the default branch. The branch is the blast radius.
 2. **One commit per task**, message ending `(TASK-XXX)` — the rhythm does not change, only who approves it. Commits during an unattended span do not require per-commit human review; the checkpoint reviews the span.
 3. **No pushing.** Publishing is always human.
-4. **Hard stops.** The loop halts at: a `checkpoint` task, a `clarify` task, any task entering `blocked`, or a second consecutive gate failure on the same task.
+4. **Hard stops.** The loop halts at: a `checkpoint` task, a `clarify` task, any task entering `blocked`, or a second consecutive gate failure on the same task, or a new `foundation`-severity observation (the current task finishes cleanly first).
 5. **Merge is human.** The span reaches the default branch only through checkpoint approval and a human merge.
 
 Rules 1 and 3 are mechanically enforced by the branch guard and push guard hooks, not by instruction-following alone (see Boundaries#hook-configuration). <!-- ASSUMED: ties policy to its enforcing mechanism, per Design Principle #2 -->

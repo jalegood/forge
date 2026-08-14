@@ -11,4 +11,4 @@
 3. **Git is the memory.** Commits are checkpoints. The workplan is the log. Everything else is ephemeral.
 4. **Progressive context, not total context.** Each task sees only the Contract and Spec sections it needs. The full spec never enters the context window.
 5. **You are the architect.** You own the Vision, Contract, and Spec. AI derives plans and writes code. You review gates. The automation boundary is the Contract.
-6. **Checkpoints over keystrokes.** Human attention concentrates at defined checkpoints — plan review, quality checkpoints, merges. Between checkpoints, the pipeline may run unattended on a work branch without losing the one-task-one-session-one-commit rhythm.
+6. **Checkpoints over keystrokes.** Human attention concentrates at defined checkpoints — plan review, quality checkpoints, merges. Between checkpoints, the pipeline may run unattended on a work branch without losing the one-task-one-session-one-commit rhythm. The quantity being maximized is correct decisions per unit of human attention — never throughput. Generated code volume is not progress; it is load-bearing liability.

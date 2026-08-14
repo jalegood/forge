@@ -326,14 +326,52 @@
   Added SPEC# and specs/name# to forge-next.md's step 3 reference-format list, source-file routing sentence, and nested-navigation block. One deviation from plain CONTRACT#-style slug matching: SPEC.md's `### [req-slug] Requirement Name` requirement headings match on the bracketed req-slug alone (strip brackets, lowercase, compare directly), ignoring the trailing "Requirement Name" text — a plain slugify of the whole heading (brackets and all) would never equal a bare `SPEC#requirements/req-login` reference. Also added `specs/name#section-name/subsection` (nested form) alongside the top-level form already implied by CONTRACT.md's Context Manifest section. Gate passed.
   Files: .claude/commands/forge-next.md, .forge/WORKPLAN.md
 
+## [TASK-048] Author .forge/SPEC.md for Forge itself
+
+- **Status:** pending
+- **Type:** scaffold
+- **Depends:** none
+- **Context:** CONTRACT#data-model/spec-data-model, CONTRACT#rules/spec-precedence, CONTRACT#interfaces/command-forge-spec, CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution
+- **Gate:** `test -s .forge/SPEC.md && grep -q "^## Overview" .forge/SPEC.md && grep -q "^## Requirements" .forge/SPEC.md && grep -q "^## Non-Goals" .forge/SPEC.md && grep -q "THE SYSTEM SHALL" .forge/SPEC.md && node .forge/scripts/check-workplan.js && echo "SPEC.md authored"`
+- **Notes:** Closes the dogfooding gap: TASK-027/028/029 shipped SPEC# support and this project has no SPEC.md. Hand-authored — `/forge-spec` (TASK-032) does not exist yet, same as STATUS.md was hand-authored ahead of TASK-031.
+
+  **Scope discipline is the whole point.** Forge's CONTRACT is unusually behavior-rich (every command already has Reads/Does/Outputs), so a naive SPEC.md would duplicate it and violate CONTRACT#rules/spec-precedence in the repo that defines that rule. Restrict this file to the acceptance-criteria layer — the v0.3 behavior CONTRACT structurally cannot express as invariants:
+  - What makes an intake interview *good* (`/forge-spec`): which questions must be asked before drafting, what disqualifies a draft.
+  - What a checkpoint review packet must contain to actually confer confidence on a span.
+  - What an unattended span looks like from the operator's seat: what halts it, what it leaves behind, how a course correction is made.
+
+  Write requirements as `### [REQ-slug] Name` with EARS statements (`WHEN <trigger>, THE SYSTEM SHALL <response>`) plus testable acceptance criteria. Reference CONTRACT concepts by name; never redefine a data shape or interface. Populate Non-Goals explicitly — it is the guard against this file growing into a CONTRACT mirror.
+
+  Serves as the real-instance fixture for TASK-030 and validates two open risks early: SPEC/CONTRACT duplication (STATUS.md Risks) and the ~300-line split threshold (STATUS.md Q-003). Context omits `SPEC#` self-references deliberately — check-workplan.js invariant 5 errors on refs to a file that does not exist yet.
+
+## [TASK-050] Extract shared markdown section resolution into one module
+
+- **Status:** pending
+- **Type:** refactor
+- **Depends:** none
+- **Context:** CONTRACT#data-model/context-manifest, CONTRACT#rules/gate-patterns
+- **Gate:** `bash .forge/tests/test-check-ux-spec.sh && bash .forge/tests/test-check-workplan.sh && bash .forge/tests/smoke.sh && test -s .forge/scripts/lib/markdown.js && grep -q "lib/markdown" .forge/scripts/check-ux-spec.js && grep -q "lib/markdown" .forge/scripts/check-workplan.js && echo "resolution module extracted"`
+- **Notes:** Two divergent implementations of "find a heading, extract through the next same-or-higher heading" exist in this repo today:
+  - `check-ux-spec.js` scans with an ad-hoc `/^#{1,4} /m` regex and is **not** fence-aware.
+  - `check-workplan.js` uses a level-scoped `parseHeadings` that **skips fenced code blocks**.
+
+  CONTRACT.md alone contains 8 fenced blocks holding heading-like lines, so the two algorithms disagree on real project input. `check-spec.js` (TASK-030) would become the third implementation, and forge-next.md step 3 specifies the same algorithm a fourth time in prose.
+
+  Extract `.forge/scripts/lib/markdown.js` exporting `parseHeadings` (fence-aware) and `resolveRef` (segment navigation, level scoping, slug matching), lifted from check-workplan.js — it is the correct implementation. Rewrite check-ux-spec.js to consume it.
+
+  **This is a behavior change, not a pure refactor.** check-ux-spec.js becomes fence-aware, so a screen spec containing a fenced block with `#`-prefixed lines will now scope correctly where it previously truncated early. Add a fixture to test-check-ux-spec.sh covering exactly that case *before* swapping the implementation, so the change is demonstrated rather than assumed. Preserve check-ux-spec.js's screen-name matching and its column-scoping fix from TASK-043.
+
+  TASK-030 must consume this module rather than adding implementation #3. Justified by the present-tense triplication, not by the factory-model brainstorm that surfaced it ("resolve is the sleeper") — the future abstraction is a bonus, not the rationale.
+
 ## [TASK-030] Create check-spec.js spec readiness gate script
 
 - **Status:** pending
 - **Type:** feature
-- **Depends:** TASK-027
+- **Depends:** TASK-027, TASK-048, TASK-050
 - **Context:** CONTRACT#data-model/spec-data-model, CONTRACT#rules/gate-patterns
 - **Gate:** `bash .forge/tests/test-check-spec.sh`
 - **Notes:** Validates a spec file: required sections present (Overview, Requirements, Non-Goals), at least one REQ with acceptance criteria, no unresolved `<!-- UNRESOLVED -->` markers above threshold (default: zero blocking), no placeholder/TODO text in Requirements. Mirrors check-ux-spec.js structure.
+  Test fixtures are synthetic pass/fail cases as usual, but the suite must also assert exit 0 against the real `.forge/SPEC.md` from TASK-048 — a gate script that has never run against a genuine instance is untested.
 
 ## [TASK-031] Update /forge-init to create STATUS.md stub
 
@@ -341,8 +379,8 @@
 - **Type:** scaffold
 - **Depends:** none
 - **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#data-model/status.md-data-model
-- **Gate:** `grep -q "STATUS.md" .claude/commands/forge-init.md && echo "forge-init STATUS stub present"`
-- **Notes:** Four-table stub per the STATUS.md Data Model. This repo's own .forge/STATUS.md is the reference instance.
+- **Gate:** `grep -q "STATUS.md" .claude/commands/forge-init.md && grep -q "Observations" .claude/commands/forge-init.md && echo "forge-init STATUS stub present"`
+- **Notes:** Five-table stub per the STATUS.md Data Model (Open Questions, Decisions, Risks, Blockers, Observations). This repo's own .forge/STATUS.md is the reference instance.
 
 ## [TASK-032] Create /forge-spec intake command
 
@@ -427,11 +465,71 @@
 
   Origin: identified during a risk discussion on auto-commit during unattended execution (2026-07-31) — CONTRACT already specified the unattended-execution policy (work-branch-only, no-push, hard-stops) but nothing mechanically enforced it. Coverage gap resolved in CONTRACT.md by this planning pass before this task was generated (Boundaries#hook-configuration, Data Model#artifacts, Interfaces#command-forge-init).
 
+## [TASK-051] Triage the ASSUMED marker backlog into STATUS.md
+
+- **Status:** pending
+- **Type:** clarify
+- **Depends:** none
+- **Context:** CONTRACT#data-model/status.md-data-model, CONTRACT#rules/contract-amendment-protocol, CONTRACT#rules/contract-first
+- **Gate:** `bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && test $(grep -c "ASSUMED" .forge/CONTRACT.md) -lt 18 && test $(grep -c "^| 2026-" .forge/STATUS.md) -gt 8 && echo "assumption backlog triaged"`
+- **Notes:** 18 `<!-- ASSUMED -->` markers sit in CONTRACT.md, 4 more in WORKPLAN.md, 1 each in STATUS.md and forge-plan.md. Every one is an inference the pipeline made on the human's behalf and never revisited — accumulating inside the automation boundary that every task, manifest, and gate derives from.
+
+  Triage each marker into exactly one of two outcomes:
+  - **Confirm** — remove the marker, log a dated row in STATUS.md Decisions with the rationale and what was rejected.
+  - **Surface** — keep the marker, add a STATUS.md Open Questions row so it stays visible in `/forge-status` and in every checkpoint packet.
+
+  Never silently delete a marker; that converts an unreviewed inference into an invisible one.
+
+  Gate thresholds are the literal counts at authoring time (18 markers, 8 decision rows). It requires at least one marker resolved and at least one decision logged — not full resolution, which would force rushed calls on genuinely open questions. Sequenced before TASK-046 so the checkpoint reviews a triaged Contract instead of a three-week backlog.
+
+  Origin: the "byproducts / waste stream" observation in forge-factory-brainstorm.md — every AI execution emits annotations, and a waste stream with no processing line accumulates until it poisons the base. Justified independently of that model: CONTRACT is the automation boundary, and unreviewed assumptions there propagate into every downstream task.
+
+## [TASK-053] Update /forge-next to surface and record observations
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-031
+- **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#data-model/status.md-data-model, CONTRACT#rules/unattended-execution
+- **Gate:** `bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && grep -qi "observation" .claude/commands/forge-next.md && grep -qi "foundation" .claude/commands/forge-next.md && echo "forge-next observation handling present"`
+- **Notes:** Two additions to forge-next, at opposite ends of the command.
+
+  **At session start, before task selection:** read STATUS.md Observations and report every `open` row with `foundation` severity. This is the primary loop closure — `/forge-plan` runs at project start and occasionally after, while `/forge-next` runs every session, so anything routed through planning sits unread for weeks (see STATUS.md Decisions, 2026-08-14).
+
+  **At task completion:** append observation rows produced during execution. Never promote one to a task — only a human does that.
+
+  Also wire the unattended hard stop: a new `foundation`-severity observation halts the loop, with the current task finishing cleanly first (CONTRACT#rules/unattended-execution, hard stop 4).
+
+## [TASK-054] Add the observation step to all prompt templates
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-031
+- **Context:** CONTRACT#interfaces/prompt-template-interface, CONTRACT#data-model/status.md-data-model
+- **Gate:** `bash .forge/tests/smoke.sh && test $(grep -l "Observations" .forge/templates/*.md | wc -l) -ge 7 && echo "templates record observations"`
+- **Notes:** Uniform closing step across every template. The wording carries the in-scope fix test, and getting it right is the whole task — a prohibition ("record, never act") drives agents to write memos instead of one-line fixes and spawns an analysis quagmire.
+
+  Required shape: **if the fix is covered by this task's gate and belongs in this task's diff, make it — no observation needed. Otherwise log one line in STATUS.md Observations and move on.** State plainly that the channel captures what would otherwise be lost, not what would otherwise be fixed.
+
+  Carry the three anti-ceremony constraints into the template text: one line per observation, never a report; no observation spawns a task on its own; more than three observations from one task collapse into a single `foundation` row, because volume of small complaints is itself the signal that the foundation is wrong.
+
+  Replaces the orphaned language at investigate.md:23 ("recommend specific follow-up tasks... could be added to the workplan") — currently the only proposal language in the template set, addressed to a human who is not reading during an unattended span. Gate threshold is `-ge 7` because ux-spec.md is now conditional (TASK-045) and checkpoint.md arrives with TASK-035; if TASK-035 has landed, checkpoint.md must carry the step too.
+
+## [TASK-055] Wire observations into /forge-status and /forge-plan read paths
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-031
+- **Context:** CONTRACT#interfaces/command-forge-status, CONTRACT#interfaces/command-forge-plan, CONTRACT#data-model/status.md-data-model
+- **Gate:** `bash .forge/tests/smoke.sh && grep -qi "observation" .claude/commands/forge-status.md && grep -qi "observation" .claude/commands/forge-plan.md && echo "observation read paths wired"`
+- **Notes:** `/forge-status` lists `open` observations with `foundation` severity first — it stays read-only. `/forge-plan` consumes rows marked `accepted` as planning input; each becomes a candidate task subject to the same Contract-First coverage requirement as any other deliverable, and rows marked `open` or `declined` are never planned.
+
+  `/forge-plan` intake is deliberately the secondary path, not the primary one. It closes the loop when planning happens to run; TASK-053 handles the case where it does not.
+
 ## [TASK-046] Checkpoint: v0.3 machinery complete
 
 - **Status:** pending
 - **Type:** checkpoint
-- **Depends:** TASK-026, TASK-028, TASK-029, TASK-032, TASK-033, TASK-034, TASK-036, TASK-037, TASK-038, TASK-047
+- **Depends:** TASK-026, TASK-028, TASK-029, TASK-032, TASK-033, TASK-034, TASK-036, TASK-037, TASK-038, TASK-047, TASK-051, TASK-053, TASK-054, TASK-055
 - **Context:** CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#data-model/status.md-data-model
 - **Gate:** `manual: Review the v0.3 build span before validation and docs. Packet must contain: each task completed in the span with its description and Files line, the gate result for each, check-workplan.js output on the current workplan, current STATUS.md Open Questions and Risks, and the span's starting commit for rollback.`
 - **Notes:** First executable checkpoint in Forge's history — executing it is itself the live validation that TASK-035 and TASK-037 work. Span is 15 tasks, over the cadence of 5: v0.3's own plan predates its checkpoint machinery, so this is the only position where a checkpoint is executable (see STATUS.md Decisions, 2026-07-31). Normal cadence applies from v0.4. Depends lists the span's leaf tasks, which transitively cover all of TASK-025..038 plus TASK-047 (added in a later planning pass the same day — the guard hooks are part of v0.3's unattended-execution machinery and must be reviewed in the same checkpoint, not deferred to v0.4).
@@ -445,11 +543,27 @@
 - **Gate:** `manual: In a scratch project: (1) forge-init creates SPEC.md, STATUS.md, checkpoint.md, both check scripts, and VERSION without overwriting; (2) forge-spec runs an intake interview and produces a spec that passes check-spec.js with open questions logged to STATUS.md; (3) forge-plan emits SPEC# manifests and a checkpoint task, and check-workplan.js passes; (4) forge-next resolves SPEC# refs and executes a checkpoint with a complete review packet; (5) forge-status surfaces STATUS.md items; (6) simulate a 2-3 task unattended span on a work branch honoring the hard stops`
 - **Notes:**
 
+## [TASK-049] Retire forge-spec-v0.2.md as a separate source of truth
+
+- **Status:** pending
+- **Type:** refactor
+- **Depends:** TASK-046
+- **Context:** CONTRACT#rules/contract-amendment-protocol, CONTRACT#rules/context-budget, CONTRACT#data-model/artifacts
+- **Gate:** `bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && test -f archive/forge-spec-v0.2.md && test ! -f forge-spec-v0.2.md && grep -q "Planning at Scale" .forge/CONTRACT.md && ! grep -q "the spec's" README.md && echo "narrative spec retired"`
+- **Notes:** The root narrative spec doc is a third source of truth about the same system alongside CONTRACT.md and README.md — and it is the one that drifted (still describes 3 commands, no UX/DESIGN, no SPEC/STATUS/checkpoint/sync). Maintaining it by hand reproduces, inside this repo, the exact drift problem v0.3 exists to solve.
+
+  Three steps, in order:
+  1. **Preserve the one load-bearing section.** "Planning at Scale" (scoped planning passes, split thresholds, cross-system dependency wiring) is a rule with no home in CONTRACT. Add it as `### Planning at Scale` under `## Rules`, following CONTRACT#rules/contract-amendment-protocol. It belongs beside Context Budget — same concern at a larger grain.
+  2. **Fix the dangling pointer.** [README.md:225](README.md:225) reads "See the spec's 'Planning at Scale' section for the full pattern" — repoint it at the CONTRACT rule.
+  3. **Archive.** Move `forge-spec-v0.2.md` to `archive/` beside `archive/forge-spec.md` (the v0.1), matching the established precedent. Also archive `prompts/forge-plan-bootstrap.md`, which reads the retired file as its blueprint and is a spent bootstrap artifact.
+
+  Sequenced after TASK-046 deliberately: the CONTRACT amendment in step 1 would otherwise land mid-span and invalidate manifests the checkpoint is meant to review. Contract-First anchor for this task is Data Model#artifacts — the amendment is itself the deliverable.
+
 ## [TASK-040] Update README and CLAUDE.md for v0.3
 
 - **Status:** pending
 - **Type:** scaffold
-- **Depends:** TASK-039
+- **Depends:** TASK-039, TASK-049
 - **Context:** CONTRACT#interfaces/claudemd-integration-block, CONTRACT#boundaries/platform-constraints, CONTRACT#rules/unattended-execution
 - **Gate:** `grep -q "forge-spec" README.md && grep -q "forge-sync" README.md && grep -qi "checkpoint" README.md && grep -q "SPEC.md" CLAUDE.md && echo "docs updated"`
 - **Notes:** README: new commands, checkpoint/unattended workflow section, SPEC and STATUS in file structure, template count 7→8. CLAUDE.md: update Pipeline line per amended integration block.
@@ -462,3 +576,18 @@
 - **Context:** CONTRACT#boundaries/platform-constraints, CONTRACT#interfaces/command-forge-sync
 - **Gate:** `manual: Findings documented in Notes — plugin structure (commands/skills/hooks bundling), marketplace hosting options, migration path from copied commands, template override resolution order (project .forge/templates/ over plugin defaults), and whether /forge-sync is subsumed or retained`
 - **Notes:** Tracked as STATUS.md Q-001. Decision gate for v0.4 scope.
+
+## [TASK-052] Investigate node-schema model for Forge's own machinery
+
+- **Status:** pending
+- **Type:** investigate
+- **Depends:** TASK-040
+- **Context:** CONTRACT#interfaces/task-types, CONTRACT#data-model/context-manifest, CONTRACT#rules/checkpoint-cadence
+- **Gate:** `manual: Findings documented in Notes — (1) the item/type catalog and whether Forge's real artifacts fit it without escape hatches; (2) node schema fields, specifically power source (deterministic script / AI / human) and mutates (writes back to shared state); (3) the result of re-expressing Forge's 8 task types, 6 commands, and 3 scripts in that schema, naming every place it did not fit; (4) a go/no-go recommendation for v0.4 with the cost of the next step`
+- **Notes:** Runs the cheap test proposed at the end of forge-factory-brainstorm.md: write the schema, re-express Forge's existing machinery in it, and see whether the abstraction holds. The deliverable is one throwaway YAML file plus findings — no runtime, no generic runner, no changes to any command. If describing Forge requires escape hatches, that is the answer and it cost a day.
+
+  Deliberately scoped as investigation, not construction. Building a node schema, plant graph, item catalog, or generic runner before this test is abstraction bloat against an unvalidated model — the failure mode named in claude-code-workflow-pitfalls.md and conceded by the brainstorm itself.
+
+  Two constraints to carry in, both from the brainstorm's own "where the metaphor will bite you" section: rework is a cycle, not forward flow, so any graph over task *instances* grows at runtime and is really an append-only event log; and throughput is the wrong objective function — see VISION pillar 6, which now names the correct one explicitly.
+
+  Sibling to TASK-041 (plugin packaging). Both are v0.4 scope-decision gates and both should land before any v0.4 planning pass.
