@@ -62,8 +62,12 @@ Parse the selected task's `Context` field into a list of references. Each refere
 - `UX#flows/flow-name/screen-name` — one screen spec from `.forge/UX.md`
 - `DESIGN#section-name` — a top-level section from `.forge/DESIGN.md` (e.g., `DESIGN#tokens`)
 - `DESIGN#section-name/subsection` — a subsection within DESIGN.md (e.g., `DESIGN#components/button`)
+- `SPEC#section-name` — a top-level section from `.forge/SPEC.md` (e.g., `SPEC#requirements`)
+- `SPEC#section-name/subsection` — a subsection within SPEC.md (e.g., `SPEC#requirements/req-login`)
+- `specs/name#section-name` — a top-level section from a per-feature spec file `.forge/specs/name.md` (e.g., `specs/auth#requirements`)
+- `specs/name#section-name/subsection` — a subsection within that per-feature spec file
 
-**Source file routing:** `CONTRACT#` references resolve against `.forge/CONTRACT.md`. `UX#` references resolve against `.forge/UX.md`. `DESIGN#` references resolve against `.forge/DESIGN.md`.
+**Source file routing:** `CONTRACT#` references resolve against `.forge/CONTRACT.md`. `UX#` references resolve against `.forge/UX.md`. `DESIGN#` references resolve against `.forge/DESIGN.md`. `SPEC#` references resolve against `.forge/SPEC.md`. `specs/name#` references resolve against `.forge/specs/name.md` (the `name` segment names the file, not a heading).
 
 **For each reference, extract the matching markdown section from the appropriate file:**
 
@@ -106,6 +110,15 @@ Parse the selected task's `Context` field into a list of references. Each refere
    For `DESIGN#section-name/subsection`:
    - Same nested navigation as `CONTRACT#parent/child`, but resolved against `.forge/DESIGN.md`
    - First find the heading matching `section-name`, then within it find the sub-heading matching `subsection`
+
+   For `SPEC#section-name` / `SPEC#section-name/subsection`:
+   - Same standard slug matching and nested navigation as `CONTRACT#`, but resolved against `.forge/SPEC.md`
+   - **Requirement headings are the one exception to standard slug matching.** A `### [req-slug] Requirement Name` heading under `## Requirements` matches subsection reference `req-slug` by comparing only the bracketed portion — strip the brackets, lowercase, compare directly — ignoring the trailing "Requirement Name" text. So `SPEC#requirements/req-login` matches `### [req-login] User Login` regardless of what "User Login" says.
+
+   For `specs/name#section-name` / `specs/name#section-name/subsection`:
+   - The `name` segment selects the file: `.forge/specs/name.md` (e.g., `specs/auth#requirements` resolves against `.forge/specs/auth.md`)
+   - Within that file, resolve `section-name` (and optional `subsection`) using the same standard slug matching and nested navigation as `CONTRACT#`
+   - If `.forge/specs/name.md` does not exist, treat the reference as unresolved (see below)
 
 3. **Extract section content.** Capture everything from the matched heading (inclusive) through just before the next heading at the **same level or higher**. A `###` section ends at the next `###`, `##`, or `#`.
 

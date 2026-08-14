@@ -317,12 +317,14 @@
 
 ## [TASK-029] Update /forge-next to resolve SPEC# and specs/name# context references
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-027
 - **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#data-model/context-manifest, CONTRACT#data-model/spec-data-model
 - **Gate:** `bash .forge/tests/smoke.sh && grep -q "SPEC#" .claude/commands/forge-next.md && echo "forge-next SPEC# resolution present"`
 - **Notes:** Same slug-matching resolution as CONTRACT#; specs/name# routes to .forge/specs/name.md.
+  Added SPEC# and specs/name# to forge-next.md's step 3 reference-format list, source-file routing sentence, and nested-navigation block. One deviation from plain CONTRACT#-style slug matching: SPEC.md's `### [req-slug] Requirement Name` requirement headings match on the bracketed req-slug alone (strip brackets, lowercase, compare directly), ignoring the trailing "Requirement Name" text — a plain slugify of the whole heading (brackets and all) would never equal a bare `SPEC#requirements/req-login` reference. Also added `specs/name#section-name/subsection` (nested form) alongside the top-level form already implied by CONTRACT.md's Context Manifest section. Gate passed.
+  Files: .claude/commands/forge-next.md, .forge/WORKPLAN.md
 
 ## [TASK-030] Create check-spec.js spec readiness gate script
 
