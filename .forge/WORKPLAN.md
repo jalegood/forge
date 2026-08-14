@@ -296,12 +296,13 @@
 
 ## [TASK-027] Update /forge-init to create SPEC.md stub
 
-- **Status:** pending
+- **Status:** done
 - **Type:** scaffold
 - **Depends:** none
 - **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#data-model/spec-data-model
 - **Gate:** `test -s .claude/commands/forge-init.md && grep -q "SPEC.md" .claude/commands/forge-init.md && echo "forge-init SPEC stub present"`
-- **Notes:** Stub follows the SPEC Data Model: Overview, Requirements (with REQ-slug/EARS comment guidance), Flows, Non-Goals. Mention the ~300-line split threshold to .forge/specs/ in a stub comment.
+- **Notes:** Stub follows the SPEC Data Model: Overview, Requirements (with REQ-slug/EARS comment guidance), Flows, Non-Goals. Mention the ~300-line split threshold to .forge/specs/ in a stub comment. Inserted as new unconditional step 3 (after CONTRACT.md, before templates), renumbering steps 3-9 to 4-10 and updating all internal step cross-references (the UX-question branch, DESIGN.md/check-ux-spec.js gating, and the completion report's file list and next-steps list). SPEC.md creation is unconditional — not gated on the user-facing-interface question, matching CONTRACT's Interfaces list where SPEC.md sits outside the UX/DESIGN conditional block. Gate passed.
+  Files: .claude/commands/forge-init.md, .forge/WORKPLAN.md
 
 ## [TASK-028] Update /forge-plan to read SPEC and emit SPEC# refs in manifests
 
