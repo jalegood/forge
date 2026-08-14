@@ -217,6 +217,92 @@
 - **Notes:** Ask before creating any of UX.md, DESIGN.md, check-ux-spec.js. Yes: create all three as before (existing stub content unchanged). No: skip all three, no other file's creation logic changes. Re-running forge-init re-asks; no-overwrite rule handles the rest — answering yes later creates the files then, answering no after they exist is a no-op. Step 9's completion report/next-steps now list UX.md/DESIGN.md conditionally on step 4's answer, with numbering closed up when they're omitted. Gate passed.
   Files: .claude/commands/forge-init.md, .forge/CONTRACT.md, .forge/WORKPLAN.md
 
+## [TASK-050] Extract shared markdown section resolution into one module
+
+- **Status:** pending
+- **Type:** refactor
+- **Depends:** none
+- **Context:** CONTRACT#data-model/context-manifest, CONTRACT#rules/gate-patterns
+- **Gate:** `bash .forge/tests/test-check-ux-spec.sh && bash .forge/tests/test-check-workplan.sh && bash .forge/tests/smoke.sh && test -s .forge/scripts/lib/markdown.js && grep -q "lib/markdown" .forge/scripts/check-ux-spec.js && grep -q "lib/markdown" .forge/scripts/check-workplan.js && echo "resolution module extracted"`
+- **Notes:** Two divergent implementations of "find a heading, extract through the next same-or-higher heading" exist in this repo today:
+  - `check-ux-spec.js` scans with an ad-hoc `/^#{1,4} /m` regex and is **not** fence-aware.
+  - `check-workplan.js` uses a level-scoped `parseHeadings` that **skips fenced code blocks**.
+
+  CONTRACT.md alone contains 8 fenced blocks holding heading-like lines, so the two algorithms disagree on real project input. `check-spec.js` (TASK-030) would become the third implementation, and forge-next.md step 3 specifies the same algorithm a fourth time in prose.
+
+  Extract `.forge/scripts/lib/markdown.js` exporting `parseHeadings` (fence-aware) and `resolveRef` (segment navigation, level scoping, slug matching), lifted from check-workplan.js — it is the correct implementation. Rewrite check-ux-spec.js to consume it.
+
+  **This is a behavior change, not a pure refactor.** check-ux-spec.js becomes fence-aware, so a screen spec containing a fenced block with `#`-prefixed lines will now scope correctly where it previously truncated early. Add a fixture to test-check-ux-spec.sh covering exactly that case *before* swapping the implementation, so the change is demonstrated rather than assumed. Preserve check-ux-spec.js's screen-name matching and its column-scoping fix from TASK-043.
+
+  TASK-030 must consume this module rather than adding implementation #3. Justified by the present-tense triplication, not by the factory-model brainstorm that surfaced it ("resolve is the sleeper") — the future abstraction is a bonus, not the rationale.
+
+## [TASK-056] Add notes/ namespace to context manifest resolution
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-050
+- **Context:** CONTRACT#data-model/task-record-data-model, CONTRACT#data-model/context-manifest, CONTRACT#rules/workplan-access-discipline
+- **Gate:** `bash .forge/tests/test-check-workplan.sh && node .forge/scripts/check-workplan.js && grep -q "notes/TASK" .claude/commands/forge-next.md && echo "notes namespace resolvable"`
+- **Notes:** Makes `notes/TASK-XXX#section` a first-class manifest reference so a task that needs a prior task's record *declares* it, rather than relying on an agent choosing to go look.
+
+  Smaller than it appears: `check-workplan.js`'s `loadFile` already joins the prefix onto `.forge/`, so `notes/TASK-029` resolves to `.forge/notes/TASK-029.md` by the same path that makes `specs/name#` work. Verify that with a fixture rather than assuming it, then add the form to forge-next's reference-format list and source-file routing. If the resolver moved to `lib/markdown.js` in TASK-050, the fixture belongs there.
+
+## [TASK-057] Update /forge-next to externalize task records on completion
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-056
+- **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#data-model/task-record-data-model, CONTRACT#rules/traceability
+- **Gate:** `bash .forge/tests/smoke.sh && grep -q "notes/TASK" .claude/commands/forge-next.md && grep -qi "summary" .claude/commands/forge-next.md && echo "record externalization present"`
+- **Notes:** On marking a task `done`: if the narrative would exceed 3 lines, write `.forge/notes/TASK-XXX.md` per the Task Record Data Model (Outcome, Decisions, Deviations, Files) and leave a one-line summary plus path in the workplan Notes field. Shorter notes stay inline.
+
+  **The summary is the load-bearing part.** A bare pointer relocates the problem instead of solving it — the agent cannot tell whether opening the record matters, so it either always opens it (no savings) or never does (information lost). The summary must name what the record contains: "Implemented SPEC# resolution; one deviation on req-slug matching. Record: .forge/notes/TASK-029.md".
+
+  Records must stand alone without git. Forge runs against work repos where `.forge/` is never committed, so a record that defers to a commit message is defective (CONTRACT#rules/traceability, Git-optional).
+
+## [TASK-058] Create wp.js deterministic workplan query and mutation script
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-050
+- **Context:** CONTRACT#rules/workplan-access-discipline, CONTRACT#state-machines/task-lifecycle, CONTRACT#interfaces/command-forge-next
+- **Gate:** `bash .forge/tests/test-wp.sh`
+- **Notes:** The core of the fix. Task selection is entirely deterministic — unblocked-ness, dependency satisfaction, active-task resume, explicit-ID override — so it belongs in a script (Vision pillar 2), and `check-workplan.js` already parses every field required.
+
+  Commands to support: `next` (emit the selected task's fields, applying the full selection priority order), `get TASK-XXX`, `status` (counts, next unblocked, clarify tasks, open observations), `set TASK-XXX <field> <value>`, `append-notes TASK-XXX <text>`. Output structured enough for a command to consume without re-parsing.
+
+  Reuse the parsing in check-workplan.js rather than writing a second parser — a divergent workplan parser is the exact failure TASK-050 exists to prevent.
+
+  **Format boundary is non-negotiable:** WORKPLAN.md stays plain, hand-editable markdown. wp.js accelerates access to that format; it never becomes the format. Mutations must produce output a human would have written by hand, and `node .forge/scripts/check-workplan.js` must pass after every mutation.
+
+## [TASK-059] Convert /forge-next and /forge-status to wp.js projection
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-058
+- **Context:** CONTRACT#rules/workplan-access-discipline, CONTRACT#interfaces/command-forge-next, CONTRACT#interfaces/command-forge-status
+- **Gate:** `bash .forge/tests/smoke.sh && bash .forge/tests/test-wp.sh && grep -q "wp.js" .claude/commands/forge-next.md && grep -q "wp.js" .claude/commands/forge-status.md && echo "projection wired"`
+- **Notes:** Replaces "Read `.forge/WORKPLAN.md` in full" in both commands with a wp.js invocation returning only what the operation needs. This is where the token reduction is actually realized: a 2,177-line / ~120K-token workplan stops entering context at all, and per-session cost drops to the selected task alone.
+
+  `/forge-status` becomes essentially a script invocation — deterministic, near-zero tokens, and it resolves the original complaint that finding the next pending task means scrolling a 2,000-line file.
+
+  Keep the status-report output format from CONTRACT#interfaces/command-forge-status unchanged; only the acquisition path changes. Preserve every selection rule currently written in forge-next step 2 — moving them into wp.js must not quietly drop the unmet-dependency warning or the one-active-task constraint.
+
+## [TASK-060] Create migration script for existing oversized workplans
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-057
+- **Context:** CONTRACT#data-model/task-record-data-model, CONTRACT#rules/workplan-access-discipline
+- **Gate:** `bash .forge/tests/test-migrate-notes.sh`
+- **Notes:** Existing projects carry the debt this fixes — the motivating case is a live work project at 2,177 lines / 481 KB / ~120K tokens across 67 tasks. Without migration the fix only helps new projects.
+
+  `.forge/scripts/migrate-notes.js`: for every task whose notes exceed 3 lines, write `.forge/notes/TASK-XXX.md` in Task Record Data Model shape, replace the workplan Notes field with a generated one-line summary plus path, and leave shorter notes untouched. Idempotent — re-running must be a no-op.
+
+  Must be safe on a workplan that is not committed anywhere: write the new files first, verify `check-workplan.js` still passes, and only then rewrite WORKPLAN.md. Take a `.bak` copy before mutating, since for these projects there is no git history to recover from.
+
+  Summaries are generated mechanically (first sentence of the notes, or the description) rather than by an agent — 67 agent-written summaries is its own context problem. The human can improve any summary afterward by hand.
+
 ## [TASK-024] End-to-end validation of DESIGN.md pipeline
 
 - **Status:** done
@@ -343,25 +429,6 @@
   Write requirements as `### [REQ-slug] Name` with EARS statements (`WHEN <trigger>, THE SYSTEM SHALL <response>`) plus testable acceptance criteria. Reference CONTRACT concepts by name; never redefine a data shape or interface. Populate Non-Goals explicitly — it is the guard against this file growing into a CONTRACT mirror.
 
   Serves as the real-instance fixture for TASK-030 and validates two open risks early: SPEC/CONTRACT duplication (STATUS.md Risks) and the ~300-line split threshold (STATUS.md Q-003). Context omits `SPEC#` self-references deliberately — check-workplan.js invariant 5 errors on refs to a file that does not exist yet.
-
-## [TASK-050] Extract shared markdown section resolution into one module
-
-- **Status:** pending
-- **Type:** refactor
-- **Depends:** none
-- **Context:** CONTRACT#data-model/context-manifest, CONTRACT#rules/gate-patterns
-- **Gate:** `bash .forge/tests/test-check-ux-spec.sh && bash .forge/tests/test-check-workplan.sh && bash .forge/tests/smoke.sh && test -s .forge/scripts/lib/markdown.js && grep -q "lib/markdown" .forge/scripts/check-ux-spec.js && grep -q "lib/markdown" .forge/scripts/check-workplan.js && echo "resolution module extracted"`
-- **Notes:** Two divergent implementations of "find a heading, extract through the next same-or-higher heading" exist in this repo today:
-  - `check-ux-spec.js` scans with an ad-hoc `/^#{1,4} /m` regex and is **not** fence-aware.
-  - `check-workplan.js` uses a level-scoped `parseHeadings` that **skips fenced code blocks**.
-
-  CONTRACT.md alone contains 8 fenced blocks holding heading-like lines, so the two algorithms disagree on real project input. `check-spec.js` (TASK-030) would become the third implementation, and forge-next.md step 3 specifies the same algorithm a fourth time in prose.
-
-  Extract `.forge/scripts/lib/markdown.js` exporting `parseHeadings` (fence-aware) and `resolveRef` (segment navigation, level scoping, slug matching), lifted from check-workplan.js — it is the correct implementation. Rewrite check-ux-spec.js to consume it.
-
-  **This is a behavior change, not a pure refactor.** check-ux-spec.js becomes fence-aware, so a screen spec containing a fenced block with `#`-prefixed lines will now scope correctly where it previously truncated early. Add a fixture to test-check-ux-spec.sh covering exactly that case *before* swapping the implementation, so the change is demonstrated rather than assumed. Preserve check-ux-spec.js's screen-name matching and its column-scoping fix from TASK-043.
-
-  TASK-030 must consume this module rather than adding implementation #3. Justified by the present-tense triplication, not by the factory-model brainstorm that surfaced it ("resolve is the sleeper") — the future abstraction is a bonus, not the rationale.
 
 ## [TASK-030] Create check-spec.js spec readiness gate script
 
@@ -529,7 +596,7 @@
 
 - **Status:** pending
 - **Type:** checkpoint
-- **Depends:** TASK-026, TASK-028, TASK-029, TASK-032, TASK-033, TASK-034, TASK-036, TASK-037, TASK-038, TASK-047, TASK-051, TASK-053, TASK-054, TASK-055
+- **Depends:** TASK-026, TASK-028, TASK-029, TASK-032, TASK-033, TASK-034, TASK-036, TASK-037, TASK-038, TASK-047, TASK-051, TASK-053, TASK-054, TASK-055, TASK-059, TASK-060
 - **Context:** CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#data-model/status.md-data-model
 - **Gate:** `manual: Review the v0.3 build span before validation and docs. Packet must contain: each task completed in the span with its description and Files line, the gate result for each, check-workplan.js output on the current workplan, current STATUS.md Open Questions and Risks, and the span's starting commit for rollback.`
 - **Notes:** First executable checkpoint in Forge's history — executing it is itself the live validation that TASK-035 and TASK-037 work. Span is 15 tasks, over the cadence of 5: v0.3's own plan predates its checkpoint machinery, so this is the only position where a checkpoint is executable (see STATUS.md Decisions, 2026-07-31). Normal cadence applies from v0.4. Depends lists the span's leaf tasks, which transitively cover all of TASK-025..038 plus TASK-047 (added in a later planning pass the same day — the guard hooks are part of v0.3's unattended-execution machinery and must be reviewed in the same checkpoint, not deferred to v0.4).

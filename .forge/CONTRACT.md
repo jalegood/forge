@@ -24,6 +24,8 @@ Forge operates on these file artifacts:
 | Spec Gate | `.forge/scripts/check-spec.js` | Forge-managed         | Deterministic spec readiness gate                                        |
 | Unattended Guards | `.forge/scripts/guard-push.sh`, `.forge/scripts/guard-branch.sh`, `.forge/scripts/guard-secrets.sh` | Forge-managed | Deterministic PreToolUse hooks: block `git push`, block off-branch commits during unattended runs, block commits matching common secret patterns |
 | Version   | `.forge/VERSION`              | Forge-managed          | Engine version stamp + canonical repo pointer, consumed by `/forge-sync` |
+| Task Records | `.forge/notes/TASK-XXX.md`   | AI (90%) / Human (10%) | Durable per-task narrative: outcome, decisions, deviations, files. Manifest-addressable. Self-sufficient without git |
+| Workplan Script | `.forge/scripts/wp.js`     | Forge-managed          | Deterministic workplan query and mutation — task selection, status projection, targeted field writes |
 
 ### Relationships
 
@@ -50,6 +52,7 @@ A context manifest is a list of Contract section references in a task's `Context
 - `SPEC#section-name` — references a top-level section of SPEC.md (e.g., `SPEC#requirements`)
 - `SPEC#section-name/subsection` — references a subsection (e.g., `SPEC#requirements/req-login`)
 - `specs/name#section-name` — references a section of a per-feature spec file `.forge/specs/name.md`
+- `notes/TASK-XXX#section-name` — references a section of a task record `.forge/notes/TASK-XXX.md` (e.g., `notes/TASK-029#deviations`)
 
 Resolution: parse the references, extract matching markdown sections (header through next same-level header), concatenate, inject into prompt template at the `{{context}}` slot. CONTRACT references resolve against `.forge/CONTRACT.md`; UX references resolve against `.forge/UX.md`; DESIGN references resolve against `.forge/DESIGN.md`; SPEC references resolve against `.forge/SPEC.md`; `specs/name#` references resolve against `.forge/specs/name.md`.
 
@@ -217,6 +220,34 @@ Constraints, all mandatory:
 
 **Observation readers:** `/forge-next` reports open `foundation` rows before selecting a task — this is the primary loop closure, because `/forge-next` is the command that actually runs every session. `checkpoint` packets list all open rows for triage. `/forge-status` lists them. `/forge-plan` consumes `accepted` rows as planning input when it happens to run — secondary, never the only path.
 
+### Task Record Data Model
+
+A task record is the durable narrative for one task, at `.forge/notes/TASK-XXX.md`. WORKPLAN.md holds the DAG; records hold everything else. Structure:
+
+```markdown
+# TASK-XXX — Description
+
+## Outcome
+<!-- What was built. 2-4 sentences. -->
+
+## Decisions
+<!-- Choices made during execution and why. One bullet each. -->
+
+## Deviations
+<!-- Where implementation departed from spec or contract, and why. -->
+
+## Files
+<!-- Paths created or modified. -->
+```
+
+**Externalization threshold:** `/forge-next` writes a record when a task's notes would exceed 3 lines. Shorter notes stay inline — a file per one-line note is churn, not structure.
+
+**Inline residue:** the WORKPLAN `Notes` field retains a one-line summary naming what the record contains, then the path. A bare pointer is insufficient: the summary is what lets an agent judge whether opening the record is warranted, without opening it. This is progressive disclosure, the same principle as context manifests.
+
+**Addressing:** records are manifest-addressable as `notes/TASK-XXX#section-name`. A task that genuinely depends on a prior task's record declares it in its Context field, where `check-workplan.js` validates the reference resolves. This is the supported path for cross-task record access — never agent initiative, because an optional lookup step is one an agent may skip.
+
+**Self-sufficiency:** records must stand alone without git. Forge supports projects where `.forge/` is never committed; in those, the record *is* the archaeological artifact and commit history holds nothing about tasks.
+
 ## State Machines
 
 ### Task Lifecycle
@@ -317,7 +348,7 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
 
 ### Command: `/forge-next`
 
-- **Reads:** `.forge/WORKPLAN.md`, `.forge/CONTRACT.md` (referenced sections only), `.forge/SPEC.md` and `.forge/specs/*.md` (when referenced in context manifests), `.forge/UX.md` (when referenced in context manifests), `.forge/DESIGN.md` (when referenced in context manifests), `.forge/STATUS.md` (checkpoint tasks only), `.forge/templates/`
+- **Reads:** `.forge/WORKPLAN.md` **via `.forge/scripts/wp.js` projection — never in full** (see Rules/Workplan Access Discipline), `.forge/notes/TASK-XXX.md` (only when referenced in a context manifest), `.forge/CONTRACT.md` (referenced sections only), `.forge/SPEC.md` and `.forge/specs/*.md` (when referenced in context manifests), `.forge/UX.md` (when referenced in context manifests), `.forge/DESIGN.md` (when referenced in context manifests), `.forge/STATUS.md` (checkpoint tasks only), `.forge/templates/`
 - **Task format:** Parses WORKPLAN.md entries: `## [TASK-XXX] Description` followed by Status, Type, Depends, Context, Gate, Notes fields.
 - **Task selection:** If a task is already `active`, resumes it (the `Notes` field provides continuity from the previous session). Otherwise, finds the next unblocked `pending` task, or accepts a specific task ID (e.g., `/forge-next TASK-012`). A task is **unblocked** when its `Depends` field is `none` or all listed task IDs have status `done`. If a specified task has unmet dependencies, warns the human and asks for confirmation.
 - **Does:**
@@ -331,16 +362,19 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
   8. On pass: marks `done`, runs `git diff --name-only HEAD` (or staged files if not yet committed) to collect touched files, appends `Files: <comma-separated list>` to the task's Notes field, suggests commit message ending with `(TASK-XXX)`
   9. On fail: keeps `active`, writes diagnostic to `Notes`
 - **Checkpoint tasks:** When the selected task's Type is `checkpoint`, execution means assembling the review packet (see Rules/Checkpoint Cadence): tasks completed since the last checkpoint (from WORKPLAN Notes/Files and `git log`), gate results, manual test steps if any exist, and the current STATUS.md open questions and risks. The gate is always `manual:` — present the packet and wait for human pass/fail. On block: appends a row to STATUS.md Blockers.
+- **Record externalization:** On marking a task `done`, writes the task's narrative to `.forge/notes/TASK-XXX.md` when it would exceed 3 lines, and leaves a one-line summary plus the path in the workplan `Notes` field (see Data Model/Task Record Data Model). Short notes stay inline.
+- **Projection, not reading:** Task selection runs through `wp.js`, which returns only the selected task's fields. The command never loads the full workplan into context.
 - **Workplan lint:** After any write to WORKPLAN.md, runs `node .forge/scripts/check-workplan.js`; a nonzero exit blocks proceeding until fixed.
 - **Observations:** Before selecting a task, reads STATUS.md Observations and reports every `open` row with `foundation` severity. On task completion, appends any observation rows the execution produced, per Data Model/STATUS.md Data Model. Never promotes an observation to a task.
 - **Outputs:** Executed code changes, gate result, updated WORKPLAN.md
 
 ### Command: `/forge-status`
 
-- **Reads:** `.forge/WORKPLAN.md`, `.forge/STATUS.md` (when present)
+- **Reads:** `.forge/WORKPLAN.md` **via `.forge/scripts/wp.js` projection — never in full**, `.forge/STATUS.md` (when present)
 - **Task format:** Parses task entries: `## [TASK-XXX] Description` followed by Status, Type, Depends, Context, Gate, Notes fields.
 - **Does:**
   - Counts tasks by status: `pending`, `active`, `done`, `blocked`
+  - Obtains all counts, the next unblocked task, and clarify/observation listings from `.forge/scripts/wp.js` rather than reading and parsing WORKPLAN.md in context
   - Identifies next unblocked task: first `pending` task whose `Depends` are all `done` or `none`
   - Lists any `clarify`-type tasks that are `pending` or `active` (these need human decisions)
   - Surfaces STATUS.md Observations: `open` rows, `foundation` severity listed first
@@ -424,6 +458,18 @@ Exactly 3 lines in the project's CLAUDE.md:
 - Resolved context per task must not exceed ~200 lines of Contract content.
 - If a single Contract section exceeds ~200 lines, it must be broken into subsections.
 - The full Contract never enters the context window during execution — only manifested sections.
+
+### Workplan Access Discipline
+
+WORKPLAN.md is the DAG, not the archive. Two invariants:
+
+1. **The record does not live in the workplan.** Notes beyond 3 lines externalize to `.forge/notes/` (see Data Model/Task Record Data Model). The workplan carries id, status, type, depends, context, gate, and a one-line summary per task — nothing else.
+
+2. **Commands project; they do not read in full.** `/forge-next` and `/forge-status` obtain workplan data through `.forge/scripts/wp.js`, which returns only what the operation needs: the selected task, or the status summary. Loading the whole workplan into the context window is a defect, not a default.
+
+Task selection is entirely deterministic — unblocked-ness, dependency satisfaction, active-task resume, explicit-ID override — and therefore belongs in a script, per Vision pillar 2. WORKPLAN.md is the only Forge artifact that ever lacked access discipline; CONTRACT, SPEC, UX, and DESIGN have been manifest-scoped and budget-capped from the start.
+
+**Format boundary:** WORKPLAN.md stays plain, hand-editable markdown. `wp.js` is an accelerator over that format, never a replacement for it — a human must be able to edit the workplan in any text editor, and a reader must be able to understand it without running anything. This preserves Boundaries/What Forge Does Not Do: no hidden state, no lock-in.
 
 ### Manifest Completeness
 
@@ -548,6 +594,8 @@ Add user auth middleware (TASK-012)
 - Find commits: `git log --oneline --grep="TASK-007"`
 - Find files: look at the `Files` line in the task's Notes, or `git log --name-only --grep="TASK-007"`
 - Full diff: `git log -p --grep="TASK-007"`
+
+**Git-optional:** Forge supports projects where `.forge/` is never committed — a common setup when Forge runs locally against a work repository whose history is shared. In that mode `git log --grep` retrieves nothing about tasks, and the `.forge/notes/TASK-XXX.md` record is the sole archaeological artifact. Records must therefore be self-sufficient: a record that says "see the commit" is defective. The git-based discovery commands above are an accelerant where history exists, never the primary mechanism.
 
 ### Gate Patterns
 
