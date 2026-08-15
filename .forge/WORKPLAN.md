@@ -269,16 +269,29 @@
 
 ## [TASK-057] Update /forge-next to externalize task records on completion
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-056
 - **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#data-model/task-record-data-model, CONTRACT#rules/traceability
 - **Gate:** `bash .forge/tests/smoke.sh && grep -q "notes/TASK" .claude/commands/forge-next.md && grep -qi "summary" .claude/commands/forge-next.md && echo "record externalization present"`
-- **Notes:** On marking a task `done`: if the narrative would exceed 3 lines, write `.forge/notes/TASK-XXX.md` per the Task Record Data Model (Outcome, Decisions, Deviations, Files) and leave a one-line summary plus path in the workplan Notes field. Shorter notes stay inline.
+- **Notes:** Added the externalization threshold to /forge-next step 8 with smoke.sh assertions; one deviation on where the Files list lives, needing a CONTRACT clarify. Record: .forge/notes/TASK-057.md
 
-  **The summary is the load-bearing part.** A bare pointer relocates the problem instead of solving it — the agent cannot tell whether opening the record matters, so it either always opens it (no savings) or never does (information lost). The summary must name what the record contains: "Implemented SPEC# resolution; one deviation on req-slug matching. Record: .forge/notes/TASK-029.md".
+## [TASK-061] Reconcile Rules/Traceability with record externalization
 
-  Records must stand alone without git. Forge runs against work repos where `.forge/` is never committed, so a record that defers to a commit message is defective (CONTRACT#rules/traceability, Git-optional).
+- **Status:** pending
+- **Type:** clarify
+- **Depends:** TASK-057
+- **Context:** CONTRACT#rules/traceability, CONTRACT#data-model/task-record-data-model, CONTRACT#rules/contract-amendment-protocol, notes/TASK-057#deviations
+- **Gate:** `bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && awk '/^### Traceability$/{f=1;next} f&&/^### /{exit} f' .forge/CONTRACT.md | grep -qi "externaliz" && test $(grep -c "^| 2026-" .forge/STATUS.md) -gt 21 && echo "traceability record conflict resolved"`
+- **Notes:** Two Contract sections disagree about where the file manifest lives once a task externalizes its record. `Rules/Traceability` ("File manifest") states that `/forge-next` appends a `Files` line to the task's Notes on completion — written before records existed, so it assumes one destination. `Data Model/Task Record Data Model` gives the record a `## Files` section and specifies the inline residue as a one-line summary plus path, with no `Files` line.
+
+  TASK-057 implemented the Data Model reading: externalized tasks put files in the record's `## Files`, inline tasks keep the `Files:` line in Notes as before. That call was made during execution and is recorded as a deviation, not as a Contract decision — which is the actual defect this task closes. The behavior is already shipped and dogfooded; what is missing is the Contract saying so.
+
+  Resolve by amending `Rules/Traceability` to state the branch explicitly, so its Discovery commands stop pointing at a `Files` line that will not exist for externalized tasks. Confirming the deviation is the expected outcome; overturning it is in scope but means changing forge-next.md back, not just the Contract.
+
+  Per `Rules/Contract Amendment Protocol` step 3: TASK-057 is `done` with a Context reference to `CONTRACT#rules/traceability`. If the amendment overturns the deviation, TASK-057 needs a reconciling `fix` task. If it confirms it, no reconciliation is required. Log the outcome as a dated row in STATUS.md Decisions (the gate's row-count threshold is the count at authoring time).
+
+  Origin: raised as a deviation during TASK-057 execution (2026-08-15). See `.forge/notes/TASK-057.md` Deviations.
 
 ## [TASK-058] Create wp.js deterministic workplan query and mutation script
 

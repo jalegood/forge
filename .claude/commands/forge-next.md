@@ -192,17 +192,57 @@ When you believe the task is complete, run the gate from the task's Gate field.
    ```
    - **Status:** done
    ```
-2. Collect touched files: run `git diff --name-only HEAD` (or `git diff --name-only --cached` if changes are staged but not committed). Take the resulting file list and append a `Files:` line to the task's Notes field in WORKPLAN.md:
-   ```
-   - **Notes:** Files: path/to/file1.md, path/to/file2.ts
-   ```
-   If the Notes field already has content, append on a new line after existing content.
-3. Report success to the user.
-4. Suggest a commit message:
+2. Collect touched files: run `git diff --name-only HEAD` (or `git diff --name-only --cached` if changes are staged but not committed).
+3. Write the task's narrative — what was built, decisions made, deviations taken, files touched. Decide where it goes using the **externalization threshold** below.
+4. Report success to the user.
+5. Suggest a commit message:
    ```
    [Description] (TASK-XXX)
    ```
    Example: `Implement /forge-next command (TASK-004)`
+
+#### Externalization threshold
+
+Draft the narrative first, then measure it.
+
+**3 lines or fewer** — it stays inline. Append it to the task's Notes field in WORKPLAN.md, with the file list as a `Files:` line:
+
+```markdown
+- **Notes:** Fixed the off-by-one in the slug matcher; no deviations.
+  Files: .forge/scripts/lib/markdown.js, .forge/tests/test-markdown.sh
+```
+
+If the Notes field already has content, append on a new line after existing content. A separate file for a one-line note is churn, not structure.
+
+**More than 3 lines** — externalize it. Write `.forge/notes/TASK-XXX.md` using the Task Record Data Model:
+
+```markdown
+# TASK-XXX — Description
+
+## Outcome
+<!-- What was built. 2-4 sentences. -->
+
+## Decisions
+<!-- Choices made during execution and why. One bullet each. -->
+
+## Deviations
+<!-- Where implementation departed from spec or contract, and why. -->
+
+## Files
+<!-- Paths created or modified. -->
+```
+
+Omit a section only when it is genuinely empty (no deviations occurred). The file list from step 2 goes in the record's `## Files` section — do not also duplicate it inline.
+
+Then replace the task's Notes field with a **one-line summary plus the record path**:
+
+```markdown
+- **Notes:** Implemented SPEC# resolution; one deviation on req-slug matching. Record: .forge/notes/TASK-029.md
+```
+
+**The summary is load-bearing.** A bare pointer relocates the problem instead of solving it: an agent that cannot tell what a record contains either opens it every time (no savings) or never opens it (information lost). The summary must name what is inside — the deliverable, and whether there are decisions or deviations worth reading. `Record: .forge/notes/TASK-029.md` alone is not acceptable output.
+
+**Records must stand alone without git.** Forge runs against projects where `.forge/` is never committed, so `git log --grep` retrieves nothing about tasks and the record is the only archaeological artifact. A record that says "see the commit message" or "see the diff" is defective — write what the commit would have said, in the record.
 
 **Task is blocked (cannot proceed):**
 
@@ -233,5 +273,6 @@ If during execution you determine the task cannot proceed — a dependency is mi
 - **Context budget.** Resolved context should not exceed ~200 lines of Contract content per task.
 - **Contract is read-only.** Do not modify CONTRACT.md unless the human explicitly approves.
 - **Notes are continuity.** When resuming an active task, the Notes field is your only link to previous sessions. Read it carefully before starting work.
+- **Records are the durable narrative.** WORKPLAN.md holds the DAG; `.forge/notes/TASK-XXX.md` holds everything else. Records are read only when a task declares one in its Context field (`notes/TASK-XXX#section-name`) — never open `.forge/notes/` on your own initiative.
 - **No auto-commit.** Suggest a commit message but never commit automatically. The human is the final gate.
 - **Template drives execution.** After step 5, the filled template's instructions govern what you do. The template includes its own completion protocol — follow it.
