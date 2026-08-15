@@ -5,6 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { parseHeadings, normalizeSlug, findHeading, sectionRange } = require('./lib/markdown');
 
 const screenName = process.argv[2];
 if (!screenName) {
@@ -18,24 +19,24 @@ if (!fs.existsSync(uxPath)) {
   process.exit(1);
 }
 
-const content = fs.readFileSync(uxPath, 'utf8');
+const content = fs.readFileSync(uxPath, 'utf8').replace(/\r\n/g, '\n');
 
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// Find the screen section
-const screenRegex = new RegExp(`^#### Screen: ${escapeRegex(screenName)}\\s*$`, 'm');
-const screenMatch = screenRegex.exec(content);
-if (!screenMatch) {
+// Find the screen's "#### Screen: <name>" heading and extract through the next
+// heading at the same level or higher. Scanning goes through lib/markdown.js so
+// that `#`-prefixed lines inside ``` fences are not mistaken for headings — a
+// quoted spec skeleton inside a screen used to truncate the section early.
+const headings = parseHeadings(content);
+const screenHeading = findHeading(headings, normalizeSlug(screenName), { level: 4, prefix: 'Screen' });
+if (!screenHeading) {
   console.error(`Error: Screen "${screenName}" not found in UX.md`);
   process.exit(1);
 }
 
-// Extract screen content through next heading at same or higher level
-const afterMatch = content.slice(screenMatch.index + screenMatch[0].length);
-const nextSectionMatch = /^#{1,4} /m.exec(afterMatch);
-const screenContent = nextSectionMatch ? afterMatch.slice(0, nextSectionMatch.index) : afterMatch;
+// Body excludes the heading line itself, matching the previous implementation.
+const { start, end } = sectionRange(headings, screenHeading, content.length);
+const nl = content.indexOf('\n', start);
+const bodyStart = nl === -1 || nl > end ? end : nl;
+const screenContent = content.slice(bodyStart, end);
 
 const errors = [];
 
@@ -54,12 +55,17 @@ for (const field of mandatoryFields) {
   }
 }
 
+// Sub-sections are located the same fence-aware way as the screen itself, so a
+// quoted "##### States" inside a fence is not mistaken for the real one.
+const subHeadings = parseHeadings(screenContent);
+
 // Check States table exists and has at least one data row
-const statesMatch = /##### States([\s\S]*?)(?=##### |$)/.exec(screenContent);
-if (!statesMatch) {
+const statesHeading = findHeading(subHeadings, normalizeSlug('States'), { level: 5 });
+if (!statesHeading) {
   errors.push('Missing section: ##### States');
 } else {
-  const statesBody = statesMatch[1];
+  const statesRange = sectionRange(subHeadings, statesHeading, screenContent.length);
+  const statesBody = screenContent.slice(statesRange.start, statesRange.end);
   const dataRows = statesBody.split('\n').filter(line => {
     const trimmed = line.trim();
     return trimmed.startsWith('|') && !trimmed.includes('---') && !/^\|\s*State\s*\|/i.test(trimmed);
@@ -84,7 +90,7 @@ if (!statesMatch) {
 }
 
 // Check Edge Cases section exists
-if (!screenContent.includes('##### Edge Cases')) {
+if (!findHeading(subHeadings, normalizeSlug('Edge Cases'), { level: 5 })) {
   errors.push('Missing section: ##### Edge Cases');
 }
 

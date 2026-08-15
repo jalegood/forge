@@ -12,6 +12,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { createLoader, resolveRef } = require('./lib/markdown');
 
 const ROOT = process.cwd();
 const workplanPath = path.join(ROOT, '.forge', 'WORKPLAN.md');
@@ -194,84 +195,16 @@ if (activeTasks.length > 1) {
 // Same resolution rules as CONTRACT#data-model/context-manifest: the prefix
 // before "#" names a file under .forge/ (CONTRACT, UX, DESIGN, SPEC, or a
 // specs/name / other multi-file contract); segments after "#" navigate nested
-// headings. Comparison compacts both the reference segment and the heading
-// text to lowercase alnum-only before comparing, which tolerates the mixed
-// "x.md-data-model" / "xmd-data-model"-style punctuation already present in
-// this project's own hand-written Context fields.
+// headings. The resolution itself lives in lib/markdown.js, shared with the
+// other gate scripts.
 
-function normalizeSlug(s) {
-  return s.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-function headingCompact(text) {
-  const stripped = text.trim().replace(/^(Flow|Screen):\s*/, '');
-  return normalizeSlug(stripped);
-}
-
-function parseHeadings(fileContent) {
-  const lines = fileContent.split('\n');
-  const headings = [];
-  let offset = 0;
-  let inFence = false;
-  for (const line of lines) {
-    if (/^\s*```/.test(line)) {
-      inFence = !inFence;
-    } else if (!inFence) {
-      const m = /^(#{1,6})\s+(.*)$/.exec(line);
-      if (m) headings.push({ level: m[1].length, text: m[2].trim(), index: offset });
-    }
-    offset += line.length + 1;
-  }
-  return headings;
-}
-
-const fileCache = new Map();
-function loadFile(relPath) {
-  if (fileCache.has(relPath)) return fileCache.get(relPath);
-  const full = path.join(ROOT, '.forge', relPath);
-  let data = null;
-  if (fs.existsSync(full)) {
-    const fileContent = fs.readFileSync(full, 'utf8').replace(/\r\n/g, '\n');
-    data = { content: fileContent, headings: parseHeadings(fileContent) };
-  }
-  fileCache.set(relPath, data);
-  return data;
-}
-
-function resolveRef(ref) {
-  const hashIdx = ref.indexOf('#');
-  if (hashIdx === -1) return { ok: false, reason: `"${ref}" is malformed (missing #)` };
-  const prefix = ref.slice(0, hashIdx).trim();
-  const refPath = ref.slice(hashIdx + 1).trim();
-  if (!prefix || !refPath) return { ok: false, reason: `"${ref}" is malformed` };
-
-  const file = loadFile(`${prefix}.md`);
-  if (!file) return { ok: false, reason: `"${ref}" — source file .forge/${prefix}.md not found` };
-
-  const segments = refPath.split('/').map(s => s.trim()).filter(Boolean);
-  let scopeStart = 0;
-  let scopeEnd = file.content.length;
-  let minLevel = 0;
-
-  for (const seg of segments) {
-    const segSlug = normalizeSlug(seg);
-    const candidates = file.headings.filter(h => h.index >= scopeStart && h.index < scopeEnd && h.level > minLevel);
-    const match = candidates.find(h => headingCompact(h.text) === segSlug);
-    if (!match) return { ok: false, reason: `"${ref}" — no heading matching "${seg}" found in .forge/${prefix}.md` };
-
-    const next = file.headings.find(h => h.index > match.index && h.level <= match.level);
-    scopeStart = match.index;
-    scopeEnd = next ? next.index : file.content.length;
-    minLevel = match.level;
-  }
-  return { ok: true };
-}
+const loadFile = createLoader(path.join(ROOT, '.forge'));
 
 for (const t of tasks) {
   if (!t.contextRaw || t.contextRaw.toLowerCase() === 'none') continue;
   const refs = t.contextRaw.split(',').map(s => s.trim()).filter(Boolean);
   for (const ref of refs) {
-    const result = resolveRef(ref);
+    const result = resolveRef(ref, loadFile, { displayBase: '.forge/' });
     if (!result.ok) errors.push(`${t.id}: Context reference ${result.reason}`);
   }
 }

@@ -219,7 +219,7 @@
 
 ## [TASK-050] Extract shared markdown section resolution into one module
 
-- **Status:** pending
+- **Status:** done
 - **Type:** refactor
 - **Depends:** none
 - **Context:** CONTRACT#data-model/context-manifest, CONTRACT#rules/gate-patterns
@@ -235,6 +235,16 @@
   **This is a behavior change, not a pure refactor.** check-ux-spec.js becomes fence-aware, so a screen spec containing a fenced block with `#`-prefixed lines will now scope correctly where it previously truncated early. Add a fixture to test-check-ux-spec.sh covering exactly that case *before* swapping the implementation, so the change is demonstrated rather than assumed. Preserve check-ux-spec.js's screen-name matching and its column-scoping fix from TASK-043.
 
   TASK-030 must consume this module rather than adding implementation #3. Justified by the present-tense triplication, not by the factory-model brainstorm that surfaced it ("resolve is the sleeper") — the future abstraction is a bonus, not the rationale.
+
+  Done. `.forge/scripts/lib/markdown.js` exports `parseHeadings` (fence-aware), `normalizeSlug`, `headingCompact`, `sectionRange`, `findHeading`, `resolveSegments`, `createLoader`, `resolveRef` — lifted from check-workplan.js, which now consumes it with no behavior change (all 13 fixtures plus the real-workplan case still pass; error text preserved via `resolveRef`'s cosmetic `displayBase` option).
+
+  `resolveRef`/`resolveSegments` now return the resolved `section` content, not just `{ok}` — check-workplan.js only needed a yes/no, but check-ux-spec.js and check-spec.js (TASK-030) need the text. `findHeading` takes optional `level`/`prefix` constraints, which is how check-ux-spec.js keeps matching `#### Screen: <name>` specifically rather than any heading of that name.
+
+  Behavior change landed as predicted, and was larger than the notes anticipated: check-ux-spec.js had **two** non-fence-aware scans, not one. Fixing only the screen-level scan moved fixture 3 from "Missing section: ##### States" to "States table has no data rows" — the `##### States` sub-section lookup was still matching the quoted heading inside the fence. Both scans now go through the module. Fixture 3 in test-check-ux-spec.sh was added *before* the swap and observed failing against the old implementation.
+
+  Not changed: the mandatory-field checks still use `indexOf` on the screen body, so a fenced block containing `**Emotional intent:**` would satisfy them. Same class of bug, different mechanism (inline text, not heading resolution) — left alone to keep this a single structural change.
+
+  Files: .forge/scripts/lib/markdown.js, .forge/scripts/check-workplan.js, .forge/scripts/check-ux-spec.js, .forge/tests/test-check-ux-spec.sh, .forge/WORKPLAN.md
 
 ## [TASK-056] Add notes/ namespace to context manifest resolution
 

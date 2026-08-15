@@ -77,6 +77,49 @@ if ( cd "$TMPDIR" && node "$SCRIPT" "Fail Case" ) 2>/dev/null; then
 fi
 echo "  OK (correctly rejected)"
 
+# --- Fixture 3: fenced block containing heading-like lines — must PASS ---
+# Section scoping must ignore `#` lines inside ``` fences (TASK-050). Before
+# check-ux-spec.js consumed lib/markdown.js it scanned with a bare /^#{1,4} /
+# regex, truncated the screen at the fenced "#### Screen:" line below, and
+# reported States and Edge Cases missing when both are plainly present.
+cat > "$TMPDIR/.forge/UX.md" << 'EOF'
+# UX Spec
+
+## Flows
+
+### Flow: Checkout
+
+#### Screen: Fenced Case
+
+**Purpose:** Confirm order details before paying.
+**Emotional intent:** Confidence that nothing was missed.
+**Design intention:** Line items animate in with ease-out 250ms so the total feels earned.
+
+Authors sometimes quote a spec skeleton inline:
+
+```md
+#### Screen: Illustrative Example
+##### States
+```
+
+##### States
+
+| State | Trigger | Experience |
+| ----- | ------- | ---------- |
+| Loading | Fetch triggered | Skeleton rows fade in at opacity 0->1 over 200ms |
+
+##### Edge Cases
+
+| Condition          | Behavior |
+| ------------------ | -------- |
+| Empty / first-time | Show empty-cart illustration |
+| Error              | Inline banner, retry button |
+EOF
+
+echo "Fixture 3: heading-like lines inside a fence must not truncate the screen..."
+( cd "$TMPDIR" && node "$SCRIPT" "Fenced Case" )
+echo "  OK"
+
 rm -rf "$TMPDIR"
 echo ""
 echo "All check-ux-spec.js fixtures passed."
