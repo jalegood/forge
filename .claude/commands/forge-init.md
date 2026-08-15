@@ -636,14 +636,15 @@ Check if `CLAUDE.md` exists in the project root.
 
 - If `CLAUDE.md` exists, check whether it already contains `Pipeline: .forge/`. If it does, skip — do not append. If it does not contain that line, append the integration block to the end of the file (preceded by a blank line).
 
-### 10. Create `.forge/scripts/check-workplan.js` and `.forge/scripts/lib/markdown.js` if absent
+### 10. Create the `.forge/scripts/` engine scripts if absent
 
-Unconditional — these are not gated on the step 5 interface question. `/forge-next` and `/forge-plan` both run the workplan lint after every WORKPLAN.md write and treat a nonzero exit as a hard block, so a project without these files cannot complete a task.
+Unconditional — these are not gated on the step 5 interface question. `/forge-next` and `/forge-plan` both run the workplan lint after every WORKPLAN.md write and treat a nonzero exit as a hard block, and `/forge-next` and `/forge-status` reach the workplan only through `wp.js` (CONTRACT#rules/workplan-access-discipline), so a project without these files cannot complete a task.
 
 Create `.forge/scripts/lib/` (both the `scripts` and `lib` directories) if needed.
 
-Both blocks below are exact copies of the engine's scripts. Copy them verbatim — they are diffed against the originals by `.forge/tests/test-init-scripts.sh`, and the `<!-- forge-init:embed -->` markers are what that test keys on. Do not edit the payloads in place; if a script changes, re-copy the whole block.
+The four blocks below are exact copies of the engine's scripts. Copy them verbatim — they are diffed against the originals by `.forge/tests/test-init-scripts.sh`, and the `<!-- forge-init:embed -->` markers are what that test keys on. Do not edit the payloads in place; if a script changes, re-copy the whole block.
 
+Order matters only in that the two `lib/` modules must exist before the scripts that require them; create all four.
 If `.forge/scripts/lib/markdown.js` does **not** exist, create it with:
 
 <!-- forge-init:embed .forge/scripts/lib/markdown.js -->
@@ -829,6 +830,314 @@ module.exports = {
 
 If it exists, skip — do not overwrite.
 
+If `.forge/scripts/lib/workplan.js` does **not** exist, create it with:
+
+<!-- forge-init:embed .forge/scripts/lib/workplan.js -->
+
+```javascript
+// workplan.js — shared WORKPLAN.md parsing, selection, and mutation
+// (CONTRACT#rules/workplan-access-discipline, CONTRACT#state-machines/task-lifecycle)
+//
+// One parser for the workplan format. check-workplan.js owns validation and
+// wp.js owns projection and mutation, but both read the file through here — a
+// second, divergent workplan parser is exactly the failure that pushing shared
+// markdown resolution into lib/markdown.js was meant to end.
+//
+// The parser is line-based rather than regex-over-the-whole-file because the
+// mutation side needs line ranges: `set` must rewrite one field in place and
+// leave every other byte of the file untouched. WORKPLAN.md stays plain,
+// hand-editable markdown (Rules/Workplan Access Discipline, Format boundary) —
+// this module accelerates access to that format, it does not become it.
+//
+// Exports: VALID_STATUSES, VALID_TYPES, VALID_TRANSITIONS, FIELD_NAMES,
+//          parseWorkplan, readWorkplan, dependsList, contextList, stripBackticks,
+//          unmetDeps, selectTask, setField, appendNotes
+
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+
+const VALID_STATUSES = ['pending', 'active', 'done', 'blocked'];
+const VALID_TYPES = ['scaffold', 'feature', 'clarify', 'refactor', 'fix', 'investigate', 'ux-spec', 'checkpoint'];
+
+// CONTRACT#state-machines/task-lifecycle. Enforced on mutation so the script
+// cannot walk the workplan into a state the state machine forbids; `--force`
+// exists for the human who is deliberately rewriting history.
+const VALID_TRANSITIONS = {
+  pending: ['active'],
+  active: ['done', 'blocked'],
+  blocked: ['pending'],
+  done: [],
+};
+
+// Canonical casing for the six fields, keyed by lowercase name.
+const FIELD_NAMES = {
+  status: 'Status',
+  type: 'Type',
+  depends: 'Depends',
+  context: 'Context',
+  gate: 'Gate',
+  notes: 'Notes',
+};
+
+const HEADER_RE = /^## \[(TASK-\d+)\]\s*(.*)$/;
+const FIELD_RE = /^- \*\*([A-Za-z][A-Za-z ]*):\*\*[ \t]?(.*)$/;
+
+function stripBackticks(s) {
+  if (!s) return s;
+  const m = /^`([\s\S]*)`$/.exec(s.trim());
+  return m ? m[1] : s;
+}
+
+// --- Parsing ---
+// Returns { content, lines, tasks, taskById }. Each task carries its parsed
+// field values plus a `fields` map of { name, firstLine, lastLine, valueLines }
+// so mutations can target exact line ranges.
+
+function parseWorkplan(rawContent) {
+  const content = rawContent.replace(/\r\n/g, '\n');
+  const lines = content.split('\n');
+  const tasks = [];
+
+  let cur = null;
+  let curField = null;
+  let inFence = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (/^\s*```/.test(line)) {
+      inFence = !inFence;
+    } else if (!inFence) {
+      const h = HEADER_RE.exec(line);
+      if (h) {
+        if (cur) cur.endLine = i;
+        cur = {
+          id: h[1],
+          description: h[2].trim(),
+          order: tasks.length,
+          headerLine: i,
+          endLine: lines.length,
+          fields: new Map(),
+        };
+        tasks.push(cur);
+        curField = null;
+        continue;
+      }
+      if (cur) {
+        const f = FIELD_RE.exec(line);
+        if (f) {
+          curField = {
+            name: f[1].trim(),
+            firstLine: i,
+            lastLine: i,
+            valueLines: [f[2]],
+          };
+          cur.fields.set(curField.name.toLowerCase(), curField);
+          continue;
+        }
+      }
+    }
+
+    // Anything else inside a task body continues the field above it. A field's
+    // value is therefore multi-line by default, which is what Notes needs.
+    if (cur && curField) {
+      curField.lastLine = i;
+      curField.valueLines.push(line);
+    }
+  }
+
+  // Trailing blank lines belong to the document's spacing, not to the field.
+  for (const t of tasks) {
+    for (const f of t.fields.values()) {
+      while (f.valueLines.length > 1 && f.valueLines[f.valueLines.length - 1].trim() === '') {
+        f.valueLines.pop();
+        f.lastLine--;
+      }
+    }
+    t.status = firstLineOf(t, 'status');
+    t.type = firstLineOf(t, 'type');
+    t.depends = firstLineOf(t, 'depends');
+    t.contextRaw = firstLineOf(t, 'context');
+    t.gate = stripBackticks(firstLineOf(t, 'gate'));
+    t.notes = fullValueOf(t, 'notes');
+  }
+
+  return { content, lines, tasks, taskById: new Map(tasks.map(t => [t.id, t])) };
+}
+
+function firstLineOf(task, name) {
+  const f = task.fields.get(name);
+  return f ? f.valueLines[0].trim() : null;
+}
+
+// Continuation lines carry two spaces of markdown indentation; strip one level
+// so callers see the value a human meant to write, not its list indentation.
+function fullValueOf(task, name) {
+  const f = task.fields.get(name);
+  if (!f) return null;
+  const out = [f.valueLines[0].trim()];
+  for (const l of f.valueLines.slice(1)) out.push(l.replace(/^ {1,2}/, ''));
+  return out.join('\n').replace(/\s+$/, '');
+}
+
+function readWorkplan(rootDir) {
+  const workplanPath = path.join(rootDir, '.forge', 'WORKPLAN.md');
+  if (!fs.existsSync(workplanPath)) return null;
+  const wp = parseWorkplan(fs.readFileSync(workplanPath, 'utf8'));
+  wp.path = workplanPath;
+  return wp;
+}
+
+// --- Graph helpers ---
+
+function dependsList(task) {
+  if (!task || !task.depends || task.depends === 'none') return [];
+  return task.depends.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+function contextList(task) {
+  if (!task || !task.contextRaw || task.contextRaw.toLowerCase() === 'none') return [];
+  return task.contextRaw.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+function unmetDeps(task, taskById) {
+  return dependsList(task).filter(id => {
+    const dep = taskById.get(id);
+    return !dep || dep.status !== 'done';
+  });
+}
+
+// --- Selection ---
+// The whole of CONTRACT#interfaces/command-forge-next "Task selection", in one
+// deterministic place. Returns { ok, task, selection, warnings } or
+// { ok: false, code, error }: code 1 = usage error (no such task), code 2 =
+// nothing to select (active-task conflict, or no unblocked pending task).
+
+function selectTask(wp, requestedId) {
+  const { tasks, taskById } = wp;
+  const activeTasks = tasks.filter(t => t.status === 'active');
+
+  if (activeTasks.length > 1) {
+    return {
+      ok: false,
+      code: 2,
+      error: `Multiple active tasks found: ${activeTasks.map(t => t.id).join(', ')}. At most one task may be active — resolve this in WORKPLAN.md before continuing.`,
+    };
+  }
+  const active = activeTasks[0] || null;
+
+  if (requestedId) {
+    const task = taskById.get(requestedId);
+    if (!task) {
+      return { ok: false, code: 1, error: `${requestedId} not found in WORKPLAN.md.` };
+    }
+    // Naming the active task is a resume, not a conflict.
+    if (task.status === 'active') {
+      return { ok: true, task, selection: 'resume-active', warnings: [] };
+    }
+    if (active) {
+      return {
+        ok: false,
+        code: 2,
+        error: `${active.id} is currently active. Only one task can be active at a time. Complete or block it before starting a new task.`,
+      };
+    }
+
+    const warnings = [];
+    if (task.status === 'done') {
+      warnings.push(`${task.id} is already done — re-running it will redo completed work.`);
+    }
+    if (task.status === 'blocked') {
+      warnings.push(`${task.id} is blocked. Confirm the blocker is resolved before proceeding.`);
+    }
+    const unmet = unmetDeps(task, taskById);
+    if (unmet.length) {
+      const detail = unmet
+        .map(id => `${id} (${taskById.has(id) ? taskById.get(id).status : 'missing'})`)
+        .join(', ');
+      warnings.push(`${task.id} has unmet dependencies: ${detail}. Ask the human to confirm before proceeding.`);
+    }
+    return { ok: true, task, selection: 'explicit', warnings };
+  }
+
+  if (active) {
+    return { ok: true, task: active, selection: 'resume-active', warnings: [] };
+  }
+
+  const next = tasks.find(t => t.status === 'pending' && unmetDeps(t, taskById).length === 0);
+  if (!next) {
+    return {
+      ok: false,
+      code: 2,
+      error: 'No unblocked tasks available. Run /forge-status to see what is blocked.',
+    };
+  }
+  return { ok: true, task: next, selection: 'next-unblocked', warnings: [] };
+}
+
+// --- Mutation ---
+// Both mutators return { ok, content } — new file content — or { ok: false,
+// error }. They never write; the caller decides, so it can lint before
+// committing the change to disk.
+
+function renderField(name, value) {
+  const canonical = FIELD_NAMES[name.toLowerCase()] || name;
+  const valueLines = String(value).split('\n');
+  const head = `- **${canonical}:** ${valueLines[0]}`.replace(/\s+$/, '');
+  const rest = valueLines.slice(1).map(l => (l.trim() === '' ? '' : `  ${l.replace(/^\s+/, '')}`));
+  return [head, ...rest];
+}
+
+function setField(wp, taskId, fieldName, value) {
+  const task = wp.taskById.get(taskId);
+  if (!task) return { ok: false, error: `${taskId} not found in WORKPLAN.md.` };
+
+  const key = fieldName.toLowerCase();
+  if (!FIELD_NAMES[key]) {
+    return { ok: false, error: `Unknown field "${fieldName}". Expected one of: ${Object.values(FIELD_NAMES).join(', ')}.` };
+  }
+  const field = task.fields.get(key);
+  if (!field) {
+    return { ok: false, error: `${taskId} has no ${FIELD_NAMES[key]} field to set.` };
+  }
+
+  const lines = wp.lines.slice();
+  lines.splice(field.firstLine, field.lastLine - field.firstLine + 1, ...renderField(key, value));
+  return { ok: true, content: lines.join('\n') };
+}
+
+function appendNotes(wp, taskId, text) {
+  const task = wp.taskById.get(taskId);
+  if (!task) return { ok: false, error: `${taskId} not found in WORKPLAN.md.` };
+  if (!task.fields.has('notes')) return { ok: false, error: `${taskId} has no Notes field to append to.` };
+
+  const existing = (task.notes || '').replace(/\s+$/, '');
+  const addition = String(text).replace(/\s+$/, '');
+  const merged = existing === '' ? addition : `${existing}\n${addition}`;
+  return setField(wp, taskId, 'notes', merged);
+}
+
+module.exports = {
+  VALID_STATUSES,
+  VALID_TYPES,
+  VALID_TRANSITIONS,
+  FIELD_NAMES,
+  parseWorkplan,
+  readWorkplan,
+  dependsList,
+  contextList,
+  stripBackticks,
+  unmetDeps,
+  selectTask,
+  setField,
+  appendNotes,
+};
+```
+
+If it exists, skip — do not overwrite.
+
 If `.forge/scripts/check-workplan.js` does **not** exist, create it with:
 
 <!-- forge-init:embed .forge/scripts/check-workplan.js -->
@@ -849,6 +1158,12 @@ If `.forge/scripts/check-workplan.js` does **not** exist, create it with:
 const fs = require('fs');
 const path = require('path');
 const { createLoader, resolveRef } = require('./lib/markdown');
+const {
+  VALID_STATUSES,
+  VALID_TYPES,
+  parseWorkplan,
+  dependsList,
+} = require('./lib/workplan');
 
 const ROOT = process.cwd();
 const workplanPath = path.join(ROOT, '.forge', 'WORKPLAN.md');
@@ -860,60 +1175,21 @@ if (!fs.existsSync(workplanPath)) {
 
 const content = fs.readFileSync(workplanPath, 'utf8').replace(/\r\n/g, '\n');
 
-const VALID_STATUSES = ['pending', 'active', 'done', 'blocked'];
-const VALID_TYPES = ['scaffold', 'feature', 'clarify', 'refactor', 'fix', 'investigate', 'ux-spec', 'checkpoint'];
 const CODE_EXTENSIONS = ['js', 'ts', 'jsx', 'tsx', 'py', 'rb', 'go', 'java', 'c', 'cpp', 'cs', 'php', 'rs'];
 
 const errors = [];
 const warnings = [];
 
 // --- Parse tasks ---
+// Parsing lives in lib/workplan.js, shared with wp.js. This script owns the
+// invariants, not the format: two parsers for one file is how a linter starts
+// disagreeing with the tool that writes the file it lints.
 
-const headerRegex = /^## \[(TASK-\d+)\]\s*(.*)$/gm;
-const headerMatches = [];
-let hm;
-while ((hm = headerRegex.exec(content)) !== null) {
-  headerMatches.push({ id: hm[1], description: hm[2].trim(), index: hm.index });
-}
+const { tasks, taskById } = parseWorkplan(content);
 
-if (headerMatches.length === 0) {
+if (tasks.length === 0) {
   console.error('Error: no tasks found in WORKPLAN.md');
   process.exit(1);
-}
-
-function field(block, name) {
-  const re = new RegExp(`^- \\*\\*${name}:\\*\\*\\s*(.*)$`, 'm');
-  const fm = re.exec(block);
-  return fm ? fm[1].trim() : null;
-}
-
-function stripBackticks(s) {
-  if (!s) return s;
-  const m = /^`([\s\S]*)`$/.exec(s.trim());
-  return m ? m[1] : s;
-}
-
-const tasks = headerMatches.map((hmt, i) => {
-  const start = hmt.index;
-  const end = i + 1 < headerMatches.length ? headerMatches[i + 1].index : content.length;
-  const block = content.slice(start, end);
-  return {
-    id: hmt.id,
-    description: hmt.description,
-    order: i,
-    status: field(block, 'Status'),
-    type: field(block, 'Type'),
-    depends: field(block, 'Depends'),
-    contextRaw: field(block, 'Context'),
-    gate: stripBackticks(field(block, 'Gate')),
-  };
-});
-
-const taskById = new Map(tasks.map(t => [t.id, t]));
-
-function dependsList(t) {
-  if (!t.depends || t.depends === 'none') return [];
-  return t.depends.split(',').map(s => s.trim()).filter(Boolean);
 }
 
 // --- Invariant 1: every task has all required fields with valid values ---
@@ -940,7 +1216,7 @@ for (const t of tasks) {
 //     (the same violation in a done task is a warning, not an error) ---
 
 const idCounts = new Map();
-for (const hmt of headerMatches) idCounts.set(hmt.id, (idCounts.get(hmt.id) || 0) + 1);
+for (const t of tasks) idCounts.set(t.id, (idCounts.get(t.id) || 0) + 1);
 for (const [id, count] of idCounts) {
   if (count > 1) errors.push(`Duplicate task ID: ${id} appears ${count} times`);
 }
@@ -1116,6 +1392,337 @@ process.exit(0);
 
 If it exists, skip — do not overwrite.
 
+If `.forge/scripts/wp.js` does **not** exist, create it with:
+
+<!-- forge-init:embed .forge/scripts/wp.js -->
+
+```javascript
+#!/usr/bin/env node
+// wp.js — deterministic WORKPLAN.md projection and mutation
+// (CONTRACT#rules/workplan-access-discipline)
+//
+// Usage:
+//   node .forge/scripts/wp.js next [TASK-XXX] [--json]
+//   node .forge/scripts/wp.js get TASK-XXX [--json]
+//   node .forge/scripts/wp.js status [--json]
+//   node .forge/scripts/wp.js set TASK-XXX <field> <value> [--force]
+//   node .forge/scripts/wp.js append-notes TASK-XXX <text>
+//
+// Why this exists: task selection is entirely deterministic — unblocked-ness,
+// dependency satisfaction, active-task resume, explicit-ID override — so it
+// belongs in a script rather than in an agent's context window (Vision pillar
+// 2). `/forge-next` and `/forge-status` call this instead of reading
+// WORKPLAN.md in full; a 2,000-line workplan then never enters context, and the
+// per-session cost drops to the selected task alone.
+//
+// Format boundary: WORKPLAN.md stays plain, hand-editable markdown. Every
+// mutation here rewrites exactly the field lines it targets, leaves the rest of
+// the file byte-identical, and is re-linted with check-workplan.js before it is
+// allowed to stand — a mutation that fails the lint is reverted, not left on
+// disk.
+//
+// Exit codes: 0 success · 1 usage/validation error · 2 nothing to select.
+
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+
+const {
+  VALID_STATUSES,
+  VALID_TYPES,
+  VALID_TRANSITIONS,
+  FIELD_NAMES,
+  readWorkplan,
+  dependsList,
+  contextList,
+  unmetDeps,
+  selectTask,
+  setField,
+  appendNotes,
+} = require('./lib/workplan');
+const { createLoader, resolveRef } = require('./lib/markdown');
+
+const ROOT = process.cwd();
+
+const USAGE = `usage: node .forge/scripts/wp.js <command>
+
+  next [TASK-XXX] [--json]     select the task to execute and emit its fields
+  get TASK-XXX [--json]        emit one task's fields
+  status [--json]              counts, next unblocked task, clarify tasks, open observations
+  set TASK-XXX <field> <value> [--force]
+                               set Status, Type, Depends, Context, Gate, or Notes
+  append-notes TASK-XXX <text> append a line to a task's Notes field`;
+
+function die(message, code) {
+  console.error(`wp.js: ${message}`);
+  process.exit(code === undefined ? 1 : code);
+}
+
+function loadWorkplan() {
+  const wp = readWorkplan(ROOT);
+  if (!wp) die('.forge/WORKPLAN.md not found. Run /forge-plan to generate one.');
+  if (wp.tasks.length === 0) die('no tasks found in .forge/WORKPLAN.md. Run /forge-plan to generate one.');
+  return wp;
+}
+
+// --- Rendering ---
+
+function taskJson(task) {
+  return {
+    id: task.id,
+    description: task.description,
+    status: task.status,
+    type: task.type,
+    depends: dependsList(task),
+    context: contextList(task),
+    gate: task.gate,
+    notes: task.notes || '',
+  };
+}
+
+// Notes come last and are printed verbatim, so a multi-line value needs no
+// escaping and the reader never has to guess where the field ends.
+function printTask(task, selection, warnings) {
+  console.log(`Task: ${task.id} — ${task.description}`);
+  if (selection) console.log(`Selection: ${selection}`);
+  console.log(`Status: ${task.status}`);
+  console.log(`Type: ${task.type}`);
+  console.log(`Depends: ${task.depends}`);
+  console.log(`Context: ${task.contextRaw}`);
+  console.log(`Gate: ${task.gate}`);
+  for (const w of warnings || []) console.log(`Warning: ${w}`);
+  console.log('Notes:');
+  console.log(task.notes && task.notes.trim() ? task.notes : '(none)');
+}
+
+// --- STATUS.md observations ---
+// Reads the Observations table (CONTRACT#data-model/status-md-data-model) and
+// returns open rows, foundation severity first. Missing file or missing section
+// is normal, not an error — STATUS.md is optional.
+
+function readObservations() {
+  const loadFile = createLoader(path.join(ROOT, '.forge'));
+  const result = resolveRef('STATUS#observations', loadFile);
+  if (!result.ok) return [];
+
+  const rows = [];
+  for (const line of result.section.split('\n')) {
+    if (!line.trim().startsWith('|')) continue;
+    const cells = line.split('|').slice(1, -1).map(c => c.trim());
+    if (cells.length < 6) continue;
+    if (/^-+$/.test(cells[0].replace(/\s/g, ''))) continue; // separator row
+    if (cells[0].toLowerCase() === 'id') continue;          // header row
+    const [id, raisedBy, kind, severity, observation, disposition] = cells;
+    if (disposition.toLowerCase() !== 'open') continue;
+    rows.push({ id, raisedBy, kind, severity: severity.toLowerCase(), observation, disposition });
+  }
+
+  // foundation first — the severity that means "stop and reconsider" must not
+  // be buried under routine friction rows.
+  return rows.sort((a, b) => {
+    const rank = s => (s === 'foundation' ? 0 : 1);
+    return rank(a.severity) - rank(b.severity);
+  });
+}
+
+// --- Commands ---
+
+function cmdNext(args, json) {
+  const requestedId = args.find(a => /^TASK-\d+$/i.test(a));
+  if (args.some(a => !/^TASK-\d+$/i.test(a))) {
+    die(`unexpected argument for next: ${args.find(a => !/^TASK-\d+$/i.test(a))}`);
+  }
+  const wp = loadWorkplan();
+  const result = selectTask(wp, requestedId ? requestedId.toUpperCase() : null);
+
+  if (!result.ok) {
+    if (json) {
+      console.log(JSON.stringify({ ok: false, error: result.error }, null, 2));
+      process.exit(result.code);
+    }
+    die(result.error, result.code);
+  }
+
+  if (json) {
+    console.log(JSON.stringify({
+      ok: true,
+      selection: result.selection,
+      warnings: result.warnings,
+      task: taskJson(result.task),
+    }, null, 2));
+  } else {
+    printTask(result.task, result.selection, result.warnings);
+  }
+}
+
+function cmdGet(args, json) {
+  const id = args[0];
+  if (!id) die('get requires a task ID.\n\n' + USAGE);
+  const wp = loadWorkplan();
+  const task = wp.taskById.get(id.toUpperCase());
+  if (!task) die(`${id} not found in WORKPLAN.md.`);
+
+  if (json) console.log(JSON.stringify({ ok: true, task: taskJson(task) }, null, 2));
+  else printTask(task, null, []);
+}
+
+function cmdStatus(args, json) {
+  const wp = loadWorkplan();
+  const { tasks, taskById } = wp;
+
+  const counts = {};
+  for (const s of VALID_STATUSES) counts[s] = 0;
+  for (const t of tasks) if (counts[t.status] !== undefined) counts[t.status]++;
+
+  const active = tasks.find(t => t.status === 'active') || null;
+  const next = tasks.find(t => t.status === 'pending' && unmetDeps(t, taskById).length === 0) || null;
+  const clarify = tasks.filter(t => t.type === 'clarify' && (t.status === 'pending' || t.status === 'active'));
+  const blocked = tasks.filter(t => t.status === 'blocked');
+  const observations = readObservations();
+
+  const brief = t => ({ id: t.id, description: t.description, status: t.status, type: t.type });
+
+  if (json) {
+    console.log(JSON.stringify({
+      ok: true,
+      total: tasks.length,
+      counts,
+      active: active ? brief(active) : null,
+      next: next ? brief(next) : null,
+      clarify: clarify.map(brief),
+      blocked: blocked.map(brief),
+      observations,
+    }, null, 2));
+    return;
+  }
+
+  console.log(`Tasks: ${tasks.length} total — ${counts.done} done, ${counts.active} active, ${counts.pending} pending, ${counts.blocked} blocked`);
+  console.log(`Active: ${active ? `${active.id} — ${active.description}` : 'none'}`);
+  console.log(`Next unblocked: ${next ? `${next.id} — ${next.description}` : 'none'}`);
+
+  console.log(clarify.length ? 'Clarify tasks awaiting input:' : 'Clarify tasks awaiting input: none');
+  for (const t of clarify) console.log(`  - ${t.id} (${t.status}) — ${t.description}`);
+
+  console.log(blocked.length ? 'Blocked tasks:' : 'Blocked tasks: none');
+  for (const t of blocked) console.log(`  - ${t.id} — ${t.description}`);
+
+  console.log(observations.length ? 'Open observations:' : 'Open observations: none');
+  for (const o of observations) {
+    console.log(`  - [${o.severity}] ${o.id} (${o.raisedBy}) — ${o.observation}`);
+  }
+}
+
+// Re-lint after every write. check-workplan.js resolves the workplan from the
+// working directory, same as this script, so it validates what was just
+// written. A failure means the mutation was wrong: put the file back.
+function writeAndLint(wp, content, successMessage) {
+  const original = fs.readFileSync(wp.path, 'utf8');
+  fs.writeFileSync(wp.path, content);
+
+  const lint = spawnSync(process.execPath, [path.join(__dirname, 'check-workplan.js')], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  });
+
+  if (lint.status !== 0) {
+    fs.writeFileSync(wp.path, original);
+    const detail = `${lint.stdout || ''}${lint.stderr || ''}`.trim();
+    die(`mutation rejected — check-workplan.js failed, so WORKPLAN.md was reverted:\n${detail}`);
+  }
+
+  console.log(successMessage);
+}
+
+function cmdSet(args) {
+  const force = args.includes('--force');
+  const rest = args.filter(a => a !== '--force');
+  const [rawId, rawField, ...valueParts] = rest;
+  if (!rawId || !rawField || valueParts.length === 0) die('set requires a task ID, a field, and a value.\n\n' + USAGE);
+
+  const id = rawId.toUpperCase();
+  const key = rawField.toLowerCase();
+  const value = valueParts.join(' ');
+
+  if (!FIELD_NAMES[key]) {
+    die(`unknown field "${rawField}". Expected one of: ${Object.values(FIELD_NAMES).join(', ')}.`);
+  }
+
+  const wp = loadWorkplan();
+  const task = wp.taskById.get(id);
+  if (!task) die(`${id} not found in WORKPLAN.md.`);
+
+  if (key === 'status') {
+    if (!VALID_STATUSES.includes(value)) {
+      die(`invalid Status "${value}". Expected one of: ${VALID_STATUSES.join(', ')}.`);
+    }
+    if (value !== task.status) {
+      const allowed = VALID_TRANSITIONS[task.status] || [];
+      if (!allowed.includes(value) && !force) {
+        die(`invalid transition ${task.status} → ${value} for ${id} (CONTRACT#state-machines/task-lifecycle allows: ${allowed.length ? allowed.join(', ') : 'none'}). Use --force to override.`);
+      }
+    }
+    // The one-active-task constraint is enforced on write, not only on read:
+    // a script that can create a second active task has dropped the invariant
+    // it was supposed to carry over from /forge-next.
+    if (value === 'active') {
+      const other = wp.tasks.find(t => t.status === 'active' && t.id !== id);
+      if (other && !force) {
+        die(`${other.id} is currently active. Only one task can be active at a time. Complete or block it first, or use --force.`);
+      }
+    }
+  }
+
+  if (key === 'type' && !VALID_TYPES.includes(value)) {
+    die(`invalid Type "${value}". Expected one of: ${VALID_TYPES.join(', ')}.`);
+  }
+
+  const result = setField(wp, id, key, value);
+  if (!result.ok) die(result.error);
+
+  const before = key === 'status' ? task.status : null;
+  writeAndLint(wp, result.content,
+    before ? `${id} Status: ${before} → ${value}` : `${id} ${FIELD_NAMES[key]} updated.`);
+}
+
+function cmdAppendNotes(args) {
+  const [rawId, ...textParts] = args;
+  if (!rawId || textParts.length === 0) die('append-notes requires a task ID and text.\n\n' + USAGE);
+
+  const id = rawId.toUpperCase();
+  const wp = loadWorkplan();
+  if (!wp.taskById.has(id)) die(`${id} not found in WORKPLAN.md.`);
+
+  const result = appendNotes(wp, id, textParts.join(' '));
+  if (!result.ok) die(result.error);
+
+  writeAndLint(wp, result.content, `${id} Notes: appended.`);
+}
+
+// --- Entry point ---
+
+function main(argv) {
+  const json = argv.includes('--json');
+  const args = argv.filter(a => a !== '--json');
+  const command = args[0];
+  const rest = args.slice(1);
+
+  switch (command) {
+    case 'next': return cmdNext(rest, json);
+    case 'get': return cmdGet(rest, json);
+    case 'status': return cmdStatus(rest, json);
+    case 'set': return cmdSet(rest);
+    case 'append-notes': return cmdAppendNotes(rest);
+    case undefined: return die(USAGE);
+    default: return die(`unknown command "${command}".\n\n${USAGE}`);
+  }
+}
+
+main(process.argv.slice(2));
+```
+
+If it exists, skip — do not overwrite.
 ### 11. Report completion
 
 After creating all files, tell the user which files were created (existing files were not overwritten), listing only from this set — and only the ones actually created or modified, not skipped:
@@ -1133,6 +1740,10 @@ After creating all files, tell the user which files were created (existing files
 - `.forge/templates/ux-spec.md` (only if step 5 was answered "yes")
 - `.forge/DESIGN.md` (only if step 5 was answered "yes")
 - `.forge/scripts/check-ux-spec.js` (only if step 5 was answered "yes")
+- `.forge/scripts/lib/markdown.js`
+- `.forge/scripts/lib/workplan.js`
+- `.forge/scripts/check-workplan.js`
+- `.forge/scripts/wp.js`
 - `.forge/scripts/lib/markdown.js`
 - `.forge/scripts/check-workplan.js`
 - `.claude/settings.json`

@@ -61,7 +61,9 @@ check() {
 
 echo "Checking embedded script payloads in $INIT..."
 check ".forge/scripts/lib/markdown.js"
+check ".forge/scripts/lib/workplan.js"
 check ".forge/scripts/check-workplan.js"
+check ".forge/scripts/wp.js"
 
 # The provisioning steps must also be reachable: unconditional, and creating the
 # lib/ subdirectory that markdown.js lives in.

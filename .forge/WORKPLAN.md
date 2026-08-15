@@ -287,18 +287,12 @@
 
 ## [TASK-058] Create wp.js deterministic workplan query and mutation script
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-050
 - **Context:** CONTRACT#rules/workplan-access-discipline, CONTRACT#state-machines/task-lifecycle, CONTRACT#interfaces/command-forge-next
 - **Gate:** `bash .forge/tests/test-wp.sh`
-- **Notes:** The core of the fix. Task selection is entirely deterministic — unblocked-ness, dependency satisfaction, active-task resume, explicit-ID override — so it belongs in a script (Vision pillar 2), and `check-workplan.js` already parses every field required.
-
-  Commands to support: `next` (emit the selected task's fields, applying the full selection priority order), `get TASK-XXX`, `status` (counts, next unblocked, clarify tasks, open observations), `set TASK-XXX <field> <value>`, `append-notes TASK-XXX <text>`. Output structured enough for a command to consume without re-parsing.
-
-  Reuse the parsing in check-workplan.js rather than writing a second parser — a divergent workplan parser is the exact failure TASK-050 exists to prevent.
-
-  **Format boundary is non-negotiable:** WORKPLAN.md stays plain, hand-editable markdown. wp.js accelerates access to that format; it never becomes the format. Mutations must produce output a human would have written by hand, and `node .forge/scripts/check-workplan.js` must pass after every mutation.
+- **Notes:** Built wp.js (next/get/status/set/append-notes) plus lib/workplan.js as the one workplan parser, with check-workplan.js refactored onto it; commands are not yet converted (TASK-059). Decisions on mutation safety and lifecycle enforcement, and one deviation expanding /forge-init step 10. Record: .forge/notes/TASK-058.md
 
 ## [TASK-059] Convert /forge-next and /forge-status to wp.js projection
 

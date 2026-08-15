@@ -13,6 +13,12 @@
 const fs = require('fs');
 const path = require('path');
 const { createLoader, resolveRef } = require('./lib/markdown');
+const {
+  VALID_STATUSES,
+  VALID_TYPES,
+  parseWorkplan,
+  dependsList,
+} = require('./lib/workplan');
 
 const ROOT = process.cwd();
 const workplanPath = path.join(ROOT, '.forge', 'WORKPLAN.md');
@@ -24,60 +30,21 @@ if (!fs.existsSync(workplanPath)) {
 
 const content = fs.readFileSync(workplanPath, 'utf8').replace(/\r\n/g, '\n');
 
-const VALID_STATUSES = ['pending', 'active', 'done', 'blocked'];
-const VALID_TYPES = ['scaffold', 'feature', 'clarify', 'refactor', 'fix', 'investigate', 'ux-spec', 'checkpoint'];
 const CODE_EXTENSIONS = ['js', 'ts', 'jsx', 'tsx', 'py', 'rb', 'go', 'java', 'c', 'cpp', 'cs', 'php', 'rs'];
 
 const errors = [];
 const warnings = [];
 
 // --- Parse tasks ---
+// Parsing lives in lib/workplan.js, shared with wp.js. This script owns the
+// invariants, not the format: two parsers for one file is how a linter starts
+// disagreeing with the tool that writes the file it lints.
 
-const headerRegex = /^## \[(TASK-\d+)\]\s*(.*)$/gm;
-const headerMatches = [];
-let hm;
-while ((hm = headerRegex.exec(content)) !== null) {
-  headerMatches.push({ id: hm[1], description: hm[2].trim(), index: hm.index });
-}
+const { tasks, taskById } = parseWorkplan(content);
 
-if (headerMatches.length === 0) {
+if (tasks.length === 0) {
   console.error('Error: no tasks found in WORKPLAN.md');
   process.exit(1);
-}
-
-function field(block, name) {
-  const re = new RegExp(`^- \\*\\*${name}:\\*\\*\\s*(.*)$`, 'm');
-  const fm = re.exec(block);
-  return fm ? fm[1].trim() : null;
-}
-
-function stripBackticks(s) {
-  if (!s) return s;
-  const m = /^`([\s\S]*)`$/.exec(s.trim());
-  return m ? m[1] : s;
-}
-
-const tasks = headerMatches.map((hmt, i) => {
-  const start = hmt.index;
-  const end = i + 1 < headerMatches.length ? headerMatches[i + 1].index : content.length;
-  const block = content.slice(start, end);
-  return {
-    id: hmt.id,
-    description: hmt.description,
-    order: i,
-    status: field(block, 'Status'),
-    type: field(block, 'Type'),
-    depends: field(block, 'Depends'),
-    contextRaw: field(block, 'Context'),
-    gate: stripBackticks(field(block, 'Gate')),
-  };
-});
-
-const taskById = new Map(tasks.map(t => [t.id, t]));
-
-function dependsList(t) {
-  if (!t.depends || t.depends === 'none') return [];
-  return t.depends.split(',').map(s => s.trim()).filter(Boolean);
 }
 
 // --- Invariant 1: every task has all required fields with valid values ---
@@ -104,7 +71,7 @@ for (const t of tasks) {
 //     (the same violation in a done task is a warning, not an error) ---
 
 const idCounts = new Map();
-for (const hmt of headerMatches) idCounts.set(hmt.id, (idCounts.get(hmt.id) || 0) + 1);
+for (const t of tasks) idCounts.set(t.id, (idCounts.get(t.id) || 0) + 1);
 for (const [id, count] of idCounts) {
   if (count > 1) errors.push(`Duplicate task ID: ${id} appears ${count} times`);
 }
