@@ -587,12 +587,18 @@ Add user auth middleware (TASK-012)
 
 `/forge-next` generates this format automatically when suggesting commit messages.
 
-**File manifest** — when `/forge-next` marks a task `done`, it appends a `Files` line to the task's Notes listing the files created or modified (derived from `git diff --name-only` against the task's starting commit). This records the requirement→file mapping inside WORKPLAN.md without relying on code annotations.
+**File manifest** — when `/forge-next` marks a task `done`, it records the files created or modified (derived from `git diff --name-only` against the task's starting commit). Where that list lands follows the externalization threshold in Data Model/Task Record Data Model:
+
+- **Notes kept inline** (3 lines or fewer): a `Files` line is appended to the task's Notes in WORKPLAN.md.
+- **Notes externalized** (more than 3 lines): the list goes in the record's `## Files` section, and the workplan `Notes` field holds only the one-line summary plus the record path. The list is *not* duplicated inline — it is mechanically derived, and two copies drift the moment either is hand-edited.
+
+Either way the requirement→file mapping is recorded in a Forge artifact rather than in code annotations.
 
 **Discovery:**
 
 - Find commits: `git log --oneline --grep="TASK-007"`
-- Find files: look at the `Files` line in the task's Notes, or `git log --name-only --grep="TASK-007"`
+- Find files: look at the `Files` line in the task's Notes, or the `## Files` section of `.forge/notes/TASK-007.md` when the task externalized its record, or `git log --name-only --grep="TASK-007"`
+- Find which task touched a file: `grep -rl "path/to/file" .forge/WORKPLAN.md .forge/notes/`
 - Full diff: `git log -p --grep="TASK-007"`
 
 **Git-optional:** Forge supports projects where `.forge/` is never committed — a common setup when Forge runs locally against a work repository whose history is shared. In that mode `git log --grep` retrieves nothing about tasks, and the `.forge/notes/TASK-XXX.md` record is the sole archaeological artifact. Records must therefore be self-sufficient: a record that says "see the commit" is defective. The git-based discovery commands above are an accelerant where history exists, never the primary mechanism.
@@ -663,7 +669,7 @@ Checkpoints concentrate human review at span boundaries instead of every task.
 
 - `/forge-plan` inserts a `checkpoint` task at each dependency-phase boundary, or after every 5 consecutive non-checkpoint tasks, whichever comes first. <!-- ASSUMED: cadence of 5; tune per project -->
 - A checkpoint's `Depends` lists every task in its span. Downstream tasks depend on the checkpoint, so the DAG halts there until the human passes it.
-- The checkpoint review packet contains: tasks completed in the span (descriptions, Files lines), gate results and test pass state, manual verification steps if any exist, and the current STATUS.md Open Questions and Risks.
+- The checkpoint review packet contains: tasks completed in the span (descriptions, and each task's file list — from its `Files` line when notes are inline, or its record's `## Files` section when the record was externalized), gate results and test pass state, manual verification steps if any exist, and the current STATUS.md Open Questions and Risks.
 - A failed checkpoint produces `fix` tasks (or a workplan edit / branch rollback) before the pipeline continues. The packet names the span's starting commit so rollback is one git command.
 
 ### Unattended Execution

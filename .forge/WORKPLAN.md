@@ -278,20 +278,12 @@
 
 ## [TASK-061] Reconcile Rules/Traceability with record externalization
 
-- **Status:** pending
+- **Status:** done
 - **Type:** clarify
 - **Depends:** TASK-057
 - **Context:** CONTRACT#rules/traceability, CONTRACT#data-model/task-record-data-model, CONTRACT#rules/contract-amendment-protocol, notes/TASK-057#deviations
 - **Gate:** `bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && awk '/^### Traceability$/{f=1;next} f&&/^### /{exit} f' .forge/CONTRACT.md | grep -qi "externaliz" && test $(grep -c "^| 2026-" .forge/STATUS.md) -gt 21 && echo "traceability record conflict resolved"`
-- **Notes:** Two Contract sections disagree about where the file manifest lives once a task externalizes its record. `Rules/Traceability` ("File manifest") states that `/forge-next` appends a `Files` line to the task's Notes on completion — written before records existed, so it assumes one destination. `Data Model/Task Record Data Model` gives the record a `## Files` section and specifies the inline residue as a one-line summary plus path, with no `Files` line.
-
-  TASK-057 implemented the Data Model reading: externalized tasks put files in the record's `## Files`, inline tasks keep the `Files:` line in Notes as before. That call was made during execution and is recorded as a deviation, not as a Contract decision — which is the actual defect this task closes. The behavior is already shipped and dogfooded; what is missing is the Contract saying so.
-
-  Resolve by amending `Rules/Traceability` to state the branch explicitly, so its Discovery commands stop pointing at a `Files` line that will not exist for externalized tasks. Confirming the deviation is the expected outcome; overturning it is in scope but means changing forge-next.md back, not just the Contract.
-
-  Per `Rules/Contract Amendment Protocol` step 3: TASK-057 is `done` with a Context reference to `CONTRACT#rules/traceability`. If the amendment overturns the deviation, TASK-057 needs a reconciling `fix` task. If it confirms it, no reconciliation is required. Log the outcome as a dated row in STATUS.md Decisions (the gate's row-count threshold is the count at authoring time).
-
-  Origin: raised as a deviation during TASK-057 execution (2026-08-15). See `.forge/notes/TASK-057.md` Deviations.
+- **Notes:** Confirmed the TASK-057 deviation and amended Traceability, Checkpoint Cadence, and two SPEC criteria; scope reached past CONTRACT into SPEC, and no fix task was needed for any done task. Record: .forge/notes/TASK-061.md
 
 ## [TASK-058] Create wp.js deterministic workplan query and mutation script
 

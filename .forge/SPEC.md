@@ -45,7 +45,7 @@ WHEN a checkpoint task executes, THE SYSTEM SHALL present a review packet the hu
 
 Acceptance criteria:
 
-- The packet contains everything Rules/Checkpoint Cadence enumerates: span tasks with descriptions and Files lines, gate results, manual verification steps, and the current STATUS.md Open Questions and Risks.
+- The packet contains everything Rules/Checkpoint Cadence enumerates: span tasks with descriptions and each task's file list (its `Files` line, or its record's `## Files` section when the record was externalized), gate results, manual verification steps, and the current STATUS.md Open Questions and Risks.
 - The packet additionally embeds open STATUS.md Observations rows (`foundation` severity first) and any mid-span course-correction Decisions rows (see [req-unattended-correction]).
 - The packet names the span's starting commit and the exact single rollback command.
 - The packet ends with an explicit pass/fail question and execution stops until the human answers — an unanswered packet blocks all downstream tasks by construction.
@@ -56,7 +56,7 @@ WHEN an unattended span halts — at a hard stop per Rules/Unattended Execution,
 
 Acceptance criteria:
 
-- Every task completed in the span has one commit ending `(TASK-XXX)`, status `done`, and a Files line per Rules/Traceability.
+- Every task completed in the span has one commit ending `(TASK-XXX)`, status `done`, and a recorded file list per Rules/Traceability — inline as a `Files` line, or in its record's `## Files` section.
 - The halting condition is recorded in the artifact its type dictates: a blocked task in workplan Notes plus a STATUS.md Blockers row; a `foundation` observation in STATUS.md Observations; a second consecutive gate failure in the still-`active` task's Notes.
 - Uncommitted partial work from a halting task is left in the working tree and named in that task's Notes — never silently discarded.
 - No push occurred during the span (Rules/Unattended Execution; enforced by the push guard in Boundaries/Hook Configuration).
