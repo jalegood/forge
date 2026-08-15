@@ -414,7 +414,7 @@
 
 ## [TASK-048] Author .forge/SPEC.md for Forge itself
 
-- **Status:** pending
+- **Status:** done
 - **Type:** scaffold
 - **Depends:** none
 - **Context:** CONTRACT#data-model/spec-data-model, CONTRACT#rules/spec-precedence, CONTRACT#interfaces/command-forge-spec, CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution
@@ -429,6 +429,9 @@
   Write requirements as `### [REQ-slug] Name` with EARS statements (`WHEN <trigger>, THE SYSTEM SHALL <response>`) plus testable acceptance criteria. Reference CONTRACT concepts by name; never redefine a data shape or interface. Populate Non-Goals explicitly — it is the guard against this file growing into a CONTRACT mirror.
 
   Serves as the real-instance fixture for TASK-030 and validates two open risks early: SPEC/CONTRACT duplication (STATUS.md Risks) and the ~300-line split threshold (STATUS.md Q-003). Context omits `SPEC#` self-references deliberately — check-workplan.js invariant 5 errors on refs to a file that does not exist yet.
+
+  Authored at 121 lines with 6 requirements across the three mandated areas (intake interview quality, checkpoint packet confidence, unattended-span operator experience) — single file, well under the Q-003 split threshold. Three spec-level decisions resolved by human interview before drafting and logged to STATUS.md Decisions (2026-08-14): adaptive intake bar (not strict checklist), mid-span course corrections via direct edits plus a mandatory Decisions row, and checkpoint packets re-running span gates fresh rather than trusting recorded results. No ASSUMED markers added — every judgment call was either interviewed or derived from existing CONTRACT/STATUS content.
+  Files: .forge/SPEC.md, .forge/STATUS.md, .forge/WORKPLAN.md
 
 ## [TASK-030] Create check-spec.js spec readiness gate script
 
