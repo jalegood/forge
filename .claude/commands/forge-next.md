@@ -129,6 +129,8 @@ Parse the selected task's `Context` field into a list of references. Each refere
 
 3. **Extract section content.** Capture everything from the matched heading (inclusive) through just before the next heading at the **same level or higher**. A `###` section ends at the next `###`, `##`, or `#`.
 
+   **Lines inside ``` fences are not headings.** Any section that fences a markdown example — a file template, a document skeleton, a sample artifact — holds heading-like lines inside the fence. A scan that ignores fences stops at the first one and truncates the section silently: the reference still resolves, so no unresolved-reference warning fires and the loss is invisible. Track fence state while extracting — toggle on each ``` line, and ignore headings while inside a fence. If `.forge/scripts/lib/markdown.js` is present in the project, prefer its `resolveRef`, which already handles this.
+
 4. **Concatenate** all resolved sections in the order they appear in the Context field, separated by a blank line.
 
 **If a reference cannot be resolved** (no matching heading found), warn: "Could not resolve context reference: [ref]. Check that CONTRACT.md headings match." Continue with the references that did resolve.

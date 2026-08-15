@@ -560,6 +560,15 @@
 
   Origin: identified during a risk discussion on auto-commit during unattended execution (2026-07-31) — CONTRACT already specified the unattended-execution policy (work-branch-only, no-push, hard-stops) but nothing mechanically enforced it. Coverage gap resolved in CONTRACT.md by this planning pass before this task was generated (Boundaries#hook-configuration, Data Model#artifacts, Interfaces#command-forge-init).
 
+## [TASK-062] Make /forge-init provision check-workplan.js and lib/markdown.js
+
+- **Status:** done
+- **Type:** fix
+- **Depends:** TASK-026
+- **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#rules/workplan-lint, CONTRACT#rules/gate-patterns
+- **Gate:** `bash .forge/tests/test-init-scripts.sh && bash .forge/tests/smoke.sh && echo "init provisions lint scripts"`
+- **Notes:** forge-init now embeds both lint scripts as step 10, guarded by a content-diff drift test; verified end-to-end in a scratch project. One deviation: the CONTRACT bullet was tightened before the task rather than during. Record: .forge/notes/TASK-062.md
+
 ## [TASK-051] Triage the ASSUMED marker backlog into STATUS.md
 
 - **Status:** pending
@@ -624,7 +633,7 @@
 
 - **Status:** pending
 - **Type:** checkpoint
-- **Depends:** TASK-026, TASK-028, TASK-029, TASK-032, TASK-033, TASK-034, TASK-036, TASK-037, TASK-038, TASK-047, TASK-051, TASK-053, TASK-054, TASK-055, TASK-059, TASK-060
+- **Depends:** TASK-026, TASK-028, TASK-029, TASK-032, TASK-033, TASK-034, TASK-036, TASK-037, TASK-038, TASK-047, TASK-051, TASK-053, TASK-054, TASK-055, TASK-059, TASK-060, TASK-062
 - **Context:** CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#data-model/status.md-data-model
 - **Gate:** `manual: Review the v0.3 build span before validation and docs. Packet must contain: each task completed in the span with its description and Files line, the gate result for each, check-workplan.js output on the current workplan, current STATUS.md Open Questions and Risks, and the span's starting commit for rollback.`
 - **Notes:** First executable checkpoint in Forge's history — executing it is itself the live validation that TASK-035 and TASK-037 work. Span is 15 tasks, over the cadence of 5: v0.3's own plan predates its checkpoint machinery, so this is the only position where a checkpoint is executable (see STATUS.md Decisions, 2026-07-31). Normal cadence applies from v0.4. Depends lists the span's leaf tasks, which transitively cover all of TASK-025..038 plus TASK-047 (added in a later planning pass the same day — the guard hooks are part of v0.3's unattended-execution machinery and must be reviewed in the same checkpoint, not deferred to v0.4).

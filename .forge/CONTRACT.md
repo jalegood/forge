@@ -303,7 +303,7 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
   - Creates `.forge/VISION.md` if absent (stub template with What/Who/Pillars sections)
   - Creates `.forge/CONTRACT.md` if absent (stub template with all top-level sections)
   - Creates `.forge/templates/` directory with all 7 unconditional template files if absent: scaffold.md, feature.md, clarify.md, refactor.md, fix.md, investigate.md, checkpoint.md (ux-spec.md is conditional — see below)
-  - Creates `.forge/scripts/check-workplan.js` if absent (the workplan lint script)
+  - Creates `.forge/scripts/check-workplan.js` and its `.forge/scripts/lib/markdown.js` dependency if absent (the workplan lint script and the shared section resolver it requires)
   - Creates `.forge/scripts/check-spec.js` if absent (the spec readiness gate script)
   - Creates `.forge/SPEC.md` if absent (stub with Overview, Requirements, Flows, Non-Goals sections)
   - Creates `.forge/STATUS.md` if absent (stub with Open Questions, Decisions, Risks, Blockers tables)
