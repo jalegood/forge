@@ -66,8 +66,9 @@ Parse the selected task's `Context` field into a list of references. Each refere
 - `SPEC#section-name/subsection` — a subsection within SPEC.md (e.g., `SPEC#requirements/req-login`)
 - `specs/name#section-name` — a top-level section from a per-feature spec file `.forge/specs/name.md` (e.g., `specs/auth#requirements`)
 - `specs/name#section-name/subsection` — a subsection within that per-feature spec file
+- `notes/TASK-XXX#section-name` — a section of a task record `.forge/notes/TASK-XXX.md` (e.g., `notes/TASK-029#deviations`)
 
-**Source file routing:** `CONTRACT#` references resolve against `.forge/CONTRACT.md`. `UX#` references resolve against `.forge/UX.md`. `DESIGN#` references resolve against `.forge/DESIGN.md`. `SPEC#` references resolve against `.forge/SPEC.md`. `specs/name#` references resolve against `.forge/specs/name.md` (the `name` segment names the file, not a heading).
+**Source file routing:** `CONTRACT#` references resolve against `.forge/CONTRACT.md`. `UX#` references resolve against `.forge/UX.md`. `DESIGN#` references resolve against `.forge/DESIGN.md`. `SPEC#` references resolve against `.forge/SPEC.md`. `specs/name#` references resolve against `.forge/specs/name.md` (the `name` segment names the file, not a heading). `notes/TASK-XXX#` references resolve against `.forge/notes/TASK-XXX.md` (likewise, `TASK-XXX` names the file).
 
 **For each reference, extract the matching markdown section from the appropriate file:**
 
@@ -119,6 +120,12 @@ Parse the selected task's `Context` field into a list of references. Each refere
    - The `name` segment selects the file: `.forge/specs/name.md` (e.g., `specs/auth#requirements` resolves against `.forge/specs/auth.md`)
    - Within that file, resolve `section-name` (and optional `subsection`) using the same standard slug matching and nested navigation as `CONTRACT#`
    - If `.forge/specs/name.md` does not exist, treat the reference as unresolved (see below)
+
+   For `notes/TASK-XXX#section-name`:
+   - The `TASK-XXX` segment selects the file: `.forge/notes/TASK-XXX.md` (e.g., `notes/TASK-029#deviations` resolves against `.forge/notes/TASK-029.md`)
+   - Within that file, resolve `section-name` using the same standard slug matching as `CONTRACT#`. Record headings are the plain Task Record Data Model sections — `## Outcome`, `## Decisions`, `## Deviations`, `## Files`
+   - If `.forge/notes/TASK-XXX.md` does not exist, treat the reference as unresolved (see below)
+   - **A record is read only when a task declares it.** Do not open `.forge/notes/` on your own initiative to fill in background on a prior task — an undeclared lookup is one an agent may skip, which is why cross-task record access runs through the manifest
 
 3. **Extract section content.** Capture everything from the matched heading (inclusive) through just before the next heading at the **same level or higher**. A `###` section ends at the next `###`, `##`, or `#`.
 

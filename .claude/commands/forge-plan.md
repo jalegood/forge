@@ -150,6 +150,7 @@ Do not generate a task with an incomplete manifest. The completeness test is the
 - `SPEC#section-name` — top-level section of SPEC.md (e.g., `SPEC#requirements`)
 - `SPEC#section-name/subsection` — subsection of SPEC.md (e.g., `SPEC#requirements/req-login`)
 - `specs/name#section-name` — section of a per-feature spec file `.forge/specs/name.md` (used once SPEC.md has been split per the ~300-line threshold)
+- `notes/TASK-XXX#section-name` — section of a prior task's record `.forge/notes/TASK-XXX.md` (e.g., `notes/TASK-029#deviations`). Use only when a task genuinely depends on how an earlier task turned out — a deviation it must preserve, a decision it builds on. Declaring it here is the supported path for cross-task record access; the alternative is an agent choosing to go look, which is a step it may skip
 
 **UX manifest rules:**
 

@@ -248,7 +248,7 @@
 
 ## [TASK-056] Add notes/ namespace to context manifest resolution
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-050
 - **Context:** CONTRACT#data-model/task-record-data-model, CONTRACT#data-model/context-manifest, CONTRACT#rules/workplan-access-discipline
@@ -256,6 +256,16 @@
 - **Notes:** Makes `notes/TASK-XXX#section` a first-class manifest reference so a task that needs a prior task's record *declares* it, rather than relying on an agent choosing to go look.
 
   Smaller than it appears: `check-workplan.js`'s `loadFile` already joins the prefix onto `.forge/`, so `notes/TASK-029` resolves to `.forge/notes/TASK-029.md` by the same path that makes `specs/name#` work. Verify that with a fixture rather than assuming it, then add the form to forge-next's reference-format list and source-file routing. If the resolver moved to `lib/markdown.js` in TASK-050, the fixture belongs there.
+
+  Done, and the prediction held: **zero resolution code changed.** `createLoader` in `lib/markdown.js` joins any prefix onto `.forge/`, so `notes/TASK-029#deviations` already loaded `.forge/notes/TASK-029.md`. The work was proving it and documenting it.
+
+  Three fixtures in test-check-workplan.sh (14-16), backed by a synthetic `.forge/notes/TASK-029.md` in Task Record Data Model shape: a resolving reference, a missing record file, and a missing section inside an existing record. The passing fixture was checked for discrimination — removing the record file turns it into `source file .forge/notes/TASK-029.md not found`, so it passes on real resolution rather than on the reference being skipped.
+
+  `.forge/notes/` does not exist yet; TASK-057 creates the first real record. The namespace is resolvable ahead of anything to resolve, which is the right order — TASK-057 can write records knowing they are already addressable.
+
+  **Scope call:** also added the form to `/forge-plan`'s reference-format list, which the task description did not name. Declaration happens at plan time, so a planner that does not know the form never emits it and the namespace stays inert. Both entries carry the Data Model's "never agent initiative" constraint — forge-next's navigation rules state a record is read only when a task declares it, and forge-plan's entry states declaring is the supported path for cross-task access.
+
+  Files: .forge/tests/test-check-workplan.sh, .claude/commands/forge-next.md, .claude/commands/forge-plan.md, .forge/WORKPLAN.md
 
 ## [TASK-057] Update /forge-next to externalize task records on completion
 

@@ -32,6 +32,29 @@ Fixture content.
 Fixture content.
 EOF
 
+# A task record in Task Record Data Model shape, so `notes/TASK-XXX#section`
+# references have something to resolve against (CONTRACT#data-model/task-record-data-model).
+mkdir -p "$TMPDIR/.forge/notes"
+cat > "$TMPDIR/.forge/notes/TASK-029.md" << 'EOF'
+# TASK-029 — Fixture record
+
+## Outcome
+
+Fixture content.
+
+## Decisions
+
+Fixture content.
+
+## Deviations
+
+Fixture content.
+
+## Files
+
+Fixture content.
+EOF
+
 run_fixture() {
   local description="$1"
   local expect_exit="$2"
@@ -343,9 +366,61 @@ EOF
 )
 run_fixture "duplicate task ID fails" 1 "$DUPLICATE_ID" "Duplicate"
 
+# --- 14. notes/TASK-XXX#section resolves as a Context reference ---
+# The record namespace needs no new resolution code: createLoader joins the
+# prefix onto .forge/, so `notes/TASK-029` loads .forge/notes/TASK-029.md by the
+# same path that makes `specs/name#` work. This fixture is what makes that a
+# verified property rather than an assumption.
+NOTES_REF=$(cat <<'EOF'
+# Workplan
+
+## [TASK-001] Consumes a prior task record
+
+- **Status:** pending
+- **Type:** scaffold
+- **Depends:** none
+- **Context:** CONTRACT#data-model/context-manifest, notes/TASK-029#deviations
+- **Gate:** `echo ok`
+- **Notes:**
+EOF
+)
+run_fixture "notes/TASK-XXX#section reference resolves" 0 "$NOTES_REF"
+
+# --- 15. notes/ reference to a missing record file -> error ---
+NOTES_MISSING_FILE=$(cat <<'EOF'
+# Workplan
+
+## [TASK-001] References a record that does not exist
+
+- **Status:** pending
+- **Type:** scaffold
+- **Depends:** none
+- **Context:** notes/TASK-999#outcome
+- **Gate:** `echo ok`
+- **Notes:**
+EOF
+)
+run_fixture "notes/ reference to a missing record fails" 1 "$NOTES_MISSING_FILE" "notes/TASK-999.md not found"
+
+# --- 16. notes/ reference to a missing section within an existing record -> error ---
+NOTES_MISSING_SECTION=$(cat <<'EOF'
+# Workplan
+
+## [TASK-001] References a section the record lacks
+
+- **Status:** pending
+- **Type:** scaffold
+- **Depends:** none
+- **Context:** notes/TASK-029#nonexistent-section
+- **Gate:** `echo ok`
+- **Notes:**
+EOF
+)
+run_fixture "notes/ reference to a missing section fails" 1 "$NOTES_MISSING_SECTION" "no heading matching"
+
 rm -rf "$TMPDIR"
 
-# --- 14. The real current .forge/WORKPLAN.md must pass (known frozen-history
+# --- 17. The real current .forge/WORKPLAN.md must pass (known frozen-history
 #     warnings from TASK-012/TASK-014's done-task self-deps are non-blocking) ---
 echo ""
 echo "Real workplan: exit 0 expected..."
