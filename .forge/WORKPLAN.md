@@ -332,7 +332,7 @@
 
 ## [TASK-053] Update /forge-next to surface and record observations
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-031, TASK-066
 - **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#data-model/status.md-data-model, CONTRACT#rules/unattended-execution
@@ -344,6 +344,8 @@
   **At task completion:** append observation rows produced during execution. Never promote one to a task — only a human does that.
 
   Also wire the unattended hard stop: a new `foundation`-severity observation halts the loop, with the current task finishing cleanly first (CONTRACT#rules/unattended-execution, hard stop 4).
+  Added foundation-observation reporting before task selection (Step 1, closes the resume-active reporting gap wp.js next exempts from its halt) and observation-row recording at task completion (Step 8, one-line rows appended directly to STATUS.md); no deviations.
+  Files: .claude/commands/forge-next.md
 
 ## [TASK-054] Add the observation step to all prompt templates
 

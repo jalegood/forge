@@ -8,7 +8,15 @@ If `$ARGUMENTS` is present (e.g., the user typed `/forge-next TASK-012`), treat 
 
 ## Steps
 
-### 1. Project the workplan
+### 1. Report open foundation observations, then project the workplan
+
+**Before selecting a task**, check for open `foundation`-severity rows in STATUS.md Observations and report every one of them to the user (CONTRACT#interfaces/command-forge-next, Observations). Do this regardless of what selection turns out to be — including a resume:
+
+```bash
+node .forge/scripts/wp.js status --json
+```
+
+Filter the `observations` array to entries with `severity: "foundation"`. If any exist, relay each verbatim (id, raised by, observation text) before continuing to task selection. This report is independent of the mechanical halt below: `wp.js next` itself refuses to select *new* work while an open foundation row exists, but that refusal is exempted on `resume-active` (CONTRACT#rules/unattended-execution, hard stop 4) — so a resume would otherwise surface nothing. This step closes that gap by reporting unconditionally, before the selection call, whether or not that call ends up halting.
 
 Do **not** open `.forge/WORKPLAN.md`. Task selection is entirely deterministic — unblocked-ness, dependency satisfaction, active-task resume, explicit-ID override — so it runs in a script, and the script returns only the selected task (CONTRACT#rules/workplan-access-discipline). The workplan grows without bound; the per-session cost of this command must not grow with it.
 
@@ -202,6 +210,21 @@ When you believe the task is complete, run the gate from the task's Gate field.
 - Proceed based on their answer.
 
 ### 8. Handle the result
+
+**Recording observations produced during execution:** Regardless of which branch below applies, check whether anything noticed during execution was out of scope for this task (CONTRACT#data-model/status.md-data-model, Observations). The governing test: if the fix was covered by this task's gate and belonged in this task's diff, you already made it — no observation needed. Otherwise:
+
+- **One line per observation.** A pointer, not a report.
+- **Never promote one to a task.** Observations never spawn `clarify` or `investigate` tasks — only a human does that, later, at a checkpoint or ad hoc.
+- **More than three from this task collapse into one.** If execution surfaced more than three separate candidates, don't append four-plus rows — write a single `foundation`-severity row instead. Volume of small complaints is itself the signal that the foundation is wrong, and recording it as volume buries that signal.
+- **`foundation` severity** means the spec, contract, or approach is suspect and continuing to build compounds debt (this is also what feeds CONTRACT#rules/unattended-execution hard stop 4 for the *next* session). Everything else is `normal`.
+- **Determine the next ID** — `OBS-XXX` where `XXX` is `max(existing OBS ids in .forge/STATUS.md) + 1`.
+- **Append directly to `.forge/STATUS.md`'s Observations table.** STATUS.md is hand-edited markdown, not projected through `wp.js` — that access discipline is specific to WORKPLAN.md (CONTRACT#rules/workplan-access-discipline) and does not extend here:
+
+  ```markdown
+  | OBS-XXX | TASK-XXX | design/bug/scope/... | normal or foundation | One-line observation. | open |
+  ```
+
+If execution produced nothing worth logging, skip this — most tasks generate no observations, and that is the expected case, not a gap to fill.
 
 **Gate passes:**
 
