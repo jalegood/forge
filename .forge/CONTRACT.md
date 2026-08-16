@@ -56,6 +56,8 @@ A context manifest is a list of Contract section references in a task's `Context
 
 Resolution: parse the references, extract matching markdown sections (header through next same-level header), concatenate, inject into prompt template at the `{{context}}` slot. CONTRACT references resolve against `.forge/CONTRACT.md`; UX references resolve against `.forge/UX.md`; DESIGN references resolve against `.forge/DESIGN.md`; SPEC references resolve against `.forge/SPEC.md`; `specs/name#` references resolve against `.forge/specs/name.md`.
 
+**Requirement-heading matching:** requirement headings are the one exception to standard slug matching. A `### [req-slug] Requirement Name` heading under `## Requirements` matches the subsection reference `req-slug` by comparing the bracketed portion alone — strip the brackets, lowercase, compare directly — ignoring the trailing name text. So `SPEC#requirements/req-login` matches `### [req-login] User Login` however the name is later reworded, which is the point: requirement names are prose and change, slugs are identifiers and do not.
+
 **Budget:** Resolved context must not exceed ~200 lines of Contract content per task. Exceeding this signals the Contract section is too large or the task scope is too broad. One screen per task.
 
 ### UX.md Data Model

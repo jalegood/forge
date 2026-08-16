@@ -91,7 +91,44 @@ Check if `.forge/SPEC.md` exists. If it does **not** exist, create it with this 
 
 If it exists, skip — do not overwrite.
 
-### 4. Create `.forge/templates/` with all 6 template files if absent
+### 4. Create `.forge/STATUS.md` if absent
+
+Check if `.forge/STATUS.md` exists. If it does **not** exist, create it with this stub — five tables, headers only, no rows:
+
+```markdown
+# Status
+
+## Open Questions
+
+| ID | Question | Blocking? | Raised |
+| -- | -------- | --------- | ------ |
+
+## Decisions
+
+| Date | Decision | Why | Alternatives rejected |
+| ---- | -------- | --- | --------------------- |
+
+## Risks
+
+| Risk | Impact | Mitigation |
+| ---- | ------ | ---------- |
+
+## Blockers
+
+| Blocker | Blocking tasks | Needs |
+| ------- | -------------- | ----- |
+
+## Observations
+
+| ID | Raised by | Kind | Severity | Observation | Disposition |
+| -- | --------- | ---- | -------- | ----------- | ----------- |
+```
+
+All five tables are mandatory. `check-workplan.js` resolves `STATUS#observations` and `/forge-next` halts on open `foundation` rows, so a stub missing the Observations table silently disables that hard stop. Emit the header rows even though every table starts empty — writers append rows, they do not create tables.
+
+If it exists, skip — do not overwrite.
+
+### 5. Create `.forge/templates/` with all 6 template files if absent
 
 Check for each of the following files. For any that do **not** exist, create them with the stub below. If a file exists, skip it — do not overwrite.
 
@@ -335,13 +372,13 @@ When the investigation is complete:
    - Any decisions or blockers encountered
 ```
 
-### 5. Ask whether the project has a user-facing interface, then create `.forge/UX.md` if needed
+### 6. Ask whether the project has a user-facing interface, then create `.forge/UX.md` if needed
 
 Ask the human: **"Does this project have a user-facing interface (UI/UX)?"**
 
 If the answer is unclear, ask again — do not guess a default.
 
-- **If no:** skip this step, step 6 (`DESIGN.md`), and step 7 (`check-ux-spec.js`) entirely. Do not create `.forge/UX.md`, `.forge/DESIGN.md`, or `.forge/scripts/check-ux-spec.js`. Proceed to step 8.
+- **If no:** skip this step, step 7 (`DESIGN.md`), and step 8 (`check-ux-spec.js`) entirely. Do not create `.forge/UX.md`, `.forge/DESIGN.md`, or `.forge/scripts/check-ux-spec.js`. Proceed to step 9.
 - **If yes:** continue below.
 
 Check if `.forge/UX.md` exists. If it does **not** exist, create it with this stub:
@@ -391,7 +428,7 @@ Check if `.forge/UX.md` exists. If it does **not** exist, create it with this st
 
 If it exists, skip — do not overwrite.
 
-Also create `.forge/templates/ux-spec.md` if absent (only reached when step 5 was answered "yes" — skipped otherwise):
+Also create `.forge/templates/ux-spec.md` if absent (only reached when step 6 was answered "yes" — skipped otherwise):
 
 ```markdown
 # UX Spec Task
@@ -433,9 +470,9 @@ When the screen spec is complete:
 
 If it exists, skip — do not overwrite.
 
-### 6. Create `.forge/DESIGN.md` if absent
+### 7. Create `.forge/DESIGN.md` if absent
 
-Only run this step if step 5 was answered "yes". If it was answered "no", this step was already skipped.
+Only run this step if step 6 was answered "yes". If it was answered "no", this step was already skipped.
 
 Check if `.forge/DESIGN.md` exists. If it does **not** exist, create it with this stub:
 
@@ -474,9 +511,9 @@ Check if `.forge/DESIGN.md` exists. If it does **not** exist, create it with thi
 
 If it exists, skip — do not overwrite.
 
-### 7. Create `.forge/scripts/check-ux-spec.js` if absent
+### 8. Create `.forge/scripts/check-ux-spec.js` if absent
 
-Only run this step if step 5 was answered "yes". If it was answered "no", this step was already skipped.
+Only run this step if step 6 was answered "yes". If it was answered "no", this step was already skipped.
 
 Check if `.forge/scripts/check-ux-spec.js` exists. If it does **not** exist, create `.forge/scripts/` directory if needed, then create `check-ux-spec.js` with:
 
@@ -583,7 +620,7 @@ process.exit(0);
 
 If `.forge/scripts/check-ux-spec.js` exists, skip — do not overwrite.
 
-### 8. Create `.claude/settings.json` if absent
+### 9. Create `.claude/settings.json` if absent
 
 Check if `.claude/settings.json` exists. If it does **not** exist, create `.claude/` directory if needed, then create `settings.json` with:
 
@@ -620,7 +657,7 @@ Check if `.claude/settings.json` exists. If it does **not** exist, create `.clau
 
 If `.claude/settings.json` exists, skip — do not overwrite.
 
-### 9. Append Forge integration block to `CLAUDE.md` if absent
+### 10. Append Forge integration block to `CLAUDE.md` if absent
 
 Check if `CLAUDE.md` exists in the project root.
 
@@ -636,9 +673,9 @@ Check if `CLAUDE.md` exists in the project root.
 
 - If `CLAUDE.md` exists, check whether it already contains `Pipeline: .forge/`. If it does, skip — do not append. If it does not contain that line, append the integration block to the end of the file (preceded by a blank line).
 
-### 10. Create the `.forge/scripts/` engine scripts if absent
+### 11. Create the `.forge/scripts/` engine scripts if absent
 
-Unconditional — these are not gated on the step 5 interface question. `/forge-next` and `/forge-plan` both run the workplan lint after every WORKPLAN.md write and treat a nonzero exit as a hard block, and `/forge-next` and `/forge-status` reach the workplan only through `wp.js` (CONTRACT#rules/workplan-access-discipline), so a project without these files cannot complete a task.
+Unconditional — these are not gated on the step 6 interface question. `/forge-next` and `/forge-plan` both run the workplan lint after every WORKPLAN.md write and treat a nonzero exit as a hard block, and `/forge-next` and `/forge-status` reach the workplan only through `wp.js` (CONTRACT#rules/workplan-access-discipline), so a project without these files cannot complete a task.
 
 Create `.forge/scripts/lib/` (both the `scripts` and `lib` directories) if needed.
 
@@ -1755,23 +1792,24 @@ main(process.argv.slice(2));
 ```
 
 If it exists, skip — do not overwrite.
-### 11. Report completion
+### 12. Report completion
 
 After creating all files, tell the user which files were created (existing files were not overwritten), listing only from this set — and only the ones actually created or modified, not skipped:
 
 - `.forge/VISION.md`
 - `.forge/CONTRACT.md`
 - `.forge/SPEC.md`
+- `.forge/STATUS.md`
 - `.forge/templates/scaffold.md`
 - `.forge/templates/feature.md`
 - `.forge/templates/fix.md`
 - `.forge/templates/clarify.md`
 - `.forge/templates/refactor.md`
 - `.forge/templates/investigate.md`
-- `.forge/UX.md` (only if step 5 was answered "yes")
-- `.forge/templates/ux-spec.md` (only if step 5 was answered "yes")
-- `.forge/DESIGN.md` (only if step 5 was answered "yes")
-- `.forge/scripts/check-ux-spec.js` (only if step 5 was answered "yes")
+- `.forge/UX.md` (only if step 6 was answered "yes")
+- `.forge/templates/ux-spec.md` (only if step 6 was answered "yes")
+- `.forge/DESIGN.md` (only if step 6 was answered "yes")
+- `.forge/scripts/check-ux-spec.js` (only if step 6 was answered "yes")
 - `.forge/scripts/lib/markdown.js`
 - `.forge/scripts/lib/workplan.js`
 - `.forge/scripts/check-workplan.js`
@@ -1786,8 +1824,8 @@ Then list next steps, numbered, including only the items that apply:
 1. Fill in `.forge/VISION.md` with your project's What, Who, and Pillars.
 2. Fill in `.forge/CONTRACT.md` with your project's interfaces, rules, and data model.
 3. Fill in `.forge/SPEC.md` with your requirements, or leave it for `/forge-spec` to draft.
-4. Fill in `.forge/UX.md` with your screen flows and specs. — **only if step 5 was answered "yes"**
-5. Fill in `.forge/DESIGN.md` with your design tokens and component specs. — **only if step 5 was answered "yes"**
+4. Fill in `.forge/UX.md` with your screen flows and specs. — **only if step 6 was answered "yes"**
+5. Fill in `.forge/DESIGN.md` with your design tokens and component specs. — **only if step 6 was answered "yes"**
 6. Run `/forge-plan` to generate a task workplan.
 
 Renumber the remaining steps sequentially if step 4 or 5 above was omitted, so the list has no gaps.

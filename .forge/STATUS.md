@@ -4,6 +4,7 @@
 
 | ID | Question | Blocking? | Raised |
 | -- | -------- | --------- | ------ |
+| Q-005 | SPEC req-checkpoint-fresh-gates compares fresh gate results against "the result recorded when its task completed", but the Task Record Data Model stores no gate results and /forge-next records none. Amend the record model, or drop the comparison? Tracked by TASK-064. | Yes | 2026-08-16 |
 | Q-001 | Should Forge be repackaged as a Claude Code plugin (engine centralized, `.forge/` stays project-owned)? Tracked by TASK-041. | No | 2026-07-24 |
 | Q-002 | Checkpoint cadence default is 5 tasks (`<!-- ASSUMED -->` in CONTRACT). Right default, or should it be per-project config? | No | 2026-07-24 |
 | Q-003 | Single SPEC.md vs per-feature `.forge/specs/` — split threshold assumed at ~300 lines. Validated by TASK-048, which authors this project's own SPEC.md. | No | 2026-07-24 |
@@ -13,6 +14,7 @@
 
 | Date | Decision | Why | Alternatives rejected |
 | ---- | -------- | --- | --------------------- |
+| 2026-08-16 | `Data Model/Context Manifest` amended to state the requirement-heading matching rule: `### [req-slug] Name` matches reference `req-slug` on the bracketed portion alone | The rule existed only in forge-next.md prose, which is a command file and not manifest-addressable. TASK-050 extracted the shared resolver from Contract sections that never mentioned it, silently dropping it — and check-workplan.js invariant 5 then made every `SPEC#requirements/req-*` ref a hard lint error, so the SPEC manifest rule /forge-plan mandates could not be satisfied by any task. A resolution rule that lives only in a consumer is not a contract | Fixing lib/markdown.js alone (leaves the same gap for the next extraction); dropping the req-slug form from the Contract (breaks SPEC-to-task traceability, which is the reason SPEC# refs exist) |
 | 2026-07-24 | SPEC becomes a first-class artifact beside CONTRACT, with `SPEC#`/`specs/name#` manifest refs; Contract wins on conflict | Proven reliability gain in downstream forge projects; matches 2026 SDD consensus (per-feature specs in Spec Kit/Kiro) | Merging spec content into CONTRACT (conflates constraints with behavior); spec as free-form doc outside the manifest system (agent never sees it) |
 | 2026-07-24 | Workplan invariants move from command prose to a deterministic lint script (`check-workplan.js`) | Forge principle #2: deterministic enforcement over instruction-following; prerequisite for safe unattended runs | Keeping invariants as instructions in forge-plan/forge-next only |
 | 2026-07-24 | `checkpoint` task type + Unattended Execution rule: auto-commit allowed on work branches between checkpoints; human reviews the span, merges, and pushes | Per-task human review had become the bottleneck and trends toward rubber-stamping; checkpoints concentrate attention where it matters | Full autonomy (no quality floor); status quo per-task review (doesn't scale) |
@@ -53,3 +55,5 @@
 
 | ID | Raised by | Kind | Severity | Observation | Disposition |
 | -- | --------- | ---- | -------- | ----------- | ----------- |
+| OBS-001 | TASK-031 | design | normal | CONTRACT#interfaces/command-forge-init describes the STATUS.md stub as four tables, omitting Observations, which the Data Model requires and check-workplan.js resolves. | open |
+| OBS-002 | TASK-031 | design | normal | forge-init.md step 5 creates 6 templates; CONTRACT#interfaces/command-forge-init names 7 unconditional templates — checkpoint.md is never created. | open |

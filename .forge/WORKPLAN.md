@@ -305,12 +305,12 @@
 
 ## [TASK-031] Update /forge-init to create STATUS.md stub
 
-- **Status:** pending
+- **Status:** done
 - **Type:** scaffold
 - **Depends:** none
 - **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#data-model/status.md-data-model
 - **Gate:** `node .forge/scripts/prose.js .claude/commands/forge-init.md "STATUS\.md" && grep -q "| ID | Raised by | Kind | Severity |" .claude/commands/forge-init.md && echo "forge-init STATUS stub present"`
-- **Notes:** Five-table stub per the STATUS.md Data Model (Open Questions, Decisions, Risks, Blockers, Observations). This repo's own .forge/STATUS.md is the reference instance.
+- **Notes:** Added step 4 creating the five-table STATUS.md stub; steps 5-12 renumbered. One deviation: Contract's forge-init bullet lists four tables, Data Model five — followed the Data Model, logged OBS-001/OBS-002. Record: .forge/notes/TASK-031.md
 
 ## [TASK-063] Make the foundation-observation hard stop mechanical in wp.js
 
@@ -544,11 +544,32 @@
 - **Gate:** `bash .forge/tests/smoke.sh && grep -q "STATUS.md" .forge/templates/clarify.md && echo "clarify template logs decisions"`
 - **Notes:** On resolution: move the question from Open Questions to Decisions with date, rationale, and rejected alternatives.
 
+## [TASK-065] Restore requirement-slug matching in the shared markdown resolver
+
+- **Status:** pending
+- **Type:** fix
+- **Depends:** none
+- **Context:** CONTRACT#data-model/context-manifest, CONTRACT#rules/workplan-lint, CONTRACT#rules/test-first-convention
+- **Gate:** `bash .forge/tests/test-markdown.sh && node .forge/scripts/check-workplan.js && node .forge/scripts/wp.js get TASK-035 | grep -q "SPEC#requirements/req-checkpoint-self-contained" && echo "req-slug refs resolve and are in use"`
+- **Notes:** `lib/markdown.js` implements no bracketed-heading rule, so `### [req-slug] Requirement Name` compacts to the whole heading text and never equals a bare `req-slug` reference. Every `SPEC#requirements/req-*` Context ref therefore fails to resolve, and check-workplan.js invariant 5 turns that into a hard lint error — so the SPEC manifest rule /forge-plan step 5 mandates cannot be satisfied by any task. Latent because no manifest has ever used the form.
+  Root cause was a Contract gap, closed 2026-08-16: Data Model/Context Manifest listed the reference form but never stated the matching rule, so TASK-050 extracted the resolver without it. The rule is now in the Contract and is this task's spec — scope the fix to `headingCompact`/`findHeading`, and do not special-case SPEC.md by filename: the rule is about bracketed headings, and per-feature files under `.forge/specs/` carry the same requirement headings.
+  Create `.forge/tests/test-markdown.sh` — the shared resolver has no test file despite four scripts depending on it, which is why this regression survived extraction. Cover both directions: a bracketed heading matches its slug, and a reworded requirement name still matches. Then widen the TASK-035 and TASK-037 manifests to carry `SPEC#requirements/req-checkpoint-self-contained` and `SPEC#requirements/req-checkpoint-fresh-gates`; that widening is the gate's proof the fix works end to end, not separate work.
+
+## [TASK-064] Resolve the fresh-gates conflict: records store no gate results
+
+- **Status:** pending
+- **Type:** clarify
+- **Depends:** none
+- **Context:** SPEC#requirements, CONTRACT#data-model/task-record-data-model
+- **Gate:** `grep -q "req-checkpoint-fresh-gates" .forge/STATUS.md && node .forge/scripts/check-workplan.js && echo "fresh-gates conflict resolved"`
+- **Notes:** SPEC req-checkpoint-fresh-gates requires the packet to flag "any gate whose fresh result differs from the result recorded when its task completed." Nothing records completion-time gate results: the Task Record Data Model defines Outcome/Decisions/Deviations/Files only, and /forge-next writes no gate output to Notes or records. The regression comparison is unimplementable as specified.
+  Resolve one way or the other and log a dated Decisions row: either amend the Task Record Data Model to add a gate-results section (CONTRACT wins per spec-precedence, so this is the Contract-side fix), or amend the SPEC requirement to drop the comparison and report fresh results only. Blocks TASK-035 and TASK-037, which build and execute the packet.
+
 ## [TASK-035] Create checkpoint.md template and add to /forge-init template set
 
 - **Status:** pending
 - **Type:** scaffold
-- **Depends:** TASK-031
+- **Depends:** TASK-031, TASK-064, TASK-065
 - **Context:** CONTRACT#interfaces/task-types, CONTRACT#interfaces/prompt-template-interface, CONTRACT#rules/checkpoint-cadence
 - **Gate:** `test -s .forge/templates/checkpoint.md && grep -q "checkpoint.md" .claude/commands/forge-init.md && echo "checkpoint template present"`
 - **Notes:** Template instructs: assemble review packet (span tasks + Files lines, gate results, manual test steps, STATUS excerpt, span starting commit for rollback), present, wait for manual pass/fail. Produces no code.
@@ -566,7 +587,7 @@
 
 - **Status:** pending
 - **Type:** feature
-- **Depends:** TASK-035
+- **Depends:** TASK-035, TASK-064
 - **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#data-model/status.md-data-model
 - **Gate:** `bash .forge/tests/smoke.sh && grep -qi "checkpoint" .claude/commands/forge-next.md && grep -qi "review packet" .claude/commands/forge-next.md && echo "forge-next checkpoint execution present"`
 - **Notes:** Checkpoint gates are always manual:. On block, append a STATUS.md Blockers row.
