@@ -49,7 +49,10 @@ const ROOT = process.cwd();
 
 const USAGE = `usage: node .forge/scripts/wp.js <command>
 
-  next [TASK-XXX] [--json]     select the task to execute and emit its fields
+  next [TASK-XXX] [--force] [--json]
+                               select the task to execute and emit its fields;
+                               halts (exit 2) while an open foundation-severity
+                               observation exists, unless --force
   get TASK-XXX [--json]        emit one task's fields
   status [--json]              counts, next unblocked task, clarify tasks, open observations
   set TASK-XXX <field> <value> [--force]
@@ -131,9 +134,11 @@ function readObservations() {
 // --- Commands ---
 
 function cmdNext(args, json) {
-  const requestedId = args.find(a => /^TASK-\d+$/i.test(a));
-  if (args.some(a => !/^TASK-\d+$/i.test(a))) {
-    die(`unexpected argument for next: ${args.find(a => !/^TASK-\d+$/i.test(a))}`);
+  const force = args.includes('--force');
+  const rest = args.filter(a => a !== '--force');
+  const requestedId = rest.find(a => /^TASK-\d+$/i.test(a));
+  if (rest.some(a => !/^TASK-\d+$/i.test(a))) {
+    die(`unexpected argument for next: ${rest.find(a => !/^TASK-\d+$/i.test(a))}`);
   }
   const wp = loadWorkplan();
   const result = selectTask(wp, requestedId ? requestedId.toUpperCase() : null);
@@ -144,6 +149,33 @@ function cmdNext(args, json) {
       process.exit(result.code);
     }
     die(result.error, result.code);
+  }
+
+  // CONTRACT#rules/unattended-execution rule 4: an open foundation-severity
+  // observation halts the loop, mechanically rather than advisorily. This is
+  // the one hard stop an agent must trigger against its own momentum, so it
+  // cannot rest on the agent reading its own warning.
+  //
+  // Resume is exempt on purpose — the contract has the current task finish
+  // cleanly first, so refusal covers new work only. The designed exit is the
+  // human triaging the row off `open`; --force is the deliberate override, and
+  // agents do not pass it.
+  if (result.selection !== 'resume-active' && !force) {
+    const blocking = readObservations().filter(o => o.severity === 'foundation');
+    if (blocking.length) {
+      const rows = blocking.map(o => `  - ${o.id} (${o.raisedBy}, ${o.kind}) — ${o.observation}`).join('\n');
+      const message =
+        `halted: ${blocking.length} open foundation-severity observation${blocking.length > 1 ? 's' : ''} ` +
+        `(CONTRACT#rules/unattended-execution, hard stop 4).\n${rows}\n` +
+        'The spec, contract, or approach is suspect and continuing to build compounds debt. ' +
+        'A human triages these — set the Disposition to accepted or declined in STATUS.md — ' +
+        'or re-runs with --force to continue anyway.';
+      if (json) {
+        console.log(JSON.stringify({ ok: false, error: message, halted: 'foundation-observation', observations: blocking }, null, 2));
+        process.exit(2);
+      }
+      die(message, 2);
+    }
   }
 
   if (json) {

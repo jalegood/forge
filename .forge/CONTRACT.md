@@ -684,6 +684,11 @@ Between checkpoints, the loop (e.g., repeated headless `/forge-next` invocations
 
 Rules 1 and 3 are mechanically enforced by the branch guard and push guard hooks, not by instruction-following alone (see Boundaries#hook-configuration). <!-- ASSUMED: ties policy to its enforcing mechanism, per Design Principle #2 -->
 
+The `foundation`-observation stop in rule 4 is likewise mechanical, not advisory: `wp.js next` refuses to select a task while an open `foundation`-severity row exists in STATUS.md Observations, exiting 2 and printing the offending rows. A halt that depends on the executing agent noticing its own warning is not a halt — and this is the one stop an agent must trigger against its own momentum, so it is the one that most needs a mechanism. Two consequences follow:
+
+- **Resuming an `active` task is still permitted.** The contract says the current task finishes cleanly first; refusal applies to selecting new work, never to `resume-active`.
+- **The human clears the stop by triaging, not by overriding.** Moving the row's Disposition off `open` — to `accepted` or `declined` — is the designed exit, and it is what makes the observation channel a queue rather than a log. `wp.js next --force` exists for the human who has read the row and wants to continue anyway; agents do not pass it.
+
 ## Boundaries
 
 ### What Forge Does Not Do

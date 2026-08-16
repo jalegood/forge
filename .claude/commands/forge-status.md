@@ -1,38 +1,40 @@
 # /forge-status
 
-Read `.forge/WORKPLAN.md` and report project progress. This is a **read-only** command — do not modify any files.
+Report project progress. This is a **read-only** command — do not modify any files.
+
+Workplan data comes from `.forge/scripts/wp.js`, never from reading `.forge/WORKPLAN.md` yourself (CONTRACT#rules/workplan-access-discipline). The workplan is the DAG, and it grows without bound; a status report that loads two thousand lines of it into context to count four numbers is a defect. The script does the counting deterministically and returns only the summary.
 
 ## Steps
 
-1. **Read** `.forge/WORKPLAN.md` in full.
+1. **Project the workplan.** Run:
 
-2. **Parse** each task entry. Tasks follow this format:
-
-   ```markdown
-   ## [TASK-XXX] Description
-
-   - **Status:** pending | active | done | blocked
-   - **Type:** scaffold | feature | clarify | refactor | fix | investigate | ux-spec | checkpoint
-   - **Depends:** none | comma-separated TASK-IDs
-   - **Context:** manifest references
-   - **Gate:** shell command or manual: prefix
-   - **Notes:** free text
+   ```bash
+   node .forge/scripts/wp.js status
    ```
 
-3. **Count tasks by status.** Tally how many tasks are `pending`, `active`, `done`, and `blocked`.
+   This single invocation returns everything the report needs: task counts by status, the active task, the next unblocked pending task, `clarify`-type tasks awaiting input, blocked tasks, and open STATUS.md observations with `foundation` severity listed first. Add `--json` if you would rather consume it structurally.
 
-4. **Identify the next unblocked task.** Scan `pending` tasks in order. A task is **unblocked** when its `Depends` field is `none` or every listed TASK-ID has status `done`. Report the first unblocked pending task's ID and description.
+   Do not open `.forge/WORKPLAN.md` to verify or supplement this output. The script is the source of truth for workplan state — it applies the same unblocked-ness rule the contract specifies (a task is unblocked when its `Depends` field is `none` or every listed TASK-ID has status `done`).
 
-5. **List clarify tasks needing input.** Find any task with Type `clarify` that has status `pending` or `active`. These require human decisions.
+   If the script exits nonzero, report its error verbatim. Exit code 1 means the workplan is missing or empty — tell the user to run `/forge-plan`.
+
+2. **Read STATUS.md for the human-authored items** — only if `.forge/STATUS.md` exists:
+   - `## Open Questions` — list every unanswered row, flagging any marked Blocking
+   - `## Blockers` — list every open row
+
+   Observations are already covered by step 1; do not re-read the `## Observations` table.
+
+3. **Format the report** using the output shape below. Do not paraphrase the script's numbers — report what it returned.
 
 ## Output Format
-
-Report the following to the user:
 
 ```
 ## Forge Status
 
 **Progress:** X/N tasks done (Y pending, Z active, W blocked)
+
+**Active task:** TASK-XXX — Description
+  (or omit this line when nothing is active)
 
 **Next unblocked task:** TASK-XXX — Description
   (or "All pending tasks are blocked" / "All tasks complete")
@@ -40,9 +42,22 @@ Report the following to the user:
 **Clarify tasks awaiting input:**
   - TASK-XXX — Description
   (or "None")
+
+**Open observations:**
+  - [foundation] OBS-X (TASK-YYY) — Observation
+  (or omit when none)
+
+**Open questions:**
+  - Question (Blocking)
+  (or omit when none)
+
+**Blockers:**
+  - Blocker
+  (or omit when none)
 ```
 
 ## Constraints
 
-- **Read-only.** Do not modify WORKPLAN.md or any other file.
+- **Read-only.** Do not modify WORKPLAN.md or any other file. `wp.js status` is a pure projection — it never writes.
+- **Projection, not reading.** Workplan state arrives through `wp.js`. Reading the workplan document directly defeats the purpose of this command.
 - **No side effects.** Only read and report.

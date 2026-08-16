@@ -296,16 +296,71 @@
 
 ## [TASK-059] Convert /forge-next and /forge-status to wp.js projection
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-058
 - **Context:** CONTRACT#rules/workplan-access-discipline, CONTRACT#interfaces/command-forge-next, CONTRACT#interfaces/command-forge-status
 - **Gate:** `bash .forge/tests/smoke.sh && bash .forge/tests/test-wp.sh && grep -q "wp.js" .claude/commands/forge-next.md && grep -q "wp.js" .claude/commands/forge-status.md && echo "projection wired"`
-- **Notes:** Replaces "Read `.forge/WORKPLAN.md` in full" in both commands with a wp.js invocation returning only what the operation needs. This is where the token reduction is actually realized: a 2,177-line / ~120K-token workplan stops entering context at all, and per-session cost drops to the selected task alone.
+- **Notes:** Both commands converted to wp.js projection; one deviation (forge-status report gained two lines). Observations gap in forge-next is owned by TASK-053, not fixed here. Record: .forge/notes/TASK-059.md
 
-  `/forge-status` becomes essentially a script invocation — deterministic, near-zero tokens, and it resolves the original complaint that finding the next pending task means scrolling a 2,000-line file.
+## [TASK-031] Update /forge-init to create STATUS.md stub
 
-  Keep the status-report output format from CONTRACT#interfaces/command-forge-status unchanged; only the acquisition path changes. Preserve every selection rule currently written in forge-next step 2 — moving them into wp.js must not quietly drop the unmet-dependency warning or the one-active-task constraint.
+- **Status:** pending
+- **Type:** scaffold
+- **Depends:** none
+- **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#data-model/status.md-data-model
+- **Gate:** `node .forge/scripts/prose.js .claude/commands/forge-init.md "STATUS\.md" && grep -q "| ID | Raised by | Kind | Severity |" .claude/commands/forge-init.md && echo "forge-init STATUS stub present"`
+- **Notes:** Five-table stub per the STATUS.md Data Model (Open Questions, Decisions, Risks, Blockers, Observations). This repo's own .forge/STATUS.md is the reference instance.
+
+## [TASK-063] Make the foundation-observation hard stop mechanical in wp.js
+
+- **Status:** done
+- **Type:** feature
+- **Depends:** TASK-058
+- **Context:** CONTRACT#rules/unattended-execution, CONTRACT#data-model/status-md-data-model
+- **Gate:** `bash .forge/tests/test-wp.sh && bash .forge/tests/smoke.sh && echo "foundation halt mechanical"`
+- **Notes:** wp.js next now halts (exit 2) on an open foundation-severity observation, with --force and triage as the two exits; CONTRACT rule 4 amended to make the stop mechanical. Decisions on the resume-active exemption and triage-not-override; three deviations including a forced re-embed of forge-init.md. Record: .forge/notes/TASK-063.md
+
+## [TASK-053] Update /forge-next to surface and record observations
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-031
+- **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#data-model/status.md-data-model, CONTRACT#rules/unattended-execution
+- **Gate:** `bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && node .forge/scripts/prose.js .claude/commands/forge-next.md "observation" "foundation" "STATUS\.md" && echo "forge-next observation handling present"`
+- **Notes:** Two additions to forge-next, at opposite ends of the command.
+
+  **At session start, before task selection:** read STATUS.md Observations and report every `open` row with `foundation` severity. This is the primary loop closure — `/forge-plan` runs at project start and occasionally after, while `/forge-next` runs every session, so anything routed through planning sits unread for weeks (see STATUS.md Decisions, 2026-08-14).
+
+  **At task completion:** append observation rows produced during execution. Never promote one to a task — only a human does that.
+
+  Also wire the unattended hard stop: a new `foundation`-severity observation halts the loop, with the current task finishing cleanly first (CONTRACT#rules/unattended-execution, hard stop 4).
+
+## [TASK-054] Add the observation step to all prompt templates
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-031
+- **Context:** CONTRACT#interfaces/prompt-template-interface, CONTRACT#data-model/status.md-data-model
+- **Gate:** `bash .forge/tests/smoke.sh && test $(grep -l "Observations" .forge/templates/*.md | wc -l) -ge 7 && echo "templates record observations"`
+- **Notes:** Uniform closing step across every template. The wording carries the in-scope fix test, and getting it right is the whole task — a prohibition ("record, never act") drives agents to write memos instead of one-line fixes and spawns an analysis quagmire.
+
+  Required shape: **if the fix is covered by this task's gate and belongs in this task's diff, make it — no observation needed. Otherwise log one line in STATUS.md Observations and move on.** State plainly that the channel captures what would otherwise be lost, not what would otherwise be fixed.
+
+  Carry the three anti-ceremony constraints into the template text: one line per observation, never a report; no observation spawns a task on its own; more than three observations from one task collapse into a single `foundation` row, because volume of small complaints is itself the signal that the foundation is wrong.
+
+  Replaces the orphaned language at investigate.md:23 ("recommend specific follow-up tasks... could be added to the workplan") — currently the only proposal language in the template set, addressed to a human who is not reading during an unattended span. Gate threshold is `-ge 7` because ux-spec.md is now conditional (TASK-045) and checkpoint.md arrives with TASK-035; if TASK-035 has landed, checkpoint.md must carry the step too.
+
+## [TASK-055] Wire observations into /forge-status and /forge-plan read paths
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-031
+- **Context:** CONTRACT#interfaces/command-forge-status, CONTRACT#interfaces/command-forge-plan, CONTRACT#data-model/status.md-data-model
+- **Gate:** `bash .forge/tests/smoke.sh && node .forge/scripts/prose.js .claude/commands/forge-status.md "observation" && node .forge/scripts/prose.js .claude/commands/forge-plan.md "observation" "accepted" && echo "observation read paths wired"`
+- **Notes:** `/forge-status` lists `open` observations with `foundation` severity first — it stays read-only. `/forge-plan` consumes rows marked `accepted` as planning input; each becomes a candidate task subject to the same Contract-First coverage requirement as any other deliverable, and rows marked `open` or `declined` are never planned.
+
+  `/forge-plan` intake is deliberately the secondary path, not the primary one. It closes the loop when planning happens to run; TASK-053 handles the case where it does not.
 
 ## [TASK-060] Create migration script for existing oversized workplans
 
@@ -462,15 +517,6 @@
 - **Notes:** Validates a spec file: required sections present (Overview, Requirements, Non-Goals), at least one REQ with acceptance criteria, no unresolved `<!-- UNRESOLVED -->` markers above threshold (default: zero blocking), no placeholder/TODO text in Requirements. Mirrors check-ux-spec.js structure.
   Test fixtures are synthetic pass/fail cases as usual, but the suite must also assert exit 0 against the real `.forge/SPEC.md` from TASK-048 — a gate script that has never run against a genuine instance is untested.
 
-## [TASK-031] Update /forge-init to create STATUS.md stub
-
-- **Status:** pending
-- **Type:** scaffold
-- **Depends:** none
-- **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#data-model/status.md-data-model
-- **Gate:** `grep -q "STATUS.md" .claude/commands/forge-init.md && grep -q "Observations" .claude/commands/forge-init.md && echo "forge-init STATUS stub present"`
-- **Notes:** Five-table stub per the STATUS.md Data Model (Open Questions, Decisions, Risks, Blockers, Observations). This repo's own .forge/STATUS.md is the reference instance.
-
 ## [TASK-032] Create /forge-spec intake command
 
 - **Status:** pending
@@ -513,7 +559,7 @@
 - **Type:** feature
 - **Depends:** TASK-035
 - **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#rules/checkpoint-cadence, CONTRACT#interfaces/task-types
-- **Gate:** `bash .forge/tests/smoke.sh && grep -qi "checkpoint" .claude/commands/forge-plan.md && echo "forge-plan checkpoint cadence present"`
+- **Gate:** `bash .forge/tests/smoke.sh && node .forge/scripts/prose.js .claude/commands/forge-plan.md "checkpoint" "cadence" && echo "forge-plan checkpoint cadence present"`
 - **Notes:** Phase boundary or every 5 non-checkpoint tasks, whichever first; checkpoint Depends lists the full span; downstream tasks depend on the checkpoint.
 
 ## [TASK-037] Update /forge-next to execute checkpoint tasks with review packet
@@ -562,6 +608,7 @@
 - **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#rules/workplan-lint, CONTRACT#rules/gate-patterns
 - **Gate:** `bash .forge/tests/test-init-scripts.sh && bash .forge/tests/smoke.sh && echo "init provisions lint scripts"`
 - **Notes:** forge-init now embeds both lint scripts as step 10, guarded by a content-diff drift test; verified end-to-end in a scratch project. One deviation: the CONTRACT bullet was tightened before the task rather than during. Record: .forge/notes/TASK-062.md
+  Also provision .forge/scripts/prose.js — added by the TASK-059 follow-up audit, and four gates (TASK-031, 036, 053, 055) now depend on it, so a project without it cannot run them.
 
 ## [TASK-051] Triage the ASSUMED marker backlog into STATUS.md
 
@@ -581,47 +628,6 @@
   Gate thresholds are the literal counts at authoring time (18 markers, 8 decision rows). It requires at least one marker resolved and at least one decision logged — not full resolution, which would force rushed calls on genuinely open questions. Sequenced before TASK-046 so the checkpoint reviews a triaged Contract instead of a three-week backlog.
 
   Origin: the "byproducts / waste stream" observation in forge-factory-brainstorm.md — every AI execution emits annotations, and a waste stream with no processing line accumulates until it poisons the base. Justified independently of that model: CONTRACT is the automation boundary, and unreviewed assumptions there propagate into every downstream task.
-
-## [TASK-053] Update /forge-next to surface and record observations
-
-- **Status:** pending
-- **Type:** feature
-- **Depends:** TASK-031
-- **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#data-model/status.md-data-model, CONTRACT#rules/unattended-execution
-- **Gate:** `bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && grep -qi "observation" .claude/commands/forge-next.md && grep -qi "foundation" .claude/commands/forge-next.md && echo "forge-next observation handling present"`
-- **Notes:** Two additions to forge-next, at opposite ends of the command.
-
-  **At session start, before task selection:** read STATUS.md Observations and report every `open` row with `foundation` severity. This is the primary loop closure — `/forge-plan` runs at project start and occasionally after, while `/forge-next` runs every session, so anything routed through planning sits unread for weeks (see STATUS.md Decisions, 2026-08-14).
-
-  **At task completion:** append observation rows produced during execution. Never promote one to a task — only a human does that.
-
-  Also wire the unattended hard stop: a new `foundation`-severity observation halts the loop, with the current task finishing cleanly first (CONTRACT#rules/unattended-execution, hard stop 4).
-
-## [TASK-054] Add the observation step to all prompt templates
-
-- **Status:** pending
-- **Type:** feature
-- **Depends:** TASK-031
-- **Context:** CONTRACT#interfaces/prompt-template-interface, CONTRACT#data-model/status.md-data-model
-- **Gate:** `bash .forge/tests/smoke.sh && test $(grep -l "Observations" .forge/templates/*.md | wc -l) -ge 7 && echo "templates record observations"`
-- **Notes:** Uniform closing step across every template. The wording carries the in-scope fix test, and getting it right is the whole task — a prohibition ("record, never act") drives agents to write memos instead of one-line fixes and spawns an analysis quagmire.
-
-  Required shape: **if the fix is covered by this task's gate and belongs in this task's diff, make it — no observation needed. Otherwise log one line in STATUS.md Observations and move on.** State plainly that the channel captures what would otherwise be lost, not what would otherwise be fixed.
-
-  Carry the three anti-ceremony constraints into the template text: one line per observation, never a report; no observation spawns a task on its own; more than three observations from one task collapse into a single `foundation` row, because volume of small complaints is itself the signal that the foundation is wrong.
-
-  Replaces the orphaned language at investigate.md:23 ("recommend specific follow-up tasks... could be added to the workplan") — currently the only proposal language in the template set, addressed to a human who is not reading during an unattended span. Gate threshold is `-ge 7` because ux-spec.md is now conditional (TASK-045) and checkpoint.md arrives with TASK-035; if TASK-035 has landed, checkpoint.md must carry the step too.
-
-## [TASK-055] Wire observations into /forge-status and /forge-plan read paths
-
-- **Status:** pending
-- **Type:** feature
-- **Depends:** TASK-031
-- **Context:** CONTRACT#interfaces/command-forge-status, CONTRACT#interfaces/command-forge-plan, CONTRACT#data-model/status.md-data-model
-- **Gate:** `bash .forge/tests/smoke.sh && grep -qi "observation" .claude/commands/forge-status.md && grep -qi "observation" .claude/commands/forge-plan.md && echo "observation read paths wired"`
-- **Notes:** `/forge-status` lists `open` observations with `foundation` severity first — it stays read-only. `/forge-plan` consumes rows marked `accepted` as planning input; each becomes a candidate task subject to the same Contract-First coverage requirement as any other deliverable, and rows marked `open` or `declined` are never planned.
-
-  `/forge-plan` intake is deliberately the secondary path, not the primary one. It closes the loop when planning happens to run; TASK-053 handles the case where it does not.
 
 ## [TASK-046] Checkpoint: v0.3 machinery complete
 

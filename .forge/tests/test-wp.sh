@@ -234,6 +234,90 @@ assert_rc 2 "no unblocked pending task is not a crash"
 assert_has "no unblocked" "the empty case is explained"
 echo "  next -> nothing available: OK"
 
+echo "Checking wp.js next (foundation-observation hard stop)..."
+
+# CONTRACT#rules/unattended-execution rule 4: a new foundation-severity
+# observation halts the loop. This is the one hard stop an agent must trigger
+# against its own momentum, so it is mechanical rather than advisory — wp.js
+# refuses to hand out new work while such a row is open.
+
+write_foundation_status() {
+  cat > "$TMPDIR/.forge/STATUS.md" << 'EOF'
+# Status
+
+## Observations
+
+| ID | Raised by | Kind | Severity | Observation | Disposition |
+| -- | --------- | ---- | -------- | ----------- | ----------- |
+| OBS-9 | TASK-001 | design | foundation | The approach is suspect | open |
+EOF
+}
+
+base_workplan | write_workplan
+write_foundation_status
+
+# --- selecting new work is refused while a foundation row is open ---
+run next
+assert_rc 2 "an open foundation observation halts selection"
+assert_has "OBS-9" "the offending row is printed, not just referenced"
+assert_has "foundation" "the severity is named"
+assert_lacks "Second task" "a refused selection must not leak the task it would have picked"
+echo "  next -> halted by foundation observation: OK"
+
+# --- naming a task explicitly does not evade the stop ---
+run next TASK-004
+assert_rc 2 "an explicit ID does not bypass the hard stop"
+assert_has "OBS-9" "the offending row is still reported"
+echo "  next TASK-XXX -> halted: OK"
+
+# --- --force is the human's override ---
+run next --force
+assert_rc 0 "--force overrides the hard stop"
+assert_has "TASK-002" "the task is selected under --force"
+echo "  next --force -> proceeds: OK"
+
+# --- resuming an active task is still permitted: the contract has the current
+#     task finish cleanly first, so refusal applies to new work only ---
+active_workplan | write_workplan
+write_foundation_status
+run next
+assert_rc 0 "resuming an active task is not blocked by the hard stop"
+assert_has "resume-active" "the resume path still reports itself"
+assert_has "TASK-002" "the active task is returned"
+echo "  next -> resume-active exempt: OK"
+
+# --- triaging the row off `open` is the designed exit ---
+base_workplan | write_workplan
+sed 's/| open |/| accepted |/' "$TMPDIR/.forge/STATUS.md" > "$TMPDIR/.forge/STATUS.tmp" && mv "$TMPDIR/.forge/STATUS.tmp" "$TMPDIR/.forge/STATUS.md"
+run next
+assert_rc 0 "an accepted observation no longer halts the loop"
+assert_has "TASK-002" "normal selection resumes after triage"
+echo "  triaged row -> stop clears: OK"
+
+# --- a normal-severity observation never halts ---
+cat > "$TMPDIR/.forge/STATUS.md" << 'EOF'
+# Status
+
+## Observations
+
+| ID | Raised by | Kind | Severity | Observation | Disposition |
+| -- | --------- | ---- | -------- | ----------- | ----------- |
+| OBS-8 | TASK-001 | friction | normal | A small annoyance | open |
+EOF
+run next
+assert_rc 0 "a normal-severity observation does not halt the loop"
+assert_has "TASK-002" "selection proceeds"
+echo "  normal severity -> no halt: OK"
+
+# --- status stays a pure read: it reports the stop, it does not enforce it ---
+write_foundation_status
+run status
+assert_rc 0 "status is never blocked by an observation"
+assert_has "OBS-9" "status still lists the row"
+echo "  status unaffected: OK"
+
+rm -f "$TMPDIR/.forge/STATUS.md"
+
 echo "Checking wp.js get..."
 
 base_workplan | write_workplan

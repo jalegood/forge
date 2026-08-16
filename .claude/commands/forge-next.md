@@ -1,54 +1,68 @@
 # /forge-next
 
-Read `.forge/WORKPLAN.md`, select the next task, resolve its context manifest from `.forge/CONTRACT.md`, inject into the prompt template, and execute the task.
+Select the next task via the `.forge/scripts/wp.js` projection, resolve its context manifest from `.forge/CONTRACT.md`, inject into the prompt template, and execute the task.
+
+Workplan reads and writes both go through `wp.js` — the command never loads `.forge/WORKPLAN.md` into context and never hand-edits it (CONTRACT#rules/workplan-access-discipline).
 
 If `$ARGUMENTS` is present (e.g., the user typed `/forge-next TASK-012`), treat it as the target task ID.
 
 ## Steps
 
-### 1. Read WORKPLAN.md
+### 1. Project the workplan
 
-Read `.forge/WORKPLAN.md` in full. Parse each task entry:
+Do **not** open `.forge/WORKPLAN.md`. Task selection is entirely deterministic — unblocked-ness, dependency satisfaction, active-task resume, explicit-ID override — so it runs in a script, and the script returns only the selected task (CONTRACT#rules/workplan-access-discipline). The workplan grows without bound; the per-session cost of this command must not grow with it.
 
-```markdown
-## [TASK-XXX] Description
+Run:
 
-- **Status:** pending | active | done | blocked
-- **Type:** scaffold | feature | clarify | refactor | fix | investigate | ux-spec | checkpoint
-- **Depends:** none | comma-separated TASK-IDs
-- **Context:** manifest references
-- **Gate:** shell command or manual: prefix
-- **Notes:** free text (may be multi-line)
+```bash
+node .forge/scripts/wp.js next
 ```
 
-If `.forge/WORKPLAN.md` does not exist or contains no tasks, tell the user: "No workplan found. Run `/forge-plan` to generate one." Stop.
+If the user supplied a task ID (e.g., the user typed `/forge-next TASK-012`), pass it through:
 
-### 2. Select the target task
+```bash
+node .forge/scripts/wp.js next TASK-012
+```
 
-Follow this priority order:
+The script emits exactly the fields this command needs:
 
-**A. Explicit task ID argument:**
-If the user provided a task ID argument:
+```
+Task: TASK-XXX — Description
+Selection: next-unblocked | resume-active | explicit
+Status: pending | active | done | blocked
+Type: scaffold | feature | clarify | refactor | fix | investigate | ux-spec | checkpoint
+Depends: none | comma-separated TASK-IDs
+Context: manifest references
+Gate: shell command or manual: prefix
+Warning: ...            (zero or more)
+Notes:
+<verbatim, possibly multi-line>
+```
 
-- Locate that task in the workplan.
-- If the specified task is already `active`, treat this as a resume (proceed to B).
-- If a _different_ task is currently `active`, warn: "TASK-XXX is currently active. Only one task can be active at a time. Complete or block it before starting a new task." Stop and wait for the user to decide.
-- If the specified task's `Depends` are not all `done` (and Depends is not `none`), warn: "TASK-XXX has unmet dependencies: [list each with its status]." Ask for confirmation before proceeding.
-- Otherwise, select it.
+Add `--json` if you would rather consume the fields structurally. Either way, this output is the whole of your knowledge of the workplan for this session — do not go read the document to fill in around it.
 
-**B. Resume active task:**
-If no argument was provided (or the argument matches the active task) and a task has status `active`:
+### 2. Interpret the selection
 
-- Select that task.
-- Read its `Notes` field carefully — this provides continuity from the previous session.
-- Report: "Resuming TASK-XXX — [description]" and display the Notes content if non-empty.
+The script has already applied every selection rule; your job is to react to what it returned.
 
-**C. Next unblocked pending task:**
-If no argument and no active task:
+**Exit code 0 — a task was selected.** The `Selection:` line says why:
 
-- Scan tasks in file order. A task is **unblocked** when its `Depends` field is `none` or every listed task ID has status `done`.
-- Select the first unblocked `pending` task.
-- If no unblocked pending task exists, report: "No unblocked tasks available. Run `/forge-status` to see what's blocked." Stop.
+- `next-unblocked` — no task was active, and this is the first `pending` task whose `Depends` are all `done` or `none`.
+- `resume-active` — a task was already `active`, so this is a resume (this also covers the case where the user named the active task explicitly). Read the `Notes:` block carefully — it is your only link to the previous session. Report: "Resuming TASK-XXX — [description]" and display the Notes content if non-empty.
+- `explicit` — the user named this task and it was free to start.
+
+**Any `Warning:` lines must be surfaced to the user before you begin work.** The script warns rather than refuses, and the human decides:
+
+- Unmet dependencies (`TASK-XXX has unmet dependencies: ...`) — relay it and ask for confirmation before proceeding.
+- Already `done`, or currently `blocked` — relay it and ask for confirmation before proceeding.
+
+**Exit code 2 — nothing to select.** Report the script's message and stop. Three cases produce it:
+
+- A _different_ task is currently `active`. Only one task can be active at a time — the human must complete or block it before starting a new one.
+- No unblocked pending task exists. Point the user at `/forge-status` to see what is blocked.
+- **An open `foundation`-severity observation exists in STATUS.md.** This is hard stop 4 from CONTRACT#rules/unattended-execution: the spec, contract, or approach is suspect, and continuing to build compounds debt. The script prints the offending rows — relay every one of them verbatim. Clearing the stop is a human judgment: they triage the row's Disposition to `accepted` or `declined`, or they re-run with `--force`. **Do not pass `--force` yourself, and do not edit the row's Disposition to clear your own path.** A halt an agent can lift is not a halt, and this is the one stop that exists to interrupt your momentum rather than support it.
+
+**Exit code 1 — usage or lookup error.** The named task ID does not exist, or `.forge/WORKPLAN.md` is missing or has no tasks. Report the message verbatim; for a missing workplan, tell the user to run `/forge-plan`.
 
 ### 3. Resolve the context manifest
 
@@ -139,14 +153,15 @@ Parse the selected task's `Context` field into a list of references. Each refere
 
 ### 4. Mark task active in WORKPLAN.md
 
-If the task is not already `active`, update its status in `.forge/WORKPLAN.md`:
+If the task is not already `active`, mark it through the same script — never by hand-editing the document:
 
-Change `- **Status:** pending` to `- **Status:** active` for this task.
+```bash
+node .forge/scripts/wp.js set TASK-XXX status active
+```
+
+`wp.js set` rewrites exactly the one field line, leaves the rest of the file byte-identical, enforces the lifecycle transitions from CONTRACT#state-machines/task-lifecycle and the one-active-task constraint, re-runs `check-workplan.js`, and reverts the write if the lint fails. A nonzero exit means the mutation did not stand: diagnose what it reported and fix that before continuing to step 5.
 
 Do this **before** beginning execution — if the session is interrupted, the task should already be marked active.
-
-**Workplan lint:** Immediately after writing, run `node .forge/scripts/check-workplan.js`. A nonzero exit blocks proceeding — diagnose the reported violation, fix WORKPLAN.md, and re-run the script until it exits 0 before continuing to step 5.
-
 ### 5. Load and fill the prompt template
 
 1. Read `.forge/templates/{type}.md` where `{type}` is the task's Type field (e.g., `feature`, `scaffold`, `clarify`). If the file does not exist, stop and tell the user: "Template file missing. Run `/forge-init` to create project templates." Do not proceed with inline fallbacks.
@@ -190,9 +205,10 @@ When you believe the task is complete, run the gate from the task's Gate field.
 
 **Gate passes:**
 
-1. Mark the task `done` in `.forge/WORKPLAN.md`:
-   ```
-   - **Status:** done
+1. Mark the task `done`:
+
+   ```bash
+   node .forge/scripts/wp.js set TASK-XXX status done
    ```
 2. Collect touched files: run `git diff --name-only HEAD` (or `git diff --name-only --cached` if changes are staged but not committed).
 3. Write the task's narrative — what was built, decisions made, deviations taken, files touched. Decide where it goes using the **externalization threshold** below.
@@ -207,14 +223,21 @@ When you believe the task is complete, run the gate from the task's Gate field.
 
 Draft the narrative first, then measure it.
 
-**3 lines or fewer** — it stays inline. Append it to the task's Notes field in WORKPLAN.md, with the file list as a `Files:` line:
+**3 lines or fewer** — it stays inline. Append it to the task's Notes field, with the file list as a `Files:` line:
+
+```bash
+node .forge/scripts/wp.js append-notes TASK-XXX 'Fixed the off-by-one in the slug matcher; no deviations.'
+node .forge/scripts/wp.js append-notes TASK-XXX 'Files: .forge/scripts/lib/markdown.js, .forge/tests/test-markdown.sh'
+```
+
+which leaves the workplan reading:
 
 ```markdown
 - **Notes:** Fixed the off-by-one in the slug matcher; no deviations.
   Files: .forge/scripts/lib/markdown.js, .forge/tests/test-markdown.sh
 ```
 
-If the Notes field already has content, append on a new line after existing content. A separate file for a one-line note is churn, not structure.
+`append-notes` preserves whatever the Notes field already held and indents the addition as a continuation line, so existing content is never clobbered. A separate file for a one-line note is churn, not structure.
 
 **More than 3 lines** — externalize it. Write `.forge/notes/TASK-XXX.md` using the Task Record Data Model:
 
@@ -236,7 +259,13 @@ If the Notes field already has content, append on a new line after existing cont
 
 Omit a section only when it is genuinely empty (no deviations occurred). The file list from step 2 goes in the record's `## Files` section — do not also duplicate it inline.
 
-Then replace the task's Notes field with a **one-line summary plus the record path**:
+Then replace the task's Notes field with a **one-line summary plus the record path** (`set`, not `append-notes` — the summary supersedes whatever was there):
+
+```bash
+node .forge/scripts/wp.js set TASK-029 notes 'Implemented SPEC# resolution; one deviation on req-slug matching. Record: .forge/notes/TASK-029.md'
+```
+
+which leaves the workplan reading:
 
 ```markdown
 - **Notes:** Implemented SPEC# resolution; one deviation on req-slug matching. Record: .forge/notes/TASK-029.md
@@ -250,28 +279,30 @@ Then replace the task's Notes field with a **one-line summary plus the record pa
 
 If during execution you determine the task cannot proceed — a dependency is missing, a Contract section is ambiguous, or the task requires human decisions that aren't available:
 
-1. Mark the task `blocked` in `.forge/WORKPLAN.md`:
+1. Mark the task `blocked`:
+
+   ```bash
+   node .forge/scripts/wp.js set TASK-XXX status blocked
    ```
-   - **Status:** blocked
-   ```
-2. Update Notes with: what's blocking, what needs to happen to unblock.
+2. Record what is blocking and what needs to happen to unblock, via `node .forge/scripts/wp.js append-notes TASK-XXX '...'`.
 3. Suggest a `clarify` or `fix` task if appropriate.
 
 **Gate fails / Task incomplete:**
 
-1. Keep the task `active` in WORKPLAN.md (do not change status).
-2. Update the task's `Notes` field in WORKPLAN.md with:
+1. Keep the task `active` (do not change status).
+2. Append to the task's `Notes` field with `node .forge/scripts/wp.js append-notes TASK-XXX '...'`:
    - What was accomplished
    - What remains to be done
    - Any decisions made or blockers encountered
 3. Report the current state to the user.
 4. The human will commit partial progress or stash, then run `/clear`.
 
-**Workplan lint:** Whichever branch above applies, run `node .forge/scripts/check-workplan.js` immediately after writing WORKPLAN.md. A nonzero exit blocks proceeding — diagnose the reported violation, fix WORKPLAN.md, and re-run the script until it exits 0 before reporting to the user.
+**Workplan lint:** Whichever branch above applies, every `wp.js` mutation re-runs `node .forge/scripts/check-workplan.js` and reverts itself if the lint fails, so a nonzero exit from `wp.js` means the write did not stand. Diagnose the reported violation, fix it, and re-run the mutation until it exits 0 before reporting to the user.
 
 ## Constraints
 
-- **One active task at a time.** Exactly 0 or 1 tasks may have status `active`. Do not activate a new task while another is active.
+- **Projection, not reading.** Workplan state arrives through `.forge/scripts/wp.js` and changes go back through it. Opening `.forge/WORKPLAN.md` to read it, or editing it by hand, defeats the access discipline this command exists to keep (CONTRACT#rules/workplan-access-discipline). Editing the file directly is still the human's prerogative — it stays plain markdown — but it is not yours.
+- **One active task at a time.** Exactly 0 or 1 tasks may have status `active`. Do not activate a new task while another is active; `wp.js` enforces this on both selection and write.
 - **Context budget.** Resolved context should not exceed ~200 lines of Contract content per task.
 - **Contract is read-only.** Do not modify CONTRACT.md unless the human explicitly approves.
 - **Notes are continuity.** When resuming an active task, the Notes field is your only link to previous sessions. Read it carefully before starting work.
