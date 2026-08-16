@@ -59,3 +59,4 @@
 | OBS-002 | TASK-031 | design | normal | forge-init.md step 5 creates 6 templates; CONTRACT#interfaces/command-forge-init names 7 unconditional templates — checkpoint.md is never created. | open |
 | OBS-003 | TASK-054 | design | normal | forge-init.md's embedded template bodies have drifted from .forge/templates/ and, unlike the script payloads, carry no forge-init:embed marker, so only the fields a test names are kept in sync. | open |
 | OBS-004 | TASK-055 | design | normal | CONTRACT#interfaces/command-forge-plan's Reads line annotates STATUS.md as "blocking open questions" only, though its own Does line requires Observations intake from the same file. | open |
+| OBS-005 | TASK-060 | scope | normal | migrate-notes.js is not embedded in forge-init.md alongside the other four scripts, so a project scaffolded by forge-init never receives the migration tool it will eventually need. | open |

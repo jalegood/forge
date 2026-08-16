@@ -367,18 +367,12 @@
 
 ## [TASK-060] Create migration script for existing oversized workplans
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-057
 - **Context:** CONTRACT#data-model/task-record-data-model, CONTRACT#rules/workplan-access-discipline
 - **Gate:** `bash .forge/tests/test-migrate-notes.sh`
-- **Notes:** Existing projects carry the debt this fixes — the motivating case is a live work project at 2,177 lines / 481 KB / ~120K tokens across 67 tasks. Without migration the fix only helps new projects.
-
-  `.forge/scripts/migrate-notes.js`: for every task whose notes exceed 3 lines, write `.forge/notes/TASK-XXX.md` in Task Record Data Model shape, replace the workplan Notes field with a generated one-line summary plus path, and leave shorter notes untouched. Idempotent — re-running must be a no-op.
-
-  Must be safe on a workplan that is not committed anywhere: write the new files first, verify `check-workplan.js` still passes, and only then rewrite WORKPLAN.md. Take a `.bak` copy before mutating, since for these projects there is no git history to recover from.
-
-  Summaries are generated mechanically (first sentence of the notes, or the description) rather than by an agent — 67 agent-written summaries is its own context problem. The human can improve any summary afterward by hand.
+- **Notes:** Added migrate-notes.js plus its test; externalizes >3-line Notes into records with mechanical summaries. One deviation: done-only by default (--all for the rest), since pending notes are the executing agent's instructions. Record: .forge/notes/TASK-060.md
 
 ## [TASK-024] End-to-end validation of DESIGN.md pipeline
 
