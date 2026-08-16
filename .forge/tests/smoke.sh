@@ -76,6 +76,26 @@ grep -qi 'observation' .claude/commands/forge-status.md
 grep -qi 'read-only' .claude/commands/forge-status.md
 echo "  forge-status.md projection: OK"
 
+# --- Observation read paths (TASK-055) ---
+# CONTRACT#data-model/status.md-data-model names the observation readers, and two
+# of them read differently on purpose: /forge-status lists every open row with
+# foundation severity first, while /forge-plan plans only rows a human has
+# triaged to `accepted`. The disposition distinction is the whole deliverable — a
+# planner that consumed open rows would let an agent's own observation become
+# work no human agreed to, which the same section forbids outright.
+#
+# Asserted through prose.js, not grep: both files fence example output and task
+# blocks, and a match inside a fence would show the instruction present when only
+# the sample was.
+echo "Checking observation read paths..."
+
+node .forge/scripts/prose.js .claude/commands/forge-status.md "observation" "foundation"
+
+node .forge/scripts/prose.js .claude/commands/forge-plan.md "observation" "accepted" "declined"
+# intake is the secondary loop closure; /forge-next is the one that runs every session
+node .forge/scripts/prose.js .claude/commands/forge-plan.md "secondary|never the only path"
+echo "  observation read paths: OK"
+
 # --- WORKPLAN.md task format is parseable ---
 echo "Checking WORKPLAN.md format..."
 

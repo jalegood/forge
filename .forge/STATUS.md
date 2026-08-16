@@ -58,3 +58,4 @@
 | OBS-001 | TASK-031 | design | normal | CONTRACT#interfaces/command-forge-init describes the STATUS.md stub as four tables, omitting Observations, which the Data Model requires and check-workplan.js resolves. | open |
 | OBS-002 | TASK-031 | design | normal | forge-init.md step 5 creates 6 templates; CONTRACT#interfaces/command-forge-init names 7 unconditional templates — checkpoint.md is never created. | open |
 | OBS-003 | TASK-054 | design | normal | forge-init.md's embedded template bodies have drifted from .forge/templates/ and, unlike the script payloads, carry no forge-init:embed marker, so only the fields a test names are kept in sync. | open |
+| OBS-004 | TASK-055 | design | normal | CONTRACT#interfaces/command-forge-plan's Reads line annotates STATUS.md as "blocking open questions" only, though its own Does line requires Observations intake from the same file. | open |

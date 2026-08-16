@@ -358,14 +358,12 @@
 
 ## [TASK-055] Wire observations into /forge-status and /forge-plan read paths
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-031, TASK-066
 - **Context:** CONTRACT#interfaces/command-forge-status, CONTRACT#interfaces/command-forge-plan, CONTRACT#data-model/status.md-data-model
 - **Gate:** `bash .forge/tests/smoke.sh && node .forge/scripts/prose.js .claude/commands/forge-status.md "observation" && node .forge/scripts/prose.js .claude/commands/forge-plan.md "observation" "accepted" && echo "observation read paths wired"`
-- **Notes:** `/forge-status` lists `open` observations with `foundation` severity first — it stays read-only. `/forge-plan` consumes rows marked `accepted` as planning input; each becomes a candidate task subject to the same Contract-First coverage requirement as any other deliverable, and rows marked `open` or `declined` are never planned.
-
-  `/forge-plan` intake is deliberately the secondary path, not the primary one. It closes the loop when planning happens to run; TASK-053 handles the case where it does not.
+- **Notes:** Added accepted-row observation intake to /forge-plan step 1; /forge-status was already wired and needed no change (verified test-first). smoke.sh now asserts both read paths. Decisions on intake placement and prose.js assertions; one out-of-scope Contract inconsistency logged as OBS-004. Record: .forge/notes/TASK-055.md
 
 ## [TASK-060] Create migration script for existing oversized workplans
 
