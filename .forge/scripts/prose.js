@@ -3,12 +3,17 @@
 //
 // Why this exists: gates assert that a command file *instructs* something, but
 // several command files now carry large fenced payloads — `/forge-init` embeds
-// four scripts verbatim and is 88% fenced by line count. A plain
-// `grep -q "Observations" .claude/commands/forge-init.md` matches a comment
-// inside the embedded wp.js source and reports the deliverable present when it
-// was never built (TASK-031 passed this way while /forge-init created no
-// STATUS.md stub at all). A gate that a headless loop can satisfy without doing
+// five scripts verbatim and is 88% fenced by line count. A plain
+// `grep -q "Observations" .claude/commands/forge-init.md` matched a comment
+// inside the embedded wp.js source and reported the deliverable present when it
+// was never built: TASK-031 passed that way while /forge-init created no
+// STATUS.md stub at all. A gate that a headless loop can satisfy without doing
 // the work is worse than no gate: it marks the task done and moves on.
+//
+// That example is historical. TASK-031's fix put both "Observations" and
+// "STATUS.md" into forge-init.md's prose, so neither is payload-only there
+// anymore; `module.exports` is the current stand-in, and is what test-prose.sh
+// asserts against the live file (TASK-066).
 //
 // Usage: node .forge/scripts/prose.js <file> <pattern>...
 // Exits 0 only when every pattern (case-insensitive) matches outside fences.

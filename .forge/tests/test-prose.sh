@@ -65,14 +65,18 @@ run "$TMPDIR/sample.md"
 [ "$RC" = "1" ] || fail "no patterns is a usage error"
 echo "  usage errors: OK"
 
-# --- the live case: /forge-init has no STATUS.md instruction, only payload ---
+# --- the live case: /forge-init instructs STATUS.md creation, in prose ---
+# TASK-031 added that instruction, so STATUS.md is no longer payload-only here.
+# The false-pass property still needs a real-file check, so the negative half
+# moves to a pattern that only ever lives inside a fence: `module.exports` is
+# JavaScript, and this is a markdown command file — it cannot migrate to prose.
 cd "$(dirname "$PROSE")/../.."
-if node "$PROSE" .claude/commands/forge-init.md "STATUS\.md" 2>/dev/null; then
-  echo "FAILED: forge-init.md now instructs STATUS.md creation — update TASK-031 and this test together"
-  exit 1
-fi
-grep -q "STATUS.md" .claude/commands/forge-init.md || fail "fixture drift — forge-init.md should still contain STATUS.md inside embedded payload"
-echo "  forge-init.md false-pass closed: OK"
+run .claude/commands/forge-init.md "STATUS\.md"
+[ "$RC" = "0" ] || fail "forge-init.md must instruct STATUS.md creation in prose (TASK-031)"
+run .claude/commands/forge-init.md "module\.exports"
+[ "$RC" = "1" ] || fail "embedded script source must not satisfy a prose assertion"
+grep -q "module.exports" .claude/commands/forge-init.md || fail "fixture drift — forge-init.md should still embed script payload containing module.exports"
+echo "  forge-init.md live case: OK"
 
 echo ""
 echo "All prose.js checks passed."

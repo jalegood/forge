@@ -323,16 +323,12 @@
 
 ## [TASK-066] Realign test-prose.sh with forge-init's STATUS.md instruction
 
-- **Status:** pending
+- **Status:** done
 - **Type:** fix
 - **Depends:** none
 - **Context:** CONTRACT#rules/gate-patterns, CONTRACT#rules/test-first-convention, notes/TASK-031#outcome
 - **Gate:** `bash .forge/tests/test-prose.sh && bash .forge/tests/smoke.sh && echo "prose assertion realigned"`
-- **Notes:** `test-prose.sh` fails at HEAD, and has since TASK-031 (commit f7d4e60). Its final live-case assertion requires that `.claude/commands/forge-init.md` does NOT instruct STATUS.md creation — it was written when that instruction was absent, to prove `prose.js` could tell instruction from embedded payload. TASK-031's whole deliverable was to add that instruction, which inverts the assertion's premise. The failure message even says "update TASK-031 and this test together"; TASK-031 landed without doing so.
-
-  Because `smoke.sh` runs `test-prose.sh`, `smoke.sh` is red, and every pending task gated on it inherits the failure — hence the Depends edges added from TASK-033/034/036/037/049/051/053/054/055.
-
-  The fix is to invert the live case, not delete it: assert that `prose.js` DOES find the STATUS.md instruction in forge-init.md prose. That keeps the false-pass property under test (a payload-only match must still not satisfy it) while matching what the command now does. Pick a second pattern that is still payload-only for the negative half, since STATUS.md no longer is.
+- **Notes:** Inverted test-prose.sh live case: asserts prose.js finds the STATUS.md instruction TASK-031 added, with module.exports as the new payload-only negative. smoke.sh green again. Record: .forge/notes/TASK-066.md
 
 ## [TASK-053] Update /forge-next to surface and record observations
 
