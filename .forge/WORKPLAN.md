@@ -349,18 +349,12 @@
 
 ## [TASK-054] Add the observation step to all prompt templates
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-031, TASK-066
 - **Context:** CONTRACT#interfaces/prompt-template-interface, CONTRACT#data-model/status.md-data-model
 - **Gate:** `bash .forge/tests/smoke.sh && test $(grep -l "Observations" .forge/templates/*.md | wc -l) -ge 7 && echo "templates record observations"`
-- **Notes:** Uniform closing step across every template. The wording carries the in-scope fix test, and getting it right is the whole task — a prohibition ("record, never act") drives agents to write memos instead of one-line fixes and spawns an analysis quagmire.
-
-  Required shape: **if the fix is covered by this task's gate and belongs in this task's diff, make it — no observation needed. Otherwise log one line in STATUS.md Observations and move on.** State plainly that the channel captures what would otherwise be lost, not what would otherwise be fixed.
-
-  Carry the three anti-ceremony constraints into the template text: one line per observation, never a report; no observation spawns a task on its own; more than three observations from one task collapse into a single `foundation` row, because volume of small complaints is itself the signal that the foundation is wrong.
-
-  Replaces the orphaned language at investigate.md:23 ("recommend specific follow-up tasks... could be added to the workplan") — currently the only proposal language in the template set, addressed to a human who is not reading during an unattended span. Gate threshold is `-ge 7` because ux-spec.md is now conditional (TASK-045) and checkpoint.md arrives with TASK-035; if TASK-035 has landed, checkpoint.md must carry the step too.
+- **Notes:** Uniform observation step added to all 7 live templates and all 7 copies embedded in /forge-init; new test-templates.sh pins the wording in both, wired into smoke.sh. Two deviations, both on investigate.md orphaned proposal language. Record: .forge/notes/TASK-054.md
 
 ## [TASK-055] Wire observations into /forge-status and /forge-plan read paths
 

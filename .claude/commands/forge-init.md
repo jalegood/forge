@@ -158,6 +158,12 @@ The following Contract sections are relevant to this task. Stay within these con
 3. **Follow conventions.** Match any existing project patterns (naming, file organization, code style).
 4. **Keep it minimal.** Scaffold only what's needed. Don't add features, utilities, or abstractions that aren't in the task description.
 5. **Wire things up.** Ensure new files are properly referenced (imports, config entries, package.json scripts).
+6. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
+   - Row format: `| OBS-XXX | {{task_id}} | design/bug/scope/... | normal or foundation | One-line observation. | open |`, where `OBS-XXX` is the highest existing OBS id plus one.
+   - One line per observation — a pointer, not a report.
+   - No observation spawns a task on its own. Only a human promotes one, later.
+   - More than three from this task collapse into a single `foundation` row: volume of small complaints is itself the signal that the foundation is wrong, and recording it as volume buries that signal.
+   - `foundation` means the spec, contract, or approach is suspect and continuing to build compounds debt. Everything else is `normal`.
 
 ## Completion
 
@@ -199,6 +205,12 @@ Follow test-first development:
 2. **Write implementation.** Write the minimum implementation needed to satisfy the tests.
 3. **Run the full gate.** Run `{{gate}}` to confirm everything passes.
 4. **Stay in scope.** Only implement what's described in the task. Don't add features, helpers, or abstractions beyond what's needed.
+5. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
+   - Row format: `| OBS-XXX | {{task_id}} | design/bug/scope/... | normal or foundation | One-line observation. | open |`, where `OBS-XXX` is the highest existing OBS id plus one.
+   - One line per observation — a pointer, not a report.
+   - No observation spawns a task on its own. Only a human promotes one, later.
+   - More than three from this task collapse into a single `foundation` row: volume of small complaints is itself the signal that the foundation is wrong, and recording it as volume buries that signal.
+   - `foundation` means the spec, contract, or approach is suspect and continuing to build compounds debt. Everything else is `normal`.
 
 ## Completion
 
@@ -239,6 +251,12 @@ Follow test-first development:
 1. **Write a failing test first.** Before touching implementation, write a test that reproduces the bug or exercises the broken behavior. Confirm it fails.
 2. **Fix the root cause.** Implement the minimal fix that makes the test pass. Avoid unrelated changes.
 3. **Run the full gate.** Run `{{gate}}` to confirm the fix holds and nothing regressed.
+4. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
+   - Row format: `| OBS-XXX | {{task_id}} | design/bug/scope/... | normal or foundation | One-line observation. | open |`, where `OBS-XXX` is the highest existing OBS id plus one.
+   - One line per observation — a pointer, not a report.
+   - No observation spawns a task on its own. Only a human promotes one, later.
+   - More than three from this task collapse into a single `foundation` row: volume of small complaints is itself the signal that the foundation is wrong, and recording it as volume buries that signal.
+   - `foundation` means the spec, contract, or approach is suspect and continuing to build compounds debt. Everything else is `normal`.
 
 ## Completion
 
@@ -279,6 +297,12 @@ The following Contract sections are relevant to this task. Stay within these con
 3. **Present to the human.** Show the proposed change and ask for approval before modifying CONTRACT.md.
 4. **Apply after approval.** Once the human approves, update CONTRACT.md with the resolved text.
 5. **Assess workplan impact.** Note any `pending` tasks whose Context references the changed section — they may need re-scoping.
+6. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
+   - Row format: `| OBS-XXX | {{task_id}} | design/bug/scope/... | normal or foundation | One-line observation. | open |`, where `OBS-XXX` is the highest existing OBS id plus one.
+   - One line per observation — a pointer, not a report.
+   - No observation spawns a task on its own. Only a human promotes one, later.
+   - More than three from this task collapse into a single `foundation` row: volume of small complaints is itself the signal that the foundation is wrong, and recording it as volume buries that signal.
+   - `foundation` means the spec, contract, or approach is suspect and continuing to build compounds debt. Everything else is `normal`.
 
 ## Completion
 
@@ -318,6 +342,12 @@ The following Contract sections are relevant to this task. Stay within these con
 3. **Refactor in small steps.** Make one structural change at a time. Run the gate after each step.
 4. **Preserve behavior.** The gate must pass before and after. If behavior changes, stop and reassess.
 5. **No scope creep.** Don't add features or fix unrelated bugs during a refactor.
+6. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
+   - Row format: `| OBS-XXX | {{task_id}} | design/bug/scope/... | normal or foundation | One-line observation. | open |`, where `OBS-XXX` is the highest existing OBS id plus one.
+   - One line per observation — a pointer, not a report.
+   - No observation spawns a task on its own. Only a human promotes one, later.
+   - More than three from this task collapse into a single `foundation` row: volume of small complaints is itself the signal that the foundation is wrong, and recording it as volume buries that signal.
+   - `foundation` means the spec, contract, or approach is suspect and continuing to build compounds debt. Everything else is `normal`.
 
 ## Completion
 
@@ -357,7 +387,12 @@ The following Contract sections are relevant to this task. Stay within these con
 2. **Explore systematically.** Read relevant files, run diagnostic commands, trace execution paths.
 3. **Document as you go.** Write findings incrementally — don't wait until the end.
 4. **Produce actionable output.** The deliverable is a clear finding: what is happening, why, and what should be done next.
-5. **Propose follow-up tasks.** If the investigation reveals work to be done, draft task entries for the human to add to WORKPLAN.md.
+5. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
+   - Row format: `| OBS-XXX | {{task_id}} | design/bug/scope/... | normal or foundation | One-line observation. | open |`, where `OBS-XXX` is the highest existing OBS id plus one.
+   - One line per observation — a pointer, not a report.
+   - No observation spawns a task on its own. Only a human promotes one, later.
+   - More than three from this task collapse into a single `foundation` row: volume of small complaints is itself the signal that the foundation is wrong, and recording it as volume buries that signal.
+   - `foundation` means the spec, contract, or approach is suspect and continuing to build compounds debt. Everything else is `normal`.
 
 ## Completion
 
@@ -454,6 +489,12 @@ The following sections are relevant to this task. The UX.md stub to complete is 
 3. **Fill in States.** Every state row must have a specific, measurable Experience value. No vague terms like "smooth", "fast", or "subtle" — use numeric values (e.g., "ease-out 250ms") for anything involving time, physics, or sensation.
 4. **Fill in Edge Cases.** At minimum: Empty/first-time behavior and Error behavior.
 5. **Precision rule.** Prose is permitted only in Emotional intent, Design intention, and Copy Tone. All cells involving measurable qualities must be numeric or reference a named pattern.
+6. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
+   - Row format: `| OBS-XXX | {{task_id}} | design/bug/scope/... | normal or foundation | One-line observation. | open |`, where `OBS-XXX` is the highest existing OBS id plus one.
+   - One line per observation — a pointer, not a report.
+   - No observation spawns a task on its own. Only a human promotes one, later.
+   - More than three from this task collapse into a single `foundation` row: volume of small complaints is itself the signal that the foundation is wrong, and recording it as volume buries that signal.
+   - `foundation` means the spec, contract, or approach is suspect and continuing to build compounds debt. Everything else is `normal`.
 
 ## Completion
 

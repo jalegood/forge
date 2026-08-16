@@ -26,6 +26,12 @@ The following Contract sections contain the ambiguity or `<!-- UNRESOLVED -->` i
    - Remove the `<!-- UNRESOLVED -->` comment
    - Replace it with the resolved specification
    - Ensure the resolution is testable (can you write an assertion for it?)
+5. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
+   - Row format: `| OBS-XXX | {{task_id}} | design/bug/scope/... | normal or foundation | One-line observation. | open |`, where `OBS-XXX` is the highest existing OBS id plus one.
+   - One line per observation — a pointer, not a report.
+   - No observation spawns a task on its own. Only a human promotes one, later.
+   - More than three from this task collapse into a single `foundation` row: volume of small complaints is itself the signal that the foundation is wrong, and recording it as volume buries that signal.
+   - `foundation` means the spec, contract, or approach is suspect and continuing to build compounds debt. Everything else is `normal`.
 
 ## Completion
 

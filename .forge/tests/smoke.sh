@@ -102,6 +102,15 @@ echo "Checking markdown.js..."
 bash .forge/tests/test-markdown.sh > /dev/null
 echo "  markdown.js: OK"
 
+# --- Every prompt template carries the observation step ---
+# CONTRACT#interfaces/prompt-template-interface makes the step mandatory in
+# every template, and the templates embedded in /forge-init are not diffed
+# against the live ones — so both copies are checked here, where every gate
+# that runs smoke.sh picks it up.
+echo "Checking prompt templates..."
+bash .forge/tests/test-templates.sh > /dev/null
+echo "  templates: OK"
+
 # --- settings.json is valid JSON with hook config ---
 echo "Checking settings.json..."
 
