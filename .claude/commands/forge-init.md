@@ -715,9 +715,18 @@ function normalizeSlug(s) {
 
 // UX.md headings carry a "Flow: " / "Screen: " label prefix that is part of the
 // document convention, not part of the name being referenced.
+//
+// A heading that opens with a bracketed token — `### [req-login] User Login` —
+// compacts to the bracketed token alone (CONTRACT#data-model/context-manifest,
+// requirement-heading matching). The trailing text is a prose name that gets
+// reworded; the slug is the identifier and does not. Matching the whole heading
+// would make every manifest reference break on the next copy edit. The rule is
+// about the bracket, not about SPEC.md — per-feature files under `.forge/specs/`
+// carry the same heading shape.
 function headingCompact(text) {
   const stripped = text.trim().replace(/^(Flow|Screen):\s*/, '');
-  return normalizeSlug(stripped);
+  const bracketed = /^\[([^\]]+)\]/.exec(stripped);
+  return normalizeSlug(bracketed ? bracketed[1] : stripped);
 }
 
 // --- Heading scan ---

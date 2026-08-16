@@ -321,11 +321,24 @@
 - **Gate:** `bash .forge/tests/test-wp.sh && bash .forge/tests/smoke.sh && echo "foundation halt mechanical"`
 - **Notes:** wp.js next now halts (exit 2) on an open foundation-severity observation, with --force and triage as the two exits; CONTRACT rule 4 amended to make the stop mechanical. Decisions on the resume-active exemption and triage-not-override; three deviations including a forced re-embed of forge-init.md. Record: .forge/notes/TASK-063.md
 
+## [TASK-066] Realign test-prose.sh with forge-init's STATUS.md instruction
+
+- **Status:** pending
+- **Type:** fix
+- **Depends:** none
+- **Context:** CONTRACT#rules/gate-patterns, CONTRACT#rules/test-first-convention, notes/TASK-031#outcome
+- **Gate:** `bash .forge/tests/test-prose.sh && bash .forge/tests/smoke.sh && echo "prose assertion realigned"`
+- **Notes:** `test-prose.sh` fails at HEAD, and has since TASK-031 (commit f7d4e60). Its final live-case assertion requires that `.claude/commands/forge-init.md` does NOT instruct STATUS.md creation — it was written when that instruction was absent, to prove `prose.js` could tell instruction from embedded payload. TASK-031's whole deliverable was to add that instruction, which inverts the assertion's premise. The failure message even says "update TASK-031 and this test together"; TASK-031 landed without doing so.
+
+  Because `smoke.sh` runs `test-prose.sh`, `smoke.sh` is red, and every pending task gated on it inherits the failure — hence the Depends edges added from TASK-033/034/036/037/049/051/053/054/055.
+
+  The fix is to invert the live case, not delete it: assert that `prose.js` DOES find the STATUS.md instruction in forge-init.md prose. That keeps the false-pass property under test (a payload-only match must still not satisfy it) while matching what the command now does. Pick a second pattern that is still payload-only for the negative half, since STATUS.md no longer is.
+
 ## [TASK-053] Update /forge-next to surface and record observations
 
 - **Status:** pending
 - **Type:** feature
-- **Depends:** TASK-031
+- **Depends:** TASK-031, TASK-066
 - **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#data-model/status.md-data-model, CONTRACT#rules/unattended-execution
 - **Gate:** `bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && node .forge/scripts/prose.js .claude/commands/forge-next.md "observation" "foundation" "STATUS\.md" && echo "forge-next observation handling present"`
 - **Notes:** Two additions to forge-next, at opposite ends of the command.
@@ -340,7 +353,7 @@
 
 - **Status:** pending
 - **Type:** feature
-- **Depends:** TASK-031
+- **Depends:** TASK-031, TASK-066
 - **Context:** CONTRACT#interfaces/prompt-template-interface, CONTRACT#data-model/status.md-data-model
 - **Gate:** `bash .forge/tests/smoke.sh && test $(grep -l "Observations" .forge/templates/*.md | wc -l) -ge 7 && echo "templates record observations"`
 - **Notes:** Uniform closing step across every template. The wording carries the in-scope fix test, and getting it right is the whole task — a prohibition ("record, never act") drives agents to write memos instead of one-line fixes and spawns an analysis quagmire.
@@ -355,7 +368,7 @@
 
 - **Status:** pending
 - **Type:** feature
-- **Depends:** TASK-031
+- **Depends:** TASK-031, TASK-066
 - **Context:** CONTRACT#interfaces/command-forge-status, CONTRACT#interfaces/command-forge-plan, CONTRACT#data-model/status.md-data-model
 - **Gate:** `bash .forge/tests/smoke.sh && node .forge/scripts/prose.js .claude/commands/forge-status.md "observation" && node .forge/scripts/prose.js .claude/commands/forge-plan.md "observation" "accepted" && echo "observation read paths wired"`
 - **Notes:** `/forge-status` lists `open` observations with `foundation` severity first — it stays read-only. `/forge-plan` consumes rows marked `accepted` as planning input; each becomes a candidate task subject to the same Contract-First coverage requirement as any other deliverable, and rows marked `open` or `declined` are never planned.
@@ -530,7 +543,7 @@
 
 - **Status:** pending
 - **Type:** feature
-- **Depends:** TASK-031
+- **Depends:** TASK-031, TASK-066
 - **Context:** CONTRACT#interfaces/command-forge-status, CONTRACT#data-model/status.md-data-model
 - **Gate:** `bash .forge/tests/smoke.sh && grep -q "STATUS.md" .claude/commands/forge-status.md && echo "forge-status STATUS integration present"`
 - **Notes:** Surfaces open questions (flag Blocking ones) and blockers. Remains read-only.
@@ -539,21 +552,19 @@
 
 - **Status:** pending
 - **Type:** feature
-- **Depends:** TASK-031
+- **Depends:** TASK-031, TASK-066
 - **Context:** CONTRACT#data-model/status.md-data-model, CONTRACT#interfaces/prompt-template-interface
 - **Gate:** `bash .forge/tests/smoke.sh && grep -q "STATUS.md" .forge/templates/clarify.md && echo "clarify template logs decisions"`
 - **Notes:** On resolution: move the question from Open Questions to Decisions with date, rationale, and rejected alternatives.
 
 ## [TASK-065] Restore requirement-slug matching in the shared markdown resolver
 
-- **Status:** pending
+- **Status:** done
 - **Type:** fix
 - **Depends:** none
 - **Context:** CONTRACT#data-model/context-manifest, CONTRACT#rules/workplan-lint, CONTRACT#rules/test-first-convention
 - **Gate:** `bash .forge/tests/test-markdown.sh && node .forge/scripts/check-workplan.js && node .forge/scripts/wp.js get TASK-035 | grep -q "SPEC#requirements/req-checkpoint-self-contained" && echo "req-slug refs resolve and are in use"`
-- **Notes:** `lib/markdown.js` implements no bracketed-heading rule, so `### [req-slug] Requirement Name` compacts to the whole heading text and never equals a bare `req-slug` reference. Every `SPEC#requirements/req-*` Context ref therefore fails to resolve, and check-workplan.js invariant 5 turns that into a hard lint error — so the SPEC manifest rule /forge-plan step 5 mandates cannot be satisfied by any task. Latent because no manifest has ever used the form.
-  Root cause was a Contract gap, closed 2026-08-16: Data Model/Context Manifest listed the reference form but never stated the matching rule, so TASK-050 extracted the resolver without it. The rule is now in the Contract and is this task's spec — scope the fix to `headingCompact`/`findHeading`, and do not special-case SPEC.md by filename: the rule is about bracketed headings, and per-feature files under `.forge/specs/` carry the same requirement headings.
-  Create `.forge/tests/test-markdown.sh` — the shared resolver has no test file despite four scripts depending on it, which is why this regression survived extraction. Cover both directions: a bracketed heading matches its slug, and a reworded requirement name still matches. Then widen the TASK-035 and TASK-037 manifests to carry `SPEC#requirements/req-checkpoint-self-contained` and `SPEC#requirements/req-checkpoint-fresh-gates`; that widening is the gate's proof the fix works end to end, not separate work.
+- **Notes:** Bracketed-heading rule restored in headingCompact (lib + forge-init embedded copy); new .forge/tests/test-markdown.sh wired into smoke.sh; TASK-035/037 manifests now carry real SPEC#requirements/req-* refs. Decisions on match scope and one out-of-scope finding: test-prose.sh is red at HEAD from TASK-031. Record: .forge/notes/TASK-065.md
 
 ## [TASK-064] Resolve the fresh-gates conflict: records store no gate results
 
@@ -570,7 +581,7 @@
 - **Status:** pending
 - **Type:** scaffold
 - **Depends:** TASK-031, TASK-064, TASK-065
-- **Context:** CONTRACT#interfaces/task-types, CONTRACT#interfaces/prompt-template-interface, CONTRACT#rules/checkpoint-cadence
+- **Context:** CONTRACT#interfaces/task-types, CONTRACT#interfaces/prompt-template-interface, CONTRACT#rules/checkpoint-cadence, SPEC#requirements/req-checkpoint-self-contained
 - **Gate:** `test -s .forge/templates/checkpoint.md && grep -q "checkpoint.md" .claude/commands/forge-init.md && echo "checkpoint template present"`
 - **Notes:** Template instructs: assemble review packet (span tasks + Files lines, gate results, manual test steps, STATUS excerpt, span starting commit for rollback), present, wait for manual pass/fail. Produces no code.
 
@@ -578,7 +589,7 @@
 
 - **Status:** pending
 - **Type:** feature
-- **Depends:** TASK-035
+- **Depends:** TASK-035, TASK-066
 - **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#rules/checkpoint-cadence, CONTRACT#interfaces/task-types
 - **Gate:** `bash .forge/tests/smoke.sh && node .forge/scripts/prose.js .claude/commands/forge-plan.md "checkpoint" "cadence" && echo "forge-plan checkpoint cadence present"`
 - **Notes:** Phase boundary or every 5 non-checkpoint tasks, whichever first; checkpoint Depends lists the full span; downstream tasks depend on the checkpoint.
@@ -587,8 +598,8 @@
 
 - **Status:** pending
 - **Type:** feature
-- **Depends:** TASK-035, TASK-064
-- **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#data-model/status.md-data-model
+- **Depends:** TASK-035, TASK-064, TASK-066
+- **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#data-model/status.md-data-model, SPEC#requirements/req-checkpoint-fresh-gates
 - **Gate:** `bash .forge/tests/smoke.sh && grep -qi "checkpoint" .claude/commands/forge-next.md && grep -qi "review packet" .claude/commands/forge-next.md && echo "forge-next checkpoint execution present"`
 - **Notes:** Checkpoint gates are always manual:. On block, append a STATUS.md Blockers row.
 
@@ -635,7 +646,7 @@
 
 - **Status:** pending
 - **Type:** clarify
-- **Depends:** none
+- **Depends:** TASK-066
 - **Context:** CONTRACT#data-model/status.md-data-model, CONTRACT#rules/contract-amendment-protocol, CONTRACT#rules/contract-first
 - **Gate:** `bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && test $(grep -c "ASSUMED" .forge/CONTRACT.md) -lt 18 && test $(grep -c "^| 2026-" .forge/STATUS.md) -gt 8 && echo "assumption backlog triaged"`
 - **Notes:** 18 `<!-- ASSUMED -->` markers sit in CONTRACT.md, 4 more in WORKPLAN.md, 1 each in STATUS.md and forge-plan.md. Every one is an inference the pipeline made on the human's behalf and never revisited — accumulating inside the automation boundary that every task, manifest, and gate derives from.
@@ -672,7 +683,7 @@
 
 - **Status:** pending
 - **Type:** refactor
-- **Depends:** TASK-046
+- **Depends:** TASK-046, TASK-066
 - **Context:** CONTRACT#rules/contract-amendment-protocol, CONTRACT#rules/context-budget, CONTRACT#data-model/artifacts
 - **Gate:** `bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && test -f archive/forge-spec-v0.2.md && test ! -f forge-spec-v0.2.md && grep -q "Planning at Scale" .forge/CONTRACT.md && ! grep -q "the spec's" README.md && echo "narrative spec retired"`
 - **Notes:** The root narrative spec doc is a third source of truth about the same system alongside CONTRACT.md and README.md — and it is the one that drifted (still describes 3 commands, no UX/DESIGN, no SPEC/STATUS/checkpoint/sync). Maintaining it by hand reproduces, inside this repo, the exact drift problem v0.3 exists to solve.

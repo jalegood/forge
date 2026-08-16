@@ -94,6 +94,14 @@ echo "Checking prose.js..."
 bash .forge/tests/test-prose.sh > /dev/null
 echo "  prose.js: OK"
 
+# --- Context references resolve to the sections they name ---
+# lib/markdown.js backs check-workplan.js invariant 5, check-ux-spec.js, and
+# /forge-next's manifest resolution. A silent regression there makes every
+# manifest unreliable at once, so its test runs wherever smoke.sh runs.
+echo "Checking markdown.js..."
+bash .forge/tests/test-markdown.sh > /dev/null
+echo "  markdown.js: OK"
+
 # --- settings.json is valid JSON with hook config ---
 echo "Checking settings.json..."
 
