@@ -103,7 +103,7 @@
 
 - **Status:** done
 - **Type:** refactor
-- **Depends:** TASK-012
+- **Depends:** none
 - **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#interfaces/command-forge-init
 - **Gate:** `bash .forge/tests/smoke.sh && ! grep -q "First-run scaffold" .claude/commands/forge-plan.md && echo "forge-plan scaffold step removed"`
 - **Notes:** Files: .claude/commands/forge-plan.md, .forge/WORKPLAN.md
@@ -130,7 +130,7 @@
 
 - **Status:** done
 - **Type:** investigate
-- **Depends:** TASK-012, TASK-013, TASK-014
+- **Depends:** TASK-012, TASK-013
 - **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#interfaces/command-forge-plan, CONTRACT#interfaces/command-forge-next, CONTRACT#state-machines/session-lifecycle
 - **Gate:** `manual: Simulate a fresh project setup: (1) verify forge-init creates all expected files without overwriting existing ones, (2) verify forge-plan runs lean (no scaffold output), (3) verify forge-next fails fast with a clear message if templates are missing, (4) run one full task through the pipeline to confirm the new entry point works end to end`
 - **Notes:** Task completed by user

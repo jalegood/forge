@@ -420,8 +420,12 @@ run_fixture "notes/ reference to a missing section fails" 1 "$NOTES_MISSING_SECT
 
 rm -rf "$TMPDIR"
 
-# --- 17. The real current .forge/WORKPLAN.md must pass (known frozen-history
-#     warnings from TASK-012/TASK-014's done-task self-deps are non-blocking) ---
+# --- 17. The real current .forge/WORKPLAN.md must pass, warning-free. It once
+#     carried two done-task self-deps (TASK-012, TASK-014) that surfaced as four
+#     non-blocking frozen-history warnings; those were typos, not history, and
+#     have been corrected. The warning-not-error behavior they used to
+#     demonstrate is covered by fixtures 5 and 7 above, which is where it
+#     belongs — a live-file accident is not a test. ---
 echo ""
 echo "Real workplan: exit 0 expected..."
 node "$SCRIPT"
