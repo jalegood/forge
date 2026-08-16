@@ -9,6 +9,7 @@
 | Q-002 | Checkpoint cadence default is 5 tasks (`<!-- ASSUMED -->` in CONTRACT). Right default, or should it be per-project config? | No | 2026-07-24 |
 | Q-003 | Single SPEC.md vs per-feature `.forge/specs/` — split threshold assumed at ~300 lines. Validated by TASK-048, which authors this project's own SPEC.md. | No | 2026-07-24 |
 | Q-004 | Record externalization threshold is 3 lines. Right cutoff, or should it be character-based, or per-project config? Validate against the migrated 67-task work project (TASK-060). | No | 2026-08-14 |
+| Q-006 | Should tasks group into features, derived from their `specs/X#` manifest refs rather than a declared field, to drive feature-aligned checkpoint cadence, per-feature `/forge-status`, and a requirement-coverage lint? Gated by Q-003 — no `.forge/specs/` split means no natural feature identity — and would subsume Q-002's assumed cadence of 5. Evaluation trigger: TASK-046's span, asking whether a five-task window was a coherent review unit. | No | 2026-08-16 |
 
 ## Decisions
 
