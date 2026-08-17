@@ -524,12 +524,12 @@
 
 ## [TASK-033] Update /forge-status to surface STATUS.md items
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-031, TASK-066
 - **Context:** CONTRACT#interfaces/command-forge-status, CONTRACT#data-model/status.md-data-model
 - **Gate:** `bash .forge/tests/smoke.sh && grep -q "STATUS.md" .claude/commands/forge-status.md && echo "forge-status STATUS integration present"`
-- **Notes:** Surfaces open questions (flag Blocking ones) and blockers. Remains read-only.
+- **Notes:** Deliverable already present from TASK-059; this task added the prose.js assertions that lock it (all mutation-verified) and surfaced open questions by Q-XXX ID. One deviation: IDs go marginally past the Contract Outputs line. Record: .forge/notes/TASK-033.md
 
 ## [TASK-034] Update clarify template to log decisions to STATUS.md
 

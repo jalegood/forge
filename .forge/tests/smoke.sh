@@ -114,6 +114,37 @@ grep -qi 'observation' .claude/commands/forge-status.md
 grep -qi 'read-only' .claude/commands/forge-status.md
 echo "  forge-status.md projection: OK"
 
+# --- /forge-status surfaces the human-authored STATUS.md items (TASK-033) ---
+# CONTRACT#interfaces/command-forge-status requires the report to surface open
+# questions (flagging any marked Blocking) and blockers, read from STATUS.md
+# itself — wp.js projects the workplan and the Observations table, not these two.
+# CONTRACT#data-model/status.md-data-model makes the integration mandatory: a
+# status file nothing reads goes stale.
+#
+# Asserted through prose.js, not grep: forge-status.md fences its output-format
+# template, and that fence already contains "Open questions:" and "Blockers:".
+# A plain grep would match the sample and report the instruction present when
+# only the example was — the exact failure prose.js exists to prevent, and the
+# reason the task's own `grep -q "STATUS.md"` gate is not sufficient on its own.
+echo "Checking forge-status STATUS.md surfacing..."
+
+# both tables are read, and the read is conditional on the file being present
+node .forge/scripts/prose.js .claude/commands/forge-status.md \
+  "STATUS\.md" "Open Questions" "Blockers" "exists|when present"
+# Blocking questions are flagged, not merely listed
+node .forge/scripts/prose.js .claude/commands/forge-status.md "flag[a-z]*[^.]*Blocking"
+# questions are surfaced by ID: every other row in this report carries its
+# identifier (TASK-XXX, OBS-X), and a question the human cannot name is one they
+# cannot hand to a clarify task
+node .forge/scripts/prose.js .claude/commands/forge-status.md "by its ID|by ID"
+grep -q 'Q-XXX' .claude/commands/forge-status.md
+# Observations arrive from the projection; re-reading the table would double-report
+node .forge/scripts/prose.js .claude/commands/forge-status.md "not re-read|do not re-read"
+# surfacing STATUS.md must not turn a read-only command into a writer
+node .forge/scripts/prose.js .claude/commands/forge-status.md \
+  "Read-only|read-only" "no file modifications|No side effects|never writes"
+echo "  forge-status.md STATUS.md surfacing: OK"
+
 # --- Observation read paths (TASK-055) ---
 # CONTRACT#data-model/status.md-data-model names the observation readers, and two
 # of them read differently on purpose: /forge-status lists every open row with

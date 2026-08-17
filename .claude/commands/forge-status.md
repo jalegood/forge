@@ -19,7 +19,7 @@ Workplan data comes from `.forge/scripts/wp.js`, never from reading `.forge/WORK
    If the script exits nonzero, report its error verbatim. Exit code 1 means the workplan is missing or empty — tell the user to run `/forge-plan`.
 
 2. **Read STATUS.md for the human-authored items** — only if `.forge/STATUS.md` exists:
-   - `## Open Questions` — list every unanswered row, flagging any marked Blocking
+   - `## Open Questions` — list every unanswered row by its ID, flagging any marked Blocking
    - `## Blockers` — list every open row
 
    Observations are already covered by step 1; do not re-read the `## Observations` table.
@@ -48,7 +48,7 @@ Workplan data comes from `.forge/scripts/wp.js`, never from reading `.forge/WORK
   (or omit when none)
 
 **Open questions:**
-  - Question (Blocking)
+  - Q-XXX — Question (Blocking)
   (or omit when none)
 
 **Blockers:**
