@@ -30,13 +30,14 @@ Acceptance criteria:
 
 ### [req-checkpoint-fresh-gates] Fresh gate evidence at checkpoint
 
-WHEN a checkpoint review packet is assembled, THE SYSTEM SHALL re-run every automated gate in the span and report the fresh results, flagging any gate whose fresh result differs from the result recorded when its task completed.
+WHEN a checkpoint review packet is assembled, THE SYSTEM SHALL re-run every automated gate in the span and report the fresh results, flagging any gate that fails fresh on a task whose status is `done`.
 
 Acceptance criteria:
 
-- Gates are re-run at packet-assembly time; recorded completion-time results alone are insufficient, because a later task in the span can silently break an earlier task's gate.
-- Each automated gate is reported with its actual output, not a bare pass/fail — the packet is the mitigation for the weak-gate amplification risk in STATUS.md Risks.
-- A regression (gate passed at completion, fails at checkpoint) is explicitly flagged; the packet never summarizes a span containing a regression as clean.
+- Gates are re-run at packet-assembly time; the span's task statuses alone are insufficient evidence, because a later task in the span can silently break an earlier task's gate.
+- The completion-time baseline is the one implied by task status, not a stored value. `/forge-next` marks a task `done` only after its gate passes (Interfaces/Command: `/forge-next`), so `done` *is* the record that the gate passed at completion. Nothing stores gate results, and nothing needs to: an artifact `check-workplan.js` already validates is a stronger baseline than a hand-written result line that can drift from what actually ran.
+- A regression — a gate failing fresh on a `done` task — is explicitly flagged; the packet never summarizes a span containing a regression as clean.
+- Each automated gate is reported with its actual output, not a bare pass/fail — the packet is the mitigation for the weak-gate amplification risk in STATUS.md Risks. Output *drift* on a still-passing gate is not mechanically flagged; reporting the output is what puts it in front of the human.
 - `manual:` gates in the span are listed with their verification steps, not executed.
 
 ### [req-checkpoint-self-contained] Self-contained review packet

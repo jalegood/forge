@@ -26,7 +26,12 @@ The following Contract sections contain the ambiguity or `<!-- UNRESOLVED -->` i
    - Remove the `<!-- UNRESOLVED -->` comment
    - Replace it with the resolved specification
    - Ensure the resolution is testable (can you write an assertion for it?)
-5. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
+5. **Log the decision in `.forge/STATUS.md`.** The Contract edit records *what* the answer is; the Decisions table records *why it is that answer* — and it is the only place the reasoning survives the session.
+   - Append a row to the Decisions table: `| YYYY-MM-DD | What was decided | Why | Alternatives rejected |`. Use today's real date.
+   - **The rejected alternatives are mandatory, not decoration.** The options from step 2 the human turned down go in that column, each with the reason it lost. Omit them and the next session re-opens the settled question and re-derives the same answers.
+   - **If the ambiguity was tracked as an Open Questions row, delete that row.** The question *moves* to Decisions — it does not exist in both tables. A resolved question left sitting under Open Questions is indistinguishable from an unresolved one to everyone who reads that table, including `/forge-status`.
+   - If no Open Questions row existed, still write the Decisions row. The trigger is a decision being made, not a question having been filed.
+6. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
    - Row format: `| OBS-XXX | {{task_id}} | design/bug/scope/... | normal or foundation | One-line observation. | open |`, where `OBS-XXX` is the highest existing OBS id plus one.
    - One line per observation — a pointer, not a report.
    - No observation spawns a task on its own. Only a human promotes one, later.

@@ -18,7 +18,7 @@
 set -e
 
 INIT=".claude/commands/forge-init.md"
-TEMPLATES=(scaffold feature fix clarify refactor investigate ux-spec)
+TEMPLATES=(scaffold feature fix clarify refactor investigate ux-spec checkpoint)
 
 # The wording that carries the step. Each phrase pins one mandatory element of
 # CONTRACT#data-model/status.md-data-model, Observations — dropping any one of
@@ -58,6 +58,44 @@ check_body() {
     echo "FAIL: $label frames the step as a prohibition on acting"
     exit 1
   fi
+}
+
+# The wording that makes a clarify task write its resolution to STATUS.md.
+#
+# CONTRACT#data-model/status.md-data-model names `clarify` tasks as a mandatory
+# writer of the Decisions table — "a status file nothing reads goes stale", and
+# one nothing writes is empty. The Contract's own phrasing is "move resolved
+# questions to Decisions (dated, with rationale)": a *move*, so the same
+# question cannot sit in both tables, where a reader of Open Questions cannot
+# tell it from an unresolved one.
+#
+# Rejected alternatives are pinned separately because they are the column an
+# agent drops first. The Decisions row is the only artifact that survives the
+# session; without the options the human turned down, the next session re-opens
+# the settled question and re-derives the same answers.
+check_clarify_body() {
+  local label="$1"
+  local body="$2"
+  local phrase
+  local -a required=(
+    # the destination table, named concretely enough to append to
+    "Decisions table"
+    # the row's shape — a decision with no date cannot be ordered against others
+    "YYYY-MM-DD"
+    # the column agents drop first, and the word that stops them
+    "Alternatives rejected"
+    "mandatory"
+    # the question moves out of Open Questions; it is not copied into Decisions
+    "Open Questions"
+    "does not exist in both"
+  )
+
+  for phrase in "${required[@]}"; do
+    if ! printf '%s' "$body" | grep -qF -- "$phrase"; then
+      echo "FAIL: $label is missing the decision-logging phrase: $phrase"
+      exit 1
+    fi
+  done
 }
 
 # Extract the fenced template body that follows the `.forge/templates/X.md`
@@ -108,6 +146,15 @@ for source in ".forge/templates/investigate.md" "<init>"; do
   done
   echo "  $label: OK"
 done
+
+# Both copies of the clarify template must close the STATUS.md loop. The live
+# one is what /forge-next injects here; the embedded one is what a new project
+# gets, and it carries no forge-init:embed marker, so nothing else diffs it.
+echo "Checking that clarify.md logs decisions to STATUS.md..."
+check_clarify_body ".forge/templates/clarify.md" "$(cat .forge/templates/clarify.md)"
+echo "  .forge/templates/clarify.md: OK"
+check_clarify_body "$INIT (clarify.md block)" "$(extract_init clarify)"
+echo "  $INIT (clarify.md block): OK"
 
 echo ""
 echo "All template checks passed."

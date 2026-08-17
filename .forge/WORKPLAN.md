@@ -533,12 +533,14 @@
 
 ## [TASK-034] Update clarify template to log decisions to STATUS.md
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-031, TASK-066
 - **Context:** CONTRACT#data-model/status.md-data-model, CONTRACT#interfaces/prompt-template-interface
 - **Gate:** `bash .forge/tests/smoke.sh && grep -q "STATUS.md" .forge/templates/clarify.md && echo "clarify template logs decisions"`
 - **Notes:** On resolution: move the question from Open Questions to Decisions with date, rationale, and rejected alternatives.
+  Added the STATUS.md decision-logging step (Decisions row with date/why/rejected alternatives; the Open Questions row is deleted, not copied) to both the live clarify template and the copy embedded in forge-init.md, and pinned all six phrases in test-templates.sh for both copies. The declared gate clause grep -q "STATUS.md" was already satisfied by the observation step, so the load-bearing assertions went into the templates suite that smoke.sh runs.
+  Files: .forge/templates/clarify.md, .claude/commands/forge-init.md, .forge/tests/test-templates.sh
 
 ## [TASK-065] Restore requirement-slug matching in the shared markdown resolver
 
@@ -551,22 +553,21 @@
 
 ## [TASK-064] Resolve the fresh-gates conflict: records store no gate results
 
-- **Status:** pending
+- **Status:** done
 - **Type:** clarify
 - **Depends:** none
 - **Context:** SPEC#requirements, CONTRACT#data-model/task-record-data-model
 - **Gate:** `grep -q "req-checkpoint-fresh-gates" .forge/STATUS.md && node .forge/scripts/check-workplan.js && echo "fresh-gates conflict resolved"`
-- **Notes:** SPEC req-checkpoint-fresh-gates requires the packet to flag "any gate whose fresh result differs from the result recorded when its task completed." Nothing records completion-time gate results: the Task Record Data Model defines Outcome/Decisions/Deviations/Files only, and /forge-next writes no gate output to Notes or records. The regression comparison is unimplementable as specified.
-  Resolve one way or the other and log a dated Decisions row: either amend the Task Record Data Model to add a gate-results section (CONTRACT wins per spec-precedence, so this is the Contract-side fix), or amend the SPEC requirement to drop the comparison and report fresh results only. Blocks TASK-035 and TASK-037, which build and execute the packet.
+- **Notes:** Amended SPEC req-checkpoint-fresh-gates to derive the completion-time baseline from `done` status instead of a stored gate result; Q-005 moved to a dated Decisions row. Three options weighed, one deviation (fix landed in SPEC.md, not CONTRACT.md), one accepted cost (output drift no longer mechanically flagged). Unblocks TASK-035/TASK-037 with no record-model change. Record: .forge/notes/TASK-064.md
 
 ## [TASK-035] Create checkpoint.md template and add to /forge-init template set
 
-- **Status:** pending
+- **Status:** done
 - **Type:** scaffold
 - **Depends:** TASK-031, TASK-064, TASK-065
 - **Context:** CONTRACT#interfaces/task-types, CONTRACT#interfaces/prompt-template-interface, CONTRACT#rules/checkpoint-cadence, SPEC#requirements/req-checkpoint-self-contained
 - **Gate:** `test -s .forge/templates/checkpoint.md && grep -q "checkpoint.md" .claude/commands/forge-init.md && echo "checkpoint template present"`
-- **Notes:** Template instructs: assemble review packet (span tasks + Files lines, gate results, manual test steps, STATUS excerpt, span starting commit for rollback), present, wait for manual pass/fail. Produces no code.
+- **Notes:** Created checkpoint.md (live + forge-init embed, now 7 unconditional templates) instructing span assembly via wp.js get, fresh gate re-runs with regression flagging, STATUS.md excerpts, rollback command, and a hard stop on the pass/fail question. Six decisions incl. the workplan-access choice; one deviation (~55 lines vs the ~30-50 interface guidance). Closes OBS-002. Record: .forge/notes/TASK-035.md
 
 ## [TASK-036] Update /forge-plan to insert checkpoint tasks at cadence
 
