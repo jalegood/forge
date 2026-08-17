@@ -26,6 +26,10 @@ Forge operates on these file artifacts:
 | Version   | `.forge/VERSION`              | Forge-managed          | Engine version stamp + canonical repo pointer, consumed by `/forge-sync` |
 | Task Records | `.forge/notes/TASK-XXX.md`   | AI (90%) / Human (10%) | Durable per-task narrative: outcome, decisions, deviations, files. Manifest-addressable. Self-sufficient without git |
 | Workplan Script | `.forge/scripts/wp.js`     | Forge-managed          | Deterministic workplan query and mutation — task selection, status projection, targeted field writes |
+| Markdown Resolver | `.forge/scripts/lib/markdown.js` | Forge-managed    | Shared fence-aware heading parser and manifest-reference resolver; every check script consumes it <!-- ASSUMED: table row added to close OBS-005; the file was already named in Interfaces/`/forge-init` but never listed as an artifact --> |
+| Workplan Parser | `.forge/scripts/lib/workplan.js` | Forge-managed     | The one parser for the WORKPLAN.md format, shared by `check-workplan.js` and `wp.js` |
+| Prose Gate Helper | `.forge/scripts/prose.js`  | Forge-managed          | Greps a markdown file's prose while ignoring fenced payloads, so a gate cannot pass on text inside an embedded script |
+| Notes Migration | `.forge/scripts/migrate-notes.js` | Forge-managed    | One-shot externalization of oversized inline Notes into task records, for workplans predating the threshold |
 
 ### Relationships
 
@@ -305,8 +309,7 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
   - Creates `.forge/VISION.md` if absent (stub template with What/Who/Pillars sections)
   - Creates `.forge/CONTRACT.md` if absent (stub template with all top-level sections)
   - Creates `.forge/templates/` directory with all 7 unconditional template files if absent: scaffold.md, feature.md, clarify.md, refactor.md, fix.md, investigate.md, checkpoint.md (ux-spec.md is conditional — see below)
-  - Creates `.forge/scripts/check-workplan.js` and its `.forge/scripts/lib/markdown.js` dependency if absent (the workplan lint script and the shared section resolver it requires)
-  - Creates `.forge/scripts/check-spec.js` if absent (the spec readiness gate script)
+  - Creates the Forge-managed scripts under `.forge/scripts/` if absent — `lib/markdown.js`, `lib/workplan.js`, `check-workplan.js`, `wp.js`, `check-spec.js`, `prose.js`, `migrate-notes.js`. All seven are unconditional, and each is load-bearing for a command or a generated gate: `/forge-plan` and `/forge-next` block on the workplan lint, `/forge-next` and `/forge-status` reach the workplan only through `wp.js`, `/forge-spec` gates on `check-spec.js`, generated gates on markdown deliverables call `prose.js`, and `migrate-notes.js` is the remedy a project needs once its workplan predates the externalization threshold. A project missing any of them cannot complete a task whose gate names it. <!-- ASSUMED: prose.js and migrate-notes.js added to the provisioned set to close OBS-005; the first is already a hard dependency of four existing gates, the second is inert until needed -->
   - Creates `.forge/SPEC.md` if absent (stub with Overview, Requirements, Flows, Non-Goals sections)
   - Creates `.forge/STATUS.md` if absent (stub with Open Questions, Decisions, Risks, Blockers tables)
   - Creates `.forge/VERSION` if absent (engine version stamp + canonical repo URL)
@@ -664,6 +667,18 @@ WORKPLAN.md invariants are enforced deterministically by `.forge/scripts/check-w
 7. `checkpoint` and `investigate` gates use the `manual:` prefix.
 
 `/forge-plan` and `/forge-next` run the script after any WORKPLAN.md write; a nonzero exit blocks proceeding. It may additionally be wired as a PostToolUse hook for edits made outside the commands.
+
+### Embedded Payload Synchronization
+
+`/forge-init` scaffolds a project by writing out copies of Forge-managed files that also exist in the engine repository — script sources and prompt templates alike. Every such copy is a **payload**. A payload that has drifted from its original ships a stale engine to every new project while the dogfood instance stays correct, and the drift is invisible: both files run, they simply disagree.
+
+Three requirements, all mandatory:
+
+1. **Every payload carries a marker.** The line `<!-- forge-init:embed <path> -->` immediately precedes the fenced block, naming the artifact the block reproduces. A test keys on the marker rather than on prose or fence position, so rewording the surrounding instructions cannot silently disable the check.
+2. **Payloads are byte-identical to their originals.** A payload is copied whole, never edited in place. Fixing a script or template means changing the original and re-copying the block.
+3. **A test enforces 1 and 2 by content diff, not by sampling.** Asserting that a payload contains the few fields a test happens to name keeps only those fields in sync and leaves the rest free to drift — which is worse than no test, because it reads as coverage. `.forge/tests/test-init-scripts.sh` does this for script payloads; template payloads are subject to the same requirement.
+
+This is Vision pillar 2 applied to the engine's own distribution: if it matters, it must not depend on whoever edits `forge-init.md` remembering to re-copy. <!-- ASSUMED: generalizes the marker-and-diff convention TASK-062 established for script payloads to all payloads, closing OBS-003 -->
 
 ### Checkpoint Cadence
 

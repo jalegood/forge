@@ -644,14 +644,88 @@
 
   Origin: the "byproducts / waste stream" observation in forge-factory-brainstorm.md — every AI execution emits annotations, and a waste stream with no processing line accumulates until it poisons the base. Justified independently of that model: CONTRACT is the automation boundary, and unreviewed assumptions there propagate into every downstream task.
 
+## [TASK-067] Reconcile the Contract's Interfaces bullets with STATUS.md's five-table Data Model
+
+- **Status:** pending
+- **Type:** clarify
+- **Depends:** none
+- **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#interfaces/command-forge-plan, CONTRACT#data-model/status.md-data-model, CONTRACT#rules/contract-amendment-protocol
+- **Gate:** `node .forge/scripts/check-workplan.js && bash .forge/tests/smoke.sh && grep -q "Blockers, and Observations tables" .forge/CONTRACT.md && grep -qi "blocking open questions, observations" .forge/CONTRACT.md && test $(grep -c "^| 2026-" .forge/STATUS.md) -gt 24 && echo "STATUS table drift reconciled"`
+- **Notes:** Closes OBS-001 and OBS-004 — two instances of one defect: an Interfaces bullet describing STATUS.md more narrowly than the Data Model that governs it. Both are Contract-text corrections; no command file or script changes.
+
+  1. **OBS-001** — `Interfaces/Command: /forge-init` says the stub is created "with Open Questions, Decisions, Risks, Blockers tables". The STATUS.md Data Model mandates five tables, `check-workplan.js` resolves `STATUS#observations`, and `/forge-next` halts on open `foundation` rows — so a stub missing Observations silently disables that hard stop. TASK-031 already followed the Data Model and built the five-table stub; only the Contract bullet is wrong. Target wording: "…Decisions, Risks, Blockers, and Observations tables".
+  2. **OBS-004** — `Interfaces/Command: /forge-plan`'s Reads line annotates `.forge/STATUS.md` as "(when present — blocking open questions)", though the same interface's Does line requires accepted-Observations intake from that file. Target wording: "(when present — blocking open questions, observations marked accepted)".
+
+  Log one dated Decisions row covering both. The gate's `-gt 24` is the row count at planning time, so it requires the row to exist without demanding a specific total.
+
+## [TASK-068] Reconcile the Contract's check-spec.js invocation with the script's unresolved-marker threshold
+
+- **Status:** pending
+- **Type:** clarify
+- **Depends:** none
+- **Context:** CONTRACT#interfaces/command-forge-spec, CONTRACT#data-model/spec-data-model, CONTRACT#rules/contract-amendment-protocol, notes/TASK-032#decisions
+- **Gate:** `bash .forge/tests/test-check-spec.sh && node .forge/scripts/check-workplan.js && grep -q "max-unresolved" .forge/CONTRACT.md && test $(grep -c "^| 2026-" .forge/STATUS.md) -gt 24 && echo "check-spec invocation reconciled"`
+- **Notes:** Closes OBS-007. `Interfaces/Command: /forge-spec` mandates two things that contradict each other as written: annotate every unresolvable unknown with `<!-- UNRESOLVED: ... -->`, and run `node .forge/scripts/check-spec.js <file>`. The script treats any unresolved marker as a failure unless `--max-unresolved N` is passed, so following the Contract literally produces a spec that cannot pass its own gate. The reconciliation exists only in `forge-spec.md` prose (`--max-unresolved 2`) — a command file, and therefore not manifest-addressable, which is the same failure mode as the requirement-heading rule fixed on 2026-08-16.
+
+  Decide which side is authoritative and amend the Contract to say so: either the invocation carries a threshold (state the default and where it comes from), or the script's default changes and `forge-spec.md`'s flag use is dropped. `notes/TASK-032#decisions` records why the flag was introduced — read it before choosing. Log a dated Decisions row with the rejected alternative.
+
+## [TASK-069] Make /forge-init provision check-spec.js, prose.js, and migrate-notes.js
+
+- **Status:** pending
+- **Type:** fix
+- **Depends:** none
+- **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#data-model/artifacts, CONTRACT#rules/embedded-payload-synchronization, notes/TASK-062#decisions
+- **Gate:** `bash .forge/tests/test-init-scripts.sh && bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && echo "init provisions all seven scripts"`
+- **Notes:** Closes OBS-005, which is wider than the row states. `forge-init.md` embeds four script payloads — `lib/markdown.js`, `lib/workplan.js`, `check-workplan.js`, `wp.js` — and omits three:
+
+  - **`check-spec.js`** is the most serious: the Contract has always required `/forge-init` to create it, and `forge-init.md` mentions it zero times. A scaffolded project cannot run `/forge-spec`'s gate at all. This is a live Contract violation, not a gap.
+  - **`prose.js`** — four existing gates (TASK-031, 036, 053, 055) invoke it. TASK-062's record claims it was provisioned; it was not. Verify that claim against the file rather than trusting the note.
+  - **`migrate-notes.js`** — the original OBS-005 subject. Inert until a project's workplan predates the externalization threshold, which is exactly when it cannot be fetched.
+
+  The Contract was amended by this planning pass to name all seven scripts in one bullet and to add Artifacts rows for the four that had none. Follow `notes/TASK-062#decisions` for the established pattern: copy each payload whole, precede it with `<!-- forge-init:embed <path> -->`, and extend `test-init-scripts.sh` so the content diff covers the new blocks. Also fix `forge-init.md`'s created-files summary, which currently lists `lib/markdown.js` and `check-workplan.js` twice.
+
+  Scope boundary: do not restructure how `forge-init.md` distributes scripts. It is already ~1,900 lines and mostly fenced payload, and that is a real design smell — but replacing verbatim embedding is a v0.4 distribution question that overlaps TASK-041 (plugin packaging), not this repair.
+
+## [TASK-070] Bring forge-init's embedded template payloads under the script payloads' drift test
+
+- **Status:** pending
+- **Type:** fix
+- **Depends:** none
+- **Context:** CONTRACT#rules/embedded-payload-synchronization, CONTRACT#interfaces/command-forge-init, CONTRACT#interfaces/prompt-template-interface, notes/TASK-054#deviations
+- **Gate:** `bash .forge/tests/test-templates.sh && bash .forge/tests/smoke.sh && grep -q "forge-init:embed .forge/templates/feature.md" .claude/commands/forge-init.md && echo "template payloads content-diffed"`
+- **Notes:** Closes OBS-003. `test-templates.sh` checks that each embedded template block contains the specific fields the test names, which keeps exactly those fields in sync and lets everything else drift — worse than no test, because it reads as coverage. The script payloads solved this in TASK-062 with `<!-- forge-init:embed <path> -->` markers plus a whole-content diff; the template blocks never got either.
+
+  Three changes, one concern:
+
+  1. Add a `forge-init:embed` marker before each of the seven embedded template blocks in `forge-init.md`.
+  2. Re-copy any block that has drifted from its `.forge/templates/` original — the observation reports drift already exists, so expect the new diff to fail before it passes. Determine which direction is correct per block: the live template is normally authoritative, but check for cases where `forge-init.md` carries a fix the live file never received.
+  3. Rewrite `test-templates.sh`'s embedded-block section as a content diff keyed on the markers, mirroring `test-init-scripts.sh`. Keep the live-template field assertions — those check a different property (that each template satisfies the Prompt Template Interface) and are not made redundant by the diff.
+
+  `checkpoint.md` does not exist yet (TASK-035); write the diff to cover whatever template blocks are present rather than a hardcoded count of seven, so TASK-035 does not have to revisit this test.
+
+## [TASK-071] Restore SPEC traceability on TASK-032's context manifest
+
+- **Status:** pending
+- **Type:** fix
+- **Depends:** none
+- **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#rules/spec-precedence, SPEC#requirements/req-intake-coverage, SPEC#requirements/req-intake-disqualification, notes/TASK-032#outcome
+- **Gate:** `node .forge/scripts/check-workplan.js && node .forge/scripts/wp.js get TASK-032 | grep -q "SPEC#requirements/req-intake-coverage" && node .forge/scripts/wp.js get TASK-032 | grep -q "SPEC#requirements/req-intake-disqualification" && bash .forge/tests/smoke.sh && echo "TASK-032 manifest reconciled"`
+- **Notes:** Closes OBS-006. TASK-032's Context carries only `CONTRACT#` refs though `SPEC#requirements/req-intake-coverage` and `req-intake-disqualification` govern `/forge-spec` directly — the SPEC manifest rule `/forge-plan` mandates was not applied. Add both refs to TASK-032's Context field.
+
+  **The deliverable is fine; only the record is wrong.** Verified during planning: `forge-spec.md` already states the "specific passage, not a general impression" bar, the do-not-re-ask rule, draft withholding, the implementation-detail exemption, and it names both req slugs. So this is a traceability repair, not a behavioral fix — SPEC-to-task traceability is the entire reason `SPEC#` refs exist (STATUS.md Decisions, 2026-08-16). One thing to confirm rather than assume: req-intake-disqualification requires that a disqualified draft's unasked questions are asked *before a second draft*, and the resume-the-interview step is the one criterion planning could not find asserted in the command's prose. If it is genuinely absent, add it — that is in scope here.
+
+  Amending a `done` task's manifest is deliberate and narrow. `/forge-plan` preserves done tasks on regeneration; it does not forbid a corrective task from editing one, and Rules/Contract Amendment Protocol step 3 contemplates exactly this reconciliation. Use `wp.js` for the write so the file stays byte-identical elsewhere and is re-linted automatically.
+
+  **Considered and rejected:** a `check-workplan.js` invariant warning when a `feature`/`fix` task carries no `SPEC#` ref. Forge's SPEC.md covers only intake, checkpoints, and unattended spans, so most tasks legitimately implement no requirement — the check would warn on roughly six current pending tasks and train readers to ignore warnings. The requirement-coverage lint in Q-006 remains the right home for this, once Q-003 settles whether per-feature specs give tasks a feature identity.
+
 ## [TASK-046] Checkpoint: v0.3 machinery complete
 
 - **Status:** pending
 - **Type:** checkpoint
-- **Depends:** TASK-026, TASK-028, TASK-029, TASK-032, TASK-033, TASK-034, TASK-036, TASK-037, TASK-038, TASK-047, TASK-051, TASK-053, TASK-054, TASK-055, TASK-059, TASK-060, TASK-062
+- **Depends:** TASK-026, TASK-028, TASK-029, TASK-032, TASK-033, TASK-034, TASK-036, TASK-037, TASK-038, TASK-047, TASK-051, TASK-053, TASK-054, TASK-055, TASK-059, TASK-060, TASK-062, TASK-067, TASK-068, TASK-069, TASK-070, TASK-071
 - **Context:** CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#data-model/status.md-data-model
 - **Gate:** `manual: Review the v0.3 build span before validation and docs. Packet must contain: each task completed in the span with its description and Files line, the gate result for each, check-workplan.js output on the current workplan, current STATUS.md Open Questions and Risks, and the span's starting commit for rollback.`
-- **Notes:** First executable checkpoint in Forge's history — executing it is itself the live validation that TASK-035 and TASK-037 work. Span is 15 tasks, over the cadence of 5: v0.3's own plan predates its checkpoint machinery, so this is the only position where a checkpoint is executable (see STATUS.md Decisions, 2026-07-31). Normal cadence applies from v0.4. Depends lists the span's leaf tasks, which transitively cover all of TASK-025..038 plus TASK-047 (added in a later planning pass the same day — the guard hooks are part of v0.3's unattended-execution machinery and must be reviewed in the same checkpoint, not deferred to v0.4). Q-006 evaluation: after passing or failing the packet, record whether this span read as a coherent review unit or as unrelated work reviewed together — that judgment is the evidence for or against feature-aligned checkpoint cadence, and it cannot be recovered later.
+- **Notes:** First executable checkpoint in Forge's history — executing it is itself the live validation that TASK-035 and TASK-037 work. Span is 20 tasks, far over the cadence of 5: v0.3's own plan predates its checkpoint machinery, so this is the only position where a checkpoint is executable (see STATUS.md Decisions, 2026-07-31) — inserting a second checkpoint earlier in the span would hit the same "Template file missing" hard stop. Normal cadence applies from v0.4. Depends lists the span's leaf tasks, which transitively cover all of TASK-025..038 plus TASK-047 (added in a later planning pass the same day — the guard hooks are part of v0.3's unattended-execution machinery and must be reviewed in the same checkpoint, not deferred to v0.4) plus TASK-067..071 (the 2026-08-16 observation-backlog triage — these repair v0.3 machinery this checkpoint reviews, and TASK-069 in particular must land before TASK-039, whose gate asserts that `/forge-init` creates both check scripts). Q-006 evaluation: after passing or failing the packet, record whether this span read as a coherent review unit or as unrelated work reviewed together — that judgment is the evidence for or against feature-aligned checkpoint cadence, and it cannot be recovered later.
 
 ## [TASK-039] End-to-end validation of v0.3 pipeline
 
