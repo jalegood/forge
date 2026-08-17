@@ -515,12 +515,12 @@
 
 ## [TASK-032] Create /forge-spec intake command
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-030, TASK-031
 - **Context:** CONTRACT#interfaces/command-forge-spec, CONTRACT#data-model/spec-data-model, CONTRACT#data-model/status.md-data-model
 - **Gate:** `test -s .claude/commands/forge-spec.md && grep -q "ASSUMED" .claude/commands/forge-spec.md && grep -q "STATUS.md" .claude/commands/forge-spec.md && grep -q "check-spec" .claude/commands/forge-spec.md && grep -qi "interview" .claude/commands/forge-spec.md && echo "forge-spec command valid"`
-- **Notes:** Interview-before-draft is the point — unasked questions become propagated assumptions. Accepts raw idea text or pasted ticket as $ARGUMENTS.
+- **Notes:** Created /forge-spec: adaptive five-category intake interview before drafting, draft disqualification on unasked plan-blocking unknowns, STATUS.md Q-row handoff, check-spec.js gate. Two decisions worth reading (out-of-manifest SPEC refs; --max-unresolved reconciliation) and one deviation. Record: .forge/notes/TASK-032.md
 
 ## [TASK-033] Update /forge-status to surface STATUS.md items
 

@@ -20,6 +20,44 @@ grep -q "template" .claude/commands/forge-next.md
 grep -q "gate" .claude/commands/forge-next.md
 echo "  forge-next.md: OK"
 
+test -s .claude/commands/forge-spec.md
+grep -q "SPEC" .claude/commands/forge-spec.md
+grep -q "STATUS.md" .claude/commands/forge-spec.md
+grep -q "check-spec" .claude/commands/forge-spec.md
+echo "  forge-spec.md: OK"
+
+# --- /forge-spec interviews before it drafts (TASK-032) ---
+# CONTRACT#interfaces/command-forge-spec makes the intake interview the point of
+# the command: an unasked question becomes an assumption propagated into every
+# task the spec generates. SPEC req-intake-coverage sets the bar as adaptive
+# rather than checklist-driven, and req-intake-disqualification makes an unasked
+# plan-blocking unknown withhold the draft. Asserted through prose.js because the
+# file fences a spec skeleton, a STATUS.md row, and shell commands — a match
+# inside any of those would report the instruction present when only the sample
+# was.
+echo "Checking forge-spec intake contract..."
+
+# the interview runs before drafting, not alongside it
+node .forge/scripts/prose.js .claude/commands/forge-spec.md "interview" "before draft|before you draft|before drafting"
+# all five intake categories are named
+node .forge/scripts/prose.js .claude/commands/forge-spec.md \
+  "target user" "success criteria" "edge case" "integration point" "non-goal"
+# adaptive, not a checklist: a category the input already answers is not re-asked
+node .forge/scripts/prose.js .claude/commands/forge-spec.md "already answers|already answered" "ceremony"
+# an unasked, unannotated plan-blocking unknown withholds the draft
+node .forge/scripts/prose.js .claude/commands/forge-spec.md "plan-blocking" "withhold|disqualif"
+# both annotation forms, and the STATUS.md Open Questions handoff for unknowns
+node .forge/scripts/prose.js .claude/commands/forge-spec.md "ASSUMED" "UNRESOLVED" "Open Questions"
+# drafts to the SPEC Data Model, in EARS form
+node .forge/scripts/prose.js .claude/commands/forge-spec.md "EARS" "SHALL" "Non-Goals"
+# split threshold for per-feature spec files
+node .forge/scripts/prose.js .claude/commands/forge-spec.md "specs/" "300"
+# the readiness gate is run by the command, not left to the human
+node .forge/scripts/prose.js .claude/commands/forge-spec.md "check-spec.js"
+# CONTRACT stays read-only — SPEC owns behavior, CONTRACT owns constraints
+node .forge/scripts/prose.js .claude/commands/forge-spec.md "never (writes|modifies)[^.]*CONTRACT.md"
+echo "  forge-spec.md intake: OK"
+
 # --- forge-next.md documents task record externalization ---
 echo "Checking record externalization protocol..."
 
