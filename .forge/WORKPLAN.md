@@ -589,12 +589,12 @@
 
 ## [TASK-038] Create /forge-sync command and .forge/VERSION stamp
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** none
 - **Context:** CONTRACT#interfaces/command-forge-sync, CONTRACT#data-model/artifacts
 - **Gate:** `test -s .claude/commands/forge-sync.md && test -s .forge/VERSION && grep -q "VERSION" .claude/commands/forge-sync.md && grep -qi "never" .claude/commands/forge-sync.md && echo "forge-sync command valid"`
-- **Notes:** VERSION line 1 = engine version (start at 0.3.0), line 2 = canonical repo URL. Sync diffs Forge-managed files only; project-owned artifacts are untouchable; per-file human approval.
+- **Notes:** Built /forge-sync (four-state classification via a two-clone three-way diff) and the VERSION stamp; smoke.sh carries the real assertions since the task gate is vacuous. Decisions on baseline degradation and restamp hold-back; two observations raised. Record: .forge/notes/TASK-038.md
 
 ## [TASK-047] Create unattended-execution guard hooks and wire into settings.json
 
@@ -719,14 +719,195 @@
 
   **Considered and rejected:** a `check-workplan.js` invariant warning when a `feature`/`fix` task carries no `SPEC#` ref. Forge's SPEC.md covers only intake, checkpoints, and unattended spans, so most tasks legitimately implement no requirement — the check would warn on roughly six current pending tasks and train readers to ignore warnings. The requirement-coverage lint in Q-006 remains the right home for this, once Q-003 settles whether per-feature specs give tasks a feature identity.
 
+## [TASK-073] Add the gate discrimination requirement to /forge-plan's gate authoring
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** none
+- **Context:** CONTRACT#rules/gate-discrimination, CONTRACT#interfaces/command-forge-plan, CONTRACT#rules/gate-patterns, CONTRACT#rules/test-first-convention, CONTRACT#rules/workplan-lint
+- **Gate:** `bash .forge/tests/smoke.sh && node .forge/scripts/prose.js .claude/commands/forge-plan.md "vacuous" "pre-work" && node .forge/scripts/check-workplan.js && echo "forge-plan gate discrimination present"`
+- **Notes:** First of three tasks closing OBS-013, and the one the observation names directly: "/forge-plan's gate-authoring rule that produces them is still unchanged."
+
+  Step 6 (Generate gates) currently teaches gate *strategy* by deliverable type and enforces one property — that `feature`/`fix` gates invoke a test command. It never asks whether the gate can fail. Add the discrimination requirement per CONTRACT#rules/gate-discrimination: a gate asserts the change, not the topic. The concrete substitution to teach is `grep -qi "<topic>" <file>` → `node .forge/scripts/prose.js <file> "<phrase this task adds>"`, which is what the four recorded instances (OBS-008, OBS-010, OBS-013, TASK-034) each needed.
+
+  Carry the test-first interaction explicitly — it is the part most likely to be dropped. A bare `bash .forge/tests/smoke.sh` satisfies invariant 6 and passes before the work by construction, so the gate must additionally name the new assertion the task creates. Without this, applying the new rule naively would put `/forge-plan` in conflict with Rules/Test-First Convention on every `feature` task.
+
+  The self-check at the end of step 6 ("does this gate command invoke a test suite?") is the right place to hang the second question ("could this gate fail right now?"), rather than adding a parallel structure.
+
+  This task's own gate follows the rule it installs: `vacuous` and `pre-work` appear nowhere in `forge-plan.md` today — verified at planning time — so the gate fails before the work and cannot pass on a pre-existing mention.
+
+## [TASK-074] Make the gate-discrimination probe mechanical in wp.js
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** none
+- **Context:** CONTRACT#rules/gate-discrimination, CONTRACT#rules/workplan-access-discipline, CONTRACT#state-machines/task-lifecycle, CONTRACT#rules/gate-patterns, notes/TASK-063#decisions
+- **Gate:** `bash .forge/tests/test-wp.sh && bash .forge/tests/smoke.sh && bash .forge/tests/test-init-scripts.sh && grep -q "vacuous" .forge/tests/test-wp.sh && echo "gate probe mechanical"`
+- **Notes:** The mechanism half of OBS-013. TASK-073 changes what gates get authored; this changes what happens when authoring misses, which is the half Vision pillar 2 actually requires — all four recorded instances were caught by an agent noticing after the fact, and one of them (TASK-034) was noticed and worked around without the rule ever changing.
+
+  `wp.js set TASK-XXX status active` runs the task's gate before performing the transition. Gate fails → transition proceeds normally (the expected case). Gate passes → refuse, print the gate and its output, exit with a code distinct from the existing failure paths so `/forge-next` can tell this refusal from a lint rejection or an invalid transition.
+
+  The insertion point already exists and is narrow: `cmdSet`'s `key === 'status'` branch has a `value === 'active'` block enforcing the one-active-task constraint, with `--force` and `die(message, code)` both in place, and `spawnSync` is already imported for the `check-workplan.js` call in `writeAndLint`. Follow `notes/TASK-063#decisions` for the established shape — that task made the foundation-observation halt mechanical in `wp.js next` with the same force/exit-code pattern, and its triage-not-override reasoning applies here unchanged.
+
+  Three behaviours to get right:
+  - **`manual:` gates are exempt.** There is no command to run; skip the probe rather than shelling out to a prose description.
+  - **Only `pending → active`.** Resuming an already-`active` task performs no transition and must not re-probe — the same exemption `wp.js next` makes for `resume-active`.
+  - **`--force` is the human's.** Agents repair the gate instead, via `wp.js set TASK-XXX gate '<discriminating gate>'` on the still-`pending` task, then retry. There is no deadlock: editing a pending task's Gate field requires no active transition.
+
+  Fixtures in `test-wp.sh` (the gate greps for `vacuous` there, so the fixture names are load-bearing): a task whose gate fails pre-work transitions cleanly; a task whose gate passes pre-work is refused with the distinguishing exit code; a `manual:` gate transitions without probing; `--force` overrides the refusal. Check each passing fixture for discrimination the way TASK-056 did — a fixture that would pass with the feature reverted proves nothing.
+
+  `wp.js` is embedded verbatim in `/forge-init` behind a `<!-- forge-init:embed -->` marker and content-diffed by `test-init-scripts.sh`, so the block must be re-copied whole (CONTRACT#rules/embedded-payload-synchronization). TASK-072 also rewrites `wp.js` and re-copies the same block; whichever lands second re-copies over the other's change rather than reverting it.
+
+## [TASK-075] Update /forge-next to handle a refused gate-discrimination probe
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-074
+- **Context:** CONTRACT#rules/gate-discrimination, CONTRACT#interfaces/command-forge-next, CONTRACT#data-model/status.md-data-model, CONTRACT#rules/workplan-access-discipline
+- **Gate:** `bash .forge/tests/smoke.sh && node .forge/scripts/prose.js .claude/commands/forge-next.md "vacuous" "gate-discrimination probe" && node .forge/scripts/check-workplan.js && echo "forge-next probe handling present"`
+- **Notes:** The command-side half of TASK-074. `wp.js` refuses the transition; `/forge-next` step 3 has to know what the refusal means and what to do, or the session halts on an error message with no route forward.
+
+  Two routes, and distinguishing them is the whole deliverable — they look identical from the exit code:
+
+  1. **The gate is wrong.** Repair it via `wp.js set TASK-XXX gate '<discriminating gate>'` while the task is still `pending`, then retry the transition. The repaired gate lands in this task's diff, which is what makes the fix reviewable at the checkpoint rather than invisible.
+  2. **The gate is right and the work is already done** — a prior task absorbed this task's scope. This is the OBS-008 condition. It is a scope finding, not a gate defect: report it to the human and do not silently mark the task `done`, which is what happened to TASK-033.
+
+  Never pass `--force`; it is the human's override (CONTRACT#rules/gate-discrimination, obligation 2).
+
+  Assertions go in `smoke.sh` via `prose.js`, following TASK-036/TASK-037's precedent — both found their declared workplan gates too weak to carry the real check and put the load-bearing assertions in the suite. Here the declared gate is already phrase-specific, so the suite assertions are reinforcement rather than rescue.
+
+  Scope boundary: this task does not add an Observations row for the OBS-008 condition automatically. `/forge-next` already appends observation rows at completion (TASK-053) and the existing channel covers it; a second, probe-specific writer would be a parallel path to the same table.
+
+## [TASK-076] Repair three gates that cannot fail
+
+- **Status:** pending
+- **Type:** fix
+- **Depends:** none
+- **Context:** CONTRACT#rules/gate-discrimination, CONTRACT#rules/gate-patterns, CONTRACT#interfaces/command-forge-plan, CONTRACT#data-model/spec-data-model, CONTRACT#rules/test-first-convention
+- **Gate:** `bash .forge/tests/test-check-spec.sh && bash .forge/tests/smoke.sh && node .forge/scripts/prose.js .claude/commands/forge-plan.md "Describe what this project builds" && ! grep -q "awk '\$1 >=" .claude/commands/forge-plan.md .forge/CONTRACT.md && grep -q "Fixture 5c" .forge/tests/test-check-spec.sh && echo "vacuous gates repaired"`
+- **Notes:** Three independent instances of the OBS-013 failure mode, found by the 2026-08-17 workflow audit. Grouped because they are one defect class, not because they share code — each is a check that structurally cannot fail. Sequenced alongside TASK-073..075: those change what gates get *authored*, these repair gates already shipped.
+
+  1. **The VISION stub check never matches.** [forge-plan.md:23](.claude/commands/forge-plan.md:23) stops planning if VISION.md "contains `<!-- What this project builds`" — but the stub `/forge-init` actually writes reads `<!-- Describe what this project builds. One paragraph. -->` ([forge-init.md:16](.claude/commands/forge-init.md:16)). The literal never matches, so `/forge-plan` will happily plan against an untouched VISION.md. Verified: `grep -c "Describe what this project builds" .claude/commands/forge-plan.md` returns 0. Fix the literal in forge-plan.md to match what forge-init writes. Note the irony before changing anything else: CONTRACT#interfaces/command-forge-plan's UX stub-detection bullet and TASK-024's notes both cite this check as the *model* for stub detection, so the pattern was propagated from a broken original.
+
+  2. **The screen-mapping gate always exits 0.** `grep -c "^#### Screen:" .forge/UX.md | awk '$1 >= N'` is prescribed in three places — [CONTRACT.md:339](.forge/CONTRACT.md:339), [forge-plan.md:112](.claude/commands/forge-plan.md:112), and forge-plan.md's step 6 gate table. awk's exit code does not reflect whether the condition matched, and the pipeline's exit is awk's, so a mapping task with 1 of 5 screens written passes. Verified live: `printf '#### Screen: A\n' | grep -c "^#### Screen:" | awk '$1 >= 5'` exits 0. Replace all three with `test $(grep -c "^#### Screen:" .forge/UX.md) -ge N`. This is a CONTRACT edit — follow Rules/Contract Amendment Protocol, and note that no *existing* task carries this gate form, so no `fix` task is owed downstream.
+
+  3. **`check-spec.js --max-unresolved` disables itself on a malformed value.** [check-spec.js:13](.forge/scripts/check-spec.js:13) does `Number(args[idx + 1])`; a missing or non-numeric value yields `NaN`, and `count > NaN` is always false — so the unresolved-marker check is skipped entirely rather than applied strictly. Verified: `node .forge/scripts/check-spec.js .forge/SPEC.md --max-unresolved` (no value) exits 0 without complaint. Guard with `Number.isFinite` and reject a malformed value as a usage error rather than defaulting silently in either direction.
+
+  Gate discrimination check, since this task is about exactly that: assertion 1 fails now (`Describe what this project builds` appears nowhere in forge-plan.md); assertion 2 fails now (the awk form is present 2× in forge-plan.md, 1× in CONTRACT.md); assertion 3 fails now (`test-check-spec.sh` covers `--max-unresolved 1` at fixture 5b but has no 5c — the malformed-value case is the new fixture, and `Fixture 5c` is the name to use). `test-check-spec.sh` carries the test-first obligation for item 3 per Rules/Test-First Convention.
+
+## [TASK-077] Reconcile four Contract passages that misdescribe their own commands
+
+- **Status:** pending
+- **Type:** clarify
+- **Depends:** none
+- **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#interfaces/command-forge-plan, CONTRACT#interfaces/command-forge-status, CONTRACT#rules/traceability, CONTRACT#data-model/task-record-data-model, CONTRACT#rules/contract-amendment-protocol
+- **Gate:** `node .forge/scripts/check-workplan.js && bash .forge/tests/smoke.sh && node .forge/scripts/prose.js .forge/CONTRACT.md "observations every session" "blocked tasks" && grep -q '\*\*Blocked tasks:\*\*' .claude/commands/forge-status.md && grep -q "no side effects" .forge/STATUS.md && echo "contract self-contradictions reconciled"`
+- **Notes:** Four places where CONTRACT.md disagrees with itself or describes a command more narrowly than the command actually behaves — same defect family as OBS-001/OBS-004 and TASK-067, but distinct instances TASK-067 does not cover. All four are Contract-text corrections plus one command-prose line; no script changes. Log one dated Decisions row covering all four.
+
+  1. **forge-next's Reads line contradicts its own Observations bullet.** [CONTRACT.md:357](.forge/CONTRACT.md:357) annotates `.forge/STATUS.md` as "(checkpoint tasks only)", but the same interface's Observations bullet at line 374 requires reading Observations *before selecting a task* — every session — and `/forge-next` steps 1 and 8 implement exactly that. The Reads line is the stale half. Target wording names both uses: checkpoint packets and the every-session observation read. The gate asserts the phrase `observations every session`, which appears nowhere in CONTRACT.md today.
+
+  2. **Interfaces item 8 still states the pre-TASK-061 Files rule.** [CONTRACT.md:368](.forge/CONTRACT.md:368) says `/forge-next` "appends `Files: <comma-separated list>` to the task's Notes field" unconditionally, but Rules/Traceability was amended on 2026-08-15 to branch on the externalization threshold: inline tasks keep the `Files` line, externalized tasks put it in the record's `## Files` and never duplicate it inline. Two sections now specify different writes for one operation. Traceability is the amended, more specific one — point item 8 at it rather than restating the branch a third time.
+
+  3. **`/forge-plan`'s "no side effects" claim is false as written.** [forge-plan.md:27](.claude/commands/forge-plan.md:27) says "This command's only write is WORKPLAN.md" and its Constraints repeat "No side effects beyond writing WORKPLAN.md" — yet step 2 writes `<!-- ASSUMED -->` annotations into CONTRACT.md and the spec-conflict check appends STATUS.md Open Questions rows, both licensed by CONTRACT#interfaces/command-forge-plan's own Does bullets. [CONTRACT.md:352](.forge/CONTRACT.md:352)'s Outputs line has the same gap. An agent honoring the constraint literally would refuse the spec-conflict logging its own step 2 mandates. Decide the honest scope — the two writes are contract-licensed and should stay — and correct both the command prose and the Outputs line to name all three artifacts.
+
+  4. **`/forge-status` computes a blocked-tasks list that nothing reports.** `wp.js status` already derives and prints blocked tasks — the data is paid for on every invocation — but [forge-status.md:29](.claude/commands/forge-status.md:29)-57's Output Format has no slot for it, so a blocked task surfaces only as a number in the counts line. A task sitting `blocked` with no STATUS.md Blockers row is invisible in the report. Note the Contract's forge-status Outputs line says "blockers from STATUS.md", which is the **Blockers table** — a different thing from blocked tasks, and probably how the gap opened. Add a `**Blocked tasks:**` slot to the Output Format (omitted when none, matching the other conditional slots) and amend `CONTRACT#interfaces/command-forge-status`'s Does and Outputs to name it. This is the one item touching a command file rather than only Contract text; it stays read-only and adds no new computation.
+
+  **Why item 4 is here rather than in its own task:** it is the same file, the same section type (Interfaces bullets narrower than reality), and the same Decisions row as items 1-3, so a separate session would re-read the same context to write one line. This follows the lumping precedent the human set on TASK-024 → TASK-043/044.
+
+  **The Decisions-row assertion is phrase-based, not count-based, and that is deliberate.** This gate originally read `test $(grep -c "^| 2026-" .forge/STATUS.md) -gt 26`; the OBS-009 reopening row landed the same day and satisfied it pre-work within the hour — a live demonstration of the rot that has already made TASK-067/068's `-gt 24` vacuous. A row count asserts that *someone wrote something*, which any unrelated row satisfies. `grep -q "no side effects" .forge/STATUS.md` asserts that *this* decision was recorded, and it cannot be satisfied by another task's row. Item 3's Decisions row must therefore contain the phrase `no side effects` verbatim. When writing gates for the other count-based clauses in this workplan, prefer this shape.
+
+## [TASK-078] Bring check-ux-spec.js's forge-init payload under the drift test
+
+- **Status:** pending
+- **Type:** fix
+- **Depends:** TASK-069
+- **Context:** CONTRACT#rules/embedded-payload-synchronization, CONTRACT#interfaces/command-forge-init, CONTRACT#rules/gate-patterns, notes/TASK-062#decisions
+- **Gate:** `bash .forge/tests/test-init-scripts.sh && bash .forge/tests/test-check-ux-spec.sh && bash .forge/tests/smoke.sh && grep -q "forge-init:embed .forge/scripts/check-ux-spec.js" .claude/commands/forge-init.md && echo "ux-spec payload content-diffed"`
+- **Notes:** The most serious single finding of the 2026-08-17 audit, and the only one shipping a *reverted bug fix* to every new project.
+
+  `/forge-init` step 8 embeds `check-ux-spec.js`, but the embedded copy is the **pre-TASK-050 implementation**: ad-hoc `/^#{1,4} /m` regex scanning, no `lib/markdown.js` require, not fence-aware, and missing the CRLF normalization. TASK-050 rewrote the live script to be fence-aware through the shared resolver — and TASK-050's Files list does not include `forge-init.md`, so the embed was never re-copied. TASK-043 had previously patched this same block for the column-scoping fix, establishing that keeping it in sync was understood to matter; the sync then lapsed anyway, which is the argument for a mechanism over diligence.
+
+  Consequence: every project scaffolded since TASK-050 receives a `check-ux-spec.js` that truncates a screen section at the first fenced block — the exact defect TASK-050's fixture 3 was written to prove fixed. Verified by diffing the embedded block against `.forge/scripts/check-ux-spec.js`: structurally divergent, not whitespace.
+
+  This is a live violation of all three requirements of CONTRACT#rules/embedded-payload-synchronization — no `forge-init:embed` marker, not byte-identical to its original, not covered by any content diff. `test-init-scripts.sh` keys on the markers, so the block is invisible to it.
+
+  Three changes:
+  1. Re-copy `.forge/scripts/check-ux-spec.js` whole into step 8's fenced block, replacing the stale payload. The live script is authoritative — but read both first and confirm nothing in the embed is a fix the live file never received.
+  2. Add `<!-- forge-init:embed .forge/scripts/check-ux-spec.js -->` immediately before the fence.
+  3. Extend `test-init-scripts.sh` to cover it. `check-ux-spec.js` is conditional on the step 6 interface question, unlike the four unconditional scripts the test covers today — the diff must key on marker presence rather than a hardcoded list, so a project answering "no" is not a test failure.
+
+  **Sequenced after TASK-069** deliberately: that task extends `test-init-scripts.sh` to three more script payloads, and both tasks edit the same test. Landing this second means extending an already-extended test rather than colliding with it. TASK-069's scope explicitly excludes restructuring how forge-init distributes scripts; this task inherits that boundary — re-copy and cover, do not redesign. If TASK-041's plugin-packaging investigation lands first and changes distribution, revisit rather than executing this as written.
+
+## [TASK-079] Make the manifest slug-matching rule normative in the Contract
+
+- **Status:** pending
+- **Type:** clarify
+- **Depends:** none
+- **Context:** CONTRACT#data-model/context-manifest, CONTRACT#interfaces/command-forge-next, CONTRACT#rules/contract-amendment-protocol, CONTRACT#rules/manifest-completeness
+- **Gate:** `bash .forge/tests/test-markdown.sh && bash .forge/tests/smoke.sh && node .forge/scripts/prose.js .forge/CONTRACT.md "alphanumeric compaction" && node .forge/scripts/prose.js .claude/commands/forge-next.md "alphanumeric compaction" && grep -q "claudemd-integration-block" .forge/tests/test-markdown.sh && grep -q "alphanumeric compaction" .forge/STATUS.md && echo "slug rule reconciled"`
+- **Notes:** `/forge-next` documents a slug algorithm that `lib/markdown.js` does not implement, and the documented one fails on references live in this workplan today.
+
+  **The divergence.** [forge-next.md:97](.claude/commands/forge-next.md:97)-101 instructs: lowercase the heading, "replace runs of non-alphanumeric characters with single hyphens, trim leading/trailing hyphens", then "compare to the reference segment" — a hyphen-preserving slugify applied to the heading only. `lib/markdown.js`'s `normalizeSlug` instead strips every non-alphanumeric character outright, and applies that compaction to **both** sides.
+
+  **Verified against real refs in this file:**
+
+  | Heading | Reference segment | Documented | Implemented |
+  | ------- | ----------------- | ---------- | ----------- |
+  | `### CLAUDE.md Integration Block` | `claudemd-integration-block` (TASK-006) | `claude-md-integration-block` → **no match** | `claudemdintegrationblock` → match |
+  | `### UX.md Data Model` | `ux.md-data-model` (TASK-017) | `ux-md-data-model` → **no match** | `uxmddatamodel` → match |
+  | `## Data Model` | `data-model` | `data-model` → match | `datamodel` → match |
+
+  So an agent following step 3's prose literally — which is the documented fallback when `lib/markdown.js` is absent, and the only instruction a human reading the command has — would report "Could not resolve context reference" for manifests that `check-workplan.js` validates as fine. The failure is silent in the worst direction: the agent proceeds with partial context and warns about a reference that is actually correct.
+
+  **The fix is not just to correct the prose.** The compaction rule currently lives in exactly one command file and one script, and CONTRACT#data-model/context-manifest — which is where manifest resolution is specified — is silent on it. That is the same defect the 2026-08-16 decision fixed for requirement-heading matching, and its reasoning applies verbatim: *"A resolution rule that lives only in a consumer is not a contract."* TASK-050's extraction dropped the req-slug rule precisely because no Contract section named it. Three edits:
+
+  1. **Amend `CONTRACT#data-model/context-manifest`** to state the matching rule normatively, beside the requirement-heading exception already there: both the heading text and the reference segment are compacted to lowercase alphanumerics before comparison. Explain *why* it is looser than a strict hyphen-slug — it tolerates the mixed `ux.md-data-model` / `claudemd-integration-block` punctuation this project's own hand-written Context fields already carry, per TASK-025's note (3). Follow Rules/Contract Amendment Protocol.
+  2. **Rewrite [forge-next.md:97](.claude/commands/forge-next.md:97)-101** to describe what actually happens, and point at the Contract section as the normative source rather than restating the algorithm a second time. Keep the documented exceptions — the `Flow:`/`Screen:` prefix stripping and the bracketed req-slug rule — which are correct as written.
+  3. **Add a fixture to `test-markdown.sh`** covering a punctuation-mismatched reference. `claudemd-integration-block` against a `CLAUDE.md Integration Block` heading is the case to pin, since it is live in TASK-006 and is the one a hyphen-preserving implementation would break. The file's header comment explains it exists because a matching rule was silently dropped once; this is the second such rule.
+
+  **Not in scope: changing the implementation.** `normalizeSlug` is correct and the Contract should ratify it. A strict hyphen-preserving slugify would break every `.md`-derived reference in this workplan — TASK-025 rejected that explicitly. This task moves the rule to where it is addressable, it does not relitigate it.
+
+  Gate discrimination: `alphanumeric compaction` appears in neither CONTRACT.md, forge-next.md, nor STATUS.md today, and `test-markdown.sh` has no `claudemd-integration-block` fixture — all four clauses verified failing at authoring time. The Decisions-row assertion is phrase-based rather than a row count, for the reason spelled out in TASK-077's notes.
+
+## [TASK-080] Add a drift test over the task-type enum's five restatements
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** none
+- **Context:** CONTRACT#interfaces/task-types, CONTRACT#rules/embedded-payload-synchronization, CONTRACT#rules/workplan-lint, CONTRACT#rules/gate-patterns, CONTRACT#rules/test-first-convention
+- **Gate:** `bash .forge/tests/test-task-types.sh && bash .forge/tests/smoke.sh && grep -q "test-task-types" .forge/tests/smoke.sh && echo "task-type enum drift-checked"`
+- **Notes:** Closes OBS-012, triaged `accepted` on 2026-08-17. The row says four restatement sites; there are **five**:
+
+  | # | Site | Kind |
+  | - | ---- | ---- |
+  | 1 | [lib/workplan.js:25](.forge/scripts/lib/workplan.js:25) `VALID_TYPES` | executable — the only copy that can reject a bad value |
+  | 2 | [CONTRACT.md:428](.forge/CONTRACT.md:428)-437 Task Types table | normative prose |
+  | 3 | [forge-plan.md:74](.claude/commands/forge-plan.md:74) fenced task-format block | copyable template |
+  | 4 | [forge-plan.md:93](.claude/commands/forge-plan.md:93)-102 task-types table | prose |
+  | 5 | [forge-next.md:41](.claude/commands/forge-next.md:41) wp.js output-shape block | documents literal script output |
+
+  Site 5 is the one OBS-012 missed — worth noting, because an incomplete list of copies is the same failure as an unchecked copy.
+
+  **Do not consolidate.** Each prose copy earns its place: forge-plan's fenced block is a template a planner reproduces verbatim, forge-next's block documents what `wp.js` actually prints, and the two tables carry per-type gate guidance that a pointer would lose. The duplication is deliberate; the *absence of a check on it* is the defect. `checkpoint` silently fell out of site 4 and stayed missing until TASK-036 noticed by hand — Vision pillar 2's exact failure mode.
+
+  **Build `.forge/tests/test-task-types.sh`:** parse `VALID_TYPES` out of `lib/workplan.js` as the source of truth, then assert every member appears at each of the four prose sites, and — equally important — that no site names a type absent from `VALID_TYPES`. Both directions matter: a type added to the Contract but never to the enum is as broken as one dropped from a table, and only the second direction would have caught the `checkpoint` drift. Follow `test-init-scripts.sh`'s shape (derive from the original, assert against the copies) rather than hardcoding the eight type names, which would make the test one more copy to drift.
+
+  Wire it into `smoke.sh` beside the other suites, per the pattern at [smoke.sh:252](.forge/tests/smoke.sh:252)-269.
+
+  **Test-first:** write the test before touching anything, and confirm it fails on a seeded drift — delete `checkpoint` from forge-plan.md's table, watch it fail, restore. A drift test that has never seen drift proves nothing, which is the lesson of TASK-056's fixture-discrimination check.
+
+  Gate discrimination: `.forge/tests/test-task-types.sh` does not exist and `smoke.sh` does not reference it, both verified at authoring time — the gate cannot pass before the work.
+
+  **Scope boundary:** this is a check over the existing enum, not a change to it. Adding, removing, or renaming a task type is out of scope; if the test surfaces a genuine disagreement about what the enum *should* contain, log it and stop rather than picking a side.
+
 ## [TASK-046] Checkpoint: v0.3 machinery complete
 
 - **Status:** pending
 - **Type:** checkpoint
-- **Depends:** TASK-026, TASK-028, TASK-029, TASK-032, TASK-033, TASK-034, TASK-036, TASK-037, TASK-038, TASK-047, TASK-051, TASK-053, TASK-054, TASK-055, TASK-059, TASK-060, TASK-062, TASK-067, TASK-068, TASK-069, TASK-070, TASK-071
+- **Depends:** TASK-026, TASK-028, TASK-029, TASK-032, TASK-033, TASK-034, TASK-036, TASK-037, TASK-038, TASK-047, TASK-051, TASK-053, TASK-054, TASK-055, TASK-059, TASK-060, TASK-062, TASK-067, TASK-068, TASK-069, TASK-070, TASK-071, TASK-073, TASK-074, TASK-075, TASK-076, TASK-077, TASK-078, TASK-079, TASK-080
 - **Context:** CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#data-model/status.md-data-model
 - **Gate:** `manual: Review the v0.3 build span before validation and docs. Packet must contain: each task completed in the span with its description and Files line, the gate result for each, check-workplan.js output on the current workplan, current STATUS.md Open Questions and Risks, and the span's starting commit for rollback.`
-- **Notes:** First executable checkpoint in Forge's history — executing it is itself the live validation that TASK-035 and TASK-037 work. Span is 20 tasks, far over the cadence of 5: v0.3's own plan predates its checkpoint machinery, so this is the only position where a checkpoint is executable (see STATUS.md Decisions, 2026-07-31) — inserting a second checkpoint earlier in the span would hit the same "Template file missing" hard stop. Normal cadence applies from v0.4. Depends lists the span's leaf tasks, which transitively cover all of TASK-025..038 plus TASK-047 (added in a later planning pass the same day — the guard hooks are part of v0.3's unattended-execution machinery and must be reviewed in the same checkpoint, not deferred to v0.4) plus TASK-067..071 (the 2026-08-16 observation-backlog triage — these repair v0.3 machinery this checkpoint reviews, and TASK-069 in particular must land before TASK-039, whose gate asserts that `/forge-init` creates both check scripts). Q-006 evaluation: after passing or failing the packet, record whether this span read as a coherent review unit or as unrelated work reviewed together — that judgment is the evidence for or against feature-aligned checkpoint cadence, and it cannot be recovered later.
+- **Notes:** First executable checkpoint in Forge's history — executing it is itself the live validation that TASK-035 and TASK-037 work. Span is 20 tasks, far over the cadence of 5: v0.3's own plan predates its checkpoint machinery, so this is the only position where a checkpoint is executable (see STATUS.md Decisions, 2026-07-31) — inserting a second checkpoint earlier in the span would hit the same "Template file missing" hard stop. Normal cadence applies from v0.4. Depends lists the span's leaf tasks, which transitively cover all of TASK-025..038 plus TASK-047 (added in a later planning pass the same day — the guard hooks are part of v0.3's unattended-execution machinery and must be reviewed in the same checkpoint, not deferred to v0.4) plus TASK-067..071 (the 2026-08-16 observation-backlog triage — these repair v0.3 machinery this checkpoint reviews, and TASK-069 in particular must land before TASK-039, whose gate asserts that `/forge-init` creates both check scripts) plus TASK-073..075 (the OBS-013 gate-discrimination work — these must land *before* this packet, not after, because the packet re-runs every gate in the span and a span of vacuous gates re-run fresh is a span of evidence that proves nothing) plus TASK-076..078 (the 2026-08-17 workflow audit — TASK-076 repairs three already-shipped gates that cannot fail, which is the same fresh-re-run argument as TASK-073..075; TASK-077 reconciles three self-contradicting Contract passages the packet's readers would otherwise hit; TASK-078 fixes a stale `/forge-init` payload shipping a reverted bug fix to every new project). Q-006 evaluation: after passing or failing the packet, record whether this span read as a coherent review unit or as unrelated work reviewed together — that judgment is the evidence for or against feature-aligned checkpoint cadence, and it cannot be recovered later.
 
 ## [TASK-039] End-to-end validation of v0.3 pipeline
 

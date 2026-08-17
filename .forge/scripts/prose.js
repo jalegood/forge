@@ -3,7 +3,7 @@
 //
 // Why this exists: gates assert that a command file *instructs* something, but
 // several command files now carry large fenced payloads — `/forge-init` embeds
-// five scripts verbatim and is 88% fenced by line count. A plain
+// four scripts verbatim and is 88% fenced by line count. A plain
 // `grep -q "Observations" .claude/commands/forge-init.md` matched a comment
 // inside the embedded wp.js source and reported the deliverable present when it
 // was never built: TASK-031 passed that way while /forge-init created no

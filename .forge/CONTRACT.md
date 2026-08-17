@@ -25,7 +25,7 @@ Forge operates on these file artifacts:
 | Unattended Guards | `.forge/scripts/guard-push.sh`, `.forge/scripts/guard-branch.sh`, `.forge/scripts/guard-secrets.sh` | Forge-managed | Deterministic PreToolUse hooks: block `git push`, block off-branch commits during unattended runs, block commits matching common secret patterns |
 | Version   | `.forge/VERSION`              | Forge-managed          | Engine version stamp + canonical repo pointer, consumed by `/forge-sync` |
 | Task Records | `.forge/notes/TASK-XXX.md`   | AI (90%) / Human (10%) | Durable per-task narrative: outcome, decisions, deviations, files. Manifest-addressable. Self-sufficient without git |
-| Workplan Script | `.forge/scripts/wp.js`     | Forge-managed          | Deterministic workplan query and mutation — task selection, status projection, targeted field writes |
+| Workplan Script | `.forge/scripts/wp.js`     | Forge-managed          | Deterministic workplan query and mutation — task selection, status projection, targeted field writes, gate-discrimination probe at `pending → active` |
 | Markdown Resolver | `.forge/scripts/lib/markdown.js` | Forge-managed    | Shared fence-aware heading parser and manifest-reference resolver; every check script consumes it <!-- ASSUMED: table row added to close OBS-005; the file was already named in Interfaces/`/forge-init` but never listed as an artifact --> |
 | Workplan Parser | `.forge/scripts/lib/workplan.js` | Forge-managed     | The one parser for the WORKPLAN.md format, shared by `check-workplan.js` and `wp.js` |
 | Prose Gate Helper | `.forge/scripts/prose.js`  | Forge-managed          | Greps a markdown file's prose while ignoring fenced payloads, so a gate cannot pass on text inside an embedded script |
@@ -343,6 +343,7 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
   - **DESIGN coverage:** When DESIGN.md is present and has tokens, feature tasks implementing screens include `DESIGN#tokens` in their context manifests. When DESIGN.md has component specs relevant to a screen, widen to include `DESIGN#components/[name]`. <!-- ASSUMED: additive to existing manifest rules; does not gate on DESIGN.md presence -->
   - **SPEC coverage:** When SPEC.md (or `.forge/specs/`) is present, `feature` and `fix` task manifests include the `SPEC#` requirement sections their deliverable implements, alongside the `CONTRACT#` sections that constrain it. The manifest completeness test spans both files — behavior detail without its constraint, or constraint without its behavior, fails the test (see Rules/Spec Precedence).
   - **Checkpoint cadence:** Inserts a `checkpoint` task at each dependency-phase boundary or after every 5 consecutive non-checkpoint tasks, whichever comes first, listing the span's tasks in `Depends` (see Rules/Checkpoint Cadence). <!-- ASSUMED: cadence of 5 -->
+  - **Gate discrimination:** authors every gate so it fails against the pre-work state and passes after the work (see Rules/Gate Discrimination). A gate asserting a topic word the target file may already contain is rejected at authoring time in favour of one asserting the change, the covering test suite, or `manual:`.
   - **Workplan lint:** After writing WORKPLAN.md, runs `node .forge/scripts/check-workplan.js`. A nonzero exit means the generated plan violates an invariant — fix and re-run before reporting completion.
   - **Observation intake:** Consumes STATUS.md Observations rows marked `accepted` as planning input. Each becomes a candidate task, subject to the same Contract-First coverage requirement as any other deliverable. Rows marked `open` or `declined` are not planned.
 - **Output task format:** Each task in WORKPLAN.md uses this structure: `## [TASK-XXX] Description` followed by fields — Status (`pending` for new tasks), Type (`scaffold|feature|clarify|refactor|fix|investigate|ux-spec|checkpoint`), Depends (`none` or comma-separated task IDs), Context (manifest references like `CONTRACT#section-name` or `UX#flows/flow-name/screen-name`), Gate (shell command or `manual:` prefix), Notes (empty for new tasks). Task IDs are unique and assigned from a monotonic counter: the next ID is `max(existing) + 1`, computed at write time against the current file — never inferred from the last ID read earlier in the session. Gaps are normal (deleted or abandoned tasks). An ID's ordinal carries no ordering meaning; see Rules/Task Ordering.
@@ -359,7 +360,7 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
 - **Does:**
   1. Selects the target task (see Task selection above)
   2. Resolves the context manifest: parses the `Context` field references (e.g., `CONTRACT#interfaces/command-forge-status`), extracts matching markdown sections from the appropriate file — CONTRACT.md for `CONTRACT#` references, UX.md for `UX#` references, DESIGN.md for `DESIGN#` references, SPEC.md for `SPEC#` references, `.forge/specs/name.md` for `specs/name#` references (each section runs from its header through the next same-level header), concatenates them
-  3. Marks task `active` in WORKPLAN.md
+  3. Marks task `active` in WORKPLAN.md via `wp.js set`, which runs the gate-discrimination probe first (Rules/Gate Discrimination). A refused transition means the gate is vacuous — repair the gate as part of this task's diff, or report the prior-task scope overlap it exposes. Do not pass `--force`.
   4. Loads the prompt template from `.forge/templates/{type}.md` matching the task's Type field. If the file does not exist, stop and tell the user: "Template file missing. Run `/forge-init` to create project templates." Do not proceed with inline fallbacks.
   5. Injects resolved context into the template at `{{context}}`, plus task details into `{{task_id}}`, `{{task_description}}`, `{{gate}}`
   6. Executes the task following the template instructions
@@ -624,6 +625,29 @@ Gates validate deliverable structure, not quality. Different deliverable types r
 
 - Automated gates are always preferred. Use `manual:` only when no structural check is possible.
 - If a task seems to need a `manual:` gate, first consider whether it can be split into an automatable structural task and a smaller manual verification task.
+- A gate must also distinguish done from not-done — see Rules/Gate Discrimination. An automated gate that already passes before the work is worse than a `manual:` one, because it reads as verification.
+
+### Gate Discrimination
+
+A gate's job is to tell a finished task from an unfinished one. A gate that already passes against the repository *before* the task's work begins certifies nothing — it is a **vacuous gate**, and the task it guards ships unverified while reading as verified. Four instances are on record (STATUS.md OBS-008, OBS-010, OBS-013, and TASK-034), every one noticed by an agent after the fact and none by a mechanism. That is the failure mode Vision pillar 2 exists to rule out.
+
+**The requirement:** every gate must fail against the pre-work state and pass against the post-work state. Both halves are load-bearing, and only one is currently caught — a gate that never passes blocks its task immediately and loudly, while a gate that always passes is silent.
+
+Three obligations, at three points in the pipeline:
+
+1. **Authoring — `/forge-plan`.** A gate asserts the change the task makes, not the topic the task is about. `grep -qi "checkpoint" <file>` names a topic and is satisfied by any prior mention; `node .forge/scripts/prose.js <file> "<phrase this task adds>"` names a change. Where a deliverable has no phrase stable enough to assert, the gate asserts through the test suite covering that deliverable, or it is `manual:`.
+
+   **Interaction with Rules/Test-First Convention.** A bare test-suite invocation (`bash .forge/tests/smoke.sh`, `npm test`) passes before the work by construction, because the assertions that would fail have not been written yet. Rules/Test-First Convention requires the gate to *include* a test command; this rule requires it not to *stop* there. A `feature` or `fix` gate therefore names the new assertion alongside the suite — the fixture file the task creates, the new test script, the phrase the task adds — so the suite invocation is never what carries discrimination on its own.
+
+2. **Execution — `wp.js`, at the `pending → active` transition.** Marking a task `active` runs its gate first. A gate that passes on the pre-work state means the task must not proceed on it: the transition is refused, the gate and its output are printed, and the exit code distinguishes this refusal from other failures. `manual:` gates are exempt — there is no command to run. `--force` is the human's override, matching `wp.js next --force`; agents do not pass it.
+
+   Placing the probe at the state transition rather than in `/forge-next`'s prose is deliberate. `/forge-next` reaches the workplan only through `wp.js` (Rules/Workplan Access Discipline), so a task cannot enter execution without passing the probe. A step an agent is merely told to run is a step it may skip — which is how all four recorded instances happened.
+
+3. **Repair, not bypass.** A refused transition is fixed by rewriting the gate to discriminate, in the same session and the same diff as the task's work. A gate that passes because a *prior* task already delivered this task's scope is not a gate defect — it is the OBS-008 condition, and it is reported to the human as a scope finding rather than silently absorbed.
+
+**Why not `check-workplan.js`.** The lint parses; it does not execute. Judging a gate vacuous without running it requires an allowlist of side-effect-free commands, and nearly every gate in a Forge project opens with `bash .forge/tests/…`, which no allowlist can clear by inspection. The lint would therefore skip exactly the gates that matter, while reading as coverage. The transition probe runs the real command at the real moment and needs no allowlist. <!-- ASSUMED: allowlist infeasibility argued from this repo's own gate corpus, where all but two pending-task gates invoke a shell script -->
+
+**Precedence over `manual:` avoidance.** Rules/Gate Patterns prefers automated gates. It does not prefer an automated gate that certifies nothing: where no discriminating automated check exists, the gate is `manual:`.
 
 ### UX-Spec-First
 

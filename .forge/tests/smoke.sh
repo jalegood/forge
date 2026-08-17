@@ -26,6 +26,11 @@ grep -q "STATUS.md" .claude/commands/forge-spec.md
 grep -q "check-spec" .claude/commands/forge-spec.md
 echo "  forge-spec.md: OK"
 
+test -s .claude/commands/forge-sync.md
+grep -q "VERSION" .claude/commands/forge-sync.md
+grep -qi "forge-managed" .claude/commands/forge-sync.md
+echo "  forge-sync.md: OK"
+
 # --- /forge-spec interviews before it drafts (TASK-032) ---
 # CONTRACT#interfaces/command-forge-spec makes the intake interview the point of
 # the command: an unasked question becomes an assumption propagated into every
@@ -233,6 +238,59 @@ node .forge/scripts/prose.js .claude/commands/forge-next.md \
 node .forge/scripts/prose.js .claude/commands/forge-next.md \
   "hard stop|halt" "do not select|not select further|select no further"
 echo "  forge-next.md checkpoint execution: OK"
+
+# --- /forge-sync updates Forge-managed files, never project-owned ones (TASK-038) ---
+# CONTRACT#interfaces/command-forge-sync: sync reads .forge/VERSION (line 1
+# engine version, line 2 canonical repo URL), fetches the canonical copies of
+# the three Forge-managed globs, classifies each local file, applies only what
+# the human approves file by file, and never touches a project-owned artifact.
+# That last rule is the load-bearing one: overwriting CONTRACT.md or WORKPLAN.md
+# destroys work no upstream copy can restore, so the untouchable set is asserted
+# name by name rather than as one phrase that a single edit could hollow out.
+#
+# Asserted through prose.js, not grep: forge-sync.md fences the VERSION format,
+# the per-file summary output, and shell commands. The task's own gate
+# (`grep -q "VERSION"`, `grep -qi "never"`) matches inside any of those fences
+# and passes with no work done — these assertions are what actually holds it.
+echo "Checking forge-sync contract..."
+
+# reads the version stamp, and knows what each of its two lines carries
+node .forge/scripts/prose.js .claude/commands/forge-sync.md \
+  "\.forge/VERSION" "engine version" "canonical" "repo|repository"
+# the three Forge-managed globs it is allowed to fetch and replace
+node .forge/scripts/prose.js .claude/commands/forge-sync.md \
+  "commands/forge-|forge-\*\.md" "templates/" "check-"
+# all four per-file classifications from the Contract
+node .forge/scripts/prose.js .claude/commands/forge-sync.md \
+  "unchanged" "local-only|local customization" "upstream-updated|upstream update" "conflict"
+# approval is per file, and a local customization is never silently overwritten
+node .forge/scripts/prose.js .claude/commands/forge-sync.md \
+  "file by file|per-file|each file" "approv" "never[^.]*silently|silently[^.]*overwrit"
+# every project-owned artifact named untouchable, one at a time
+for artifact in VISION CONTRACT SPEC WORKPLAN STATUS UX DESIGN; do
+  node .forge/scripts/prose.js .claude/commands/forge-sync.md "$artifact\.md"
+done
+node .forge/scripts/prose.js .claude/commands/forge-sync.md "specs/"
+# stated as a prohibition, not merely as a list
+node .forge/scripts/prose.js .claude/commands/forge-sync.md \
+  "never touch|does not touch|untouchable|never modif"
+# VERSION is restamped, and only after a sync that succeeded
+node .forge/scripts/prose.js .claude/commands/forge-sync.md \
+  "updat[^.]*VERSION|VERSION[^.]*updat|restamp" "successful|succeed"
+echo "  forge-sync.md contract: OK"
+
+# --- .forge/VERSION carries the engine stamp and the repo pointer ---
+# CONTRACT#data-model/artifacts: Forge-managed, "engine version stamp +
+# canonical repo pointer, consumed by /forge-sync". Both lines are asserted by
+# shape, since a sync that cannot parse either one has nothing to fetch from.
+echo "Checking VERSION stamp..."
+
+test -s .forge/VERSION
+# line 1 — semver engine version
+head -1 .forge/VERSION | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\r?$'
+# line 2 — canonical repo URL
+sed -n '2p' .forge/VERSION | grep -Eq '^https?://[^ ]+\r?$'
+echo "  VERSION: OK"
 
 # --- WORKPLAN.md task format is parseable ---
 echo "Checking WORKPLAN.md format..."
