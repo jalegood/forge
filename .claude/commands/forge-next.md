@@ -192,6 +192,24 @@ Follow the filled template's Instructions section to implement the task. This is
 - Do not modify CONTRACT.md without asking the human first.
 - If the task grows beyond what can be completed in this session, stop and proceed to step 8 (incomplete handling).
 
+#### Checkpoint tasks
+
+When the selected task's Type is `checkpoint`, execution produces no code. It assembles the **review packet** for the span this checkpoint closes, presents it, and stops (CONTRACT#interfaces/command-forge-next, Checkpoint tasks). `.forge/templates/checkpoint.md` drives the assembly; what follows is what this command guarantees around it.
+
+**The span is exactly the task IDs in the checkpoint's `Depends` field.** Do not reconstruct it from `git log`, and do not take it as "everything since the last checkpoint" — `/forge-plan` already recorded the span in `Depends` (CONTRACT#rules/checkpoint-cadence), and a re-derived span quietly omits or over-claims tasks. Read each one through the projection, `node .forge/scripts/wp.js get TASK-XXX`.
+
+The packet contains, in order:
+
+1. **The span's tasks** — ID, description, and file list for each. The file list is the `Files:` line in the task's Notes when the notes are inline, or the `## Files` section of `.forge/notes/TASK-XXX.md` when the Notes name a record.
+2. **Fresh gate results.** Re-run every automated gate in the span now, at packet-assembly time, and report each with its **actual output** rather than a bare pass/fail (SPEC#requirements/req-checkpoint-fresh-gates). Task status is not evidence: a later task in the span can break an earlier task's gate, and catching that is the reason this checkpoint exists.
+   - A gate that fails fresh on a task whose status is `done` is a **regression** — flag it explicitly. `done` already means the gate passed at completion (step 8 marks `done` only after a pass), so nothing needs to have stored the earlier result.
+   - **A span containing a regression is never summarized as clean.** One regression outranks any number of passes in the summary line.
+   - Gates whose value begins with `manual:` are **listed with their verification steps, not executed.** Running them is the human's job at this checkpoint.
+3. **STATUS.md, quoted into the packet.** Open Questions (all rows, flagging any marked Blocking), Risks (all rows), open Observations with `foundation` severity first, and any Decisions row dated inside the span. Quote the rows — a packet that sends the human to a file to find out what happened is defective (CONTRACT#data-model/status.md-data-model).
+4. **The rollback.** Name the span's starting commit and the single command that undoes the span, and say plainly that it discards the span's work. The human runs it; you never do.
+
+**The checkpoint's own gate is always `manual:`.** Step 7 runs no shell command for it — present the packet, end with "Does this checkpoint pass? (pass/fail)", and **stop**. Do not select further work, do not mark the task `done`, and do not commit before the human answers. A checkpoint is a hard stop for the unattended loop (CONTRACT#rules/unattended-execution, hard stop 4): an unanswered packet halts every downstream task by construction, which is the checkpoint working rather than a stall.
+
 ### 7. Run the gate
 
 When you believe the task is complete, run the gate from the task's Gate field.
@@ -208,6 +226,7 @@ When you believe the task is complete, run the gate from the task's Gate field.
 - Present the gate description (everything after `manual:`) to the human.
 - Ask: "Does this gate pass? (yes/no)"
 - Proceed based on their answer.
+- **`checkpoint` tasks always take this branch** — their gate is `manual:` by construction, and what gets presented is the review packet from step 6, ending in "Does this checkpoint pass? (pass/fail)".
 
 ### 8. Handle the result
 
@@ -309,6 +328,21 @@ If during execution you determine the task cannot proceed — a dependency is mi
    ```
 2. Record what is blocking and what needs to happen to unblock, via `node .forge/scripts/wp.js append-notes TASK-XXX '...'`.
 3. Suggest a `clarify` or `fix` task if appropriate.
+
+**Checkpoint fails (the human failed the span):**
+
+1. Mark the checkpoint `blocked`. The span did not pass, and leaving it `active` would keep the one-active-task constraint from letting any `fix` task run:
+
+   ```bash
+   node .forge/scripts/wp.js set TASK-XXX status blocked
+   ```
+2. Append a row to `.forge/STATUS.md`'s Blockers table naming what failed, which tasks it blocks, and what has to happen to clear it (CONTRACT#data-model/status.md-data-model — `/forge-next` is the named writer of this table):
+
+   ```markdown
+   | What failed at the checkpoint | TASK-XXX, TASK-YYY | What has to happen to pass the span |
+   ```
+3. Record what the human directed — `fix` tasks, a workplan edit, or a rollback — via `node .forge/scripts/wp.js append-notes TASK-XXX '...'`.
+4. **Do not add the `fix` tasks yourself.** A failed checkpoint produces them (CONTRACT#rules/checkpoint-cadence), but the human writes them into the workplan, the same way an observation only ever becomes work through a human. The checkpoint returns to `pending` once they say it is ready to re-run.
 
 **Gate fails / Task incomplete:**
 

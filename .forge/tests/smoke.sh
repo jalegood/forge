@@ -193,6 +193,47 @@ node .forge/scripts/prose.js .claude/commands/forge-plan.md \
   "review packet" "produces no code"
 echo "  forge-plan.md checkpoint cadence: OK"
 
+# --- /forge-next executes checkpoint tasks as a review packet (TASK-037) ---
+# CONTRACT#interfaces/command-forge-next: when the selected task's Type is
+# `checkpoint`, execution means assembling the review packet described in
+# CONTRACT#rules/checkpoint-cadence, the gate is always `manual:`, and a block
+# appends a STATUS.md Blockers row. SPEC req-checkpoint-fresh-gates adds that
+# every automated gate in the span is re-run at packet-assembly time and reported
+# with its real output, because a later task in the span can silently break an
+# earlier task's gate — task status alone is not evidence.
+#
+# Asserted through prose.js, not grep: forge-next.md fences the wp.js output
+# block, whose Type line already lists `checkpoint` in the enum. The task's own
+# `grep -qi "checkpoint"` gate matches that fenced enum and passes with no work
+# done — these assertions are what actually holds the deliverable.
+echo "Checking forge-next checkpoint execution..."
+
+# execution is packet assembly, and the span is exactly Depends — not a git-log
+# guess at "everything since the last checkpoint"
+node .forge/scripts/prose.js .claude/commands/forge-next.md \
+  "review packet" "span is[^.]*Depends|Depends[^.]*is the span"
+# every packet element CONTRACT#rules/checkpoint-cadence requires
+node .forge/scripts/prose.js .claude/commands/forge-next.md \
+  "file list" "Open Questions" "Risks" "rollback"
+# SPEC req-checkpoint-fresh-gates: re-run at assembly time, reported with output
+node .forge/scripts/prose.js .claude/commands/forge-next.md \
+  "re-run every[^.]*gate" "fresh" "actual output"
+# a gate failing fresh on a `done` task is a regression, flagged explicitly, and
+# a span containing one is never summarized as clean
+node .forge/scripts/prose.js .claude/commands/forge-next.md \
+  "regression" "never[^.]*clean|not[^.]*as clean"
+# manual: gates inside the span are listed with their steps, never executed
+node .forge/scripts/prose.js .claude/commands/forge-next.md "not execut"
+# the checkpoint's own gate is always manual: — step 7 runs no shell command here
+node .forge/scripts/prose.js .claude/commands/forge-next.md "always[^.]*manual:" "pass/fail"
+# on fail: a STATUS.md Blockers row, and the fix tasks are the human's to add
+node .forge/scripts/prose.js .claude/commands/forge-next.md \
+  "Blockers" "fix.{0,12}task" "not add|never add"
+# a checkpoint halts the loop — no chaining into the next task in this session
+node .forge/scripts/prose.js .claude/commands/forge-next.md \
+  "hard stop|halt" "do not select|not select further|select no further"
+echo "  forge-next.md checkpoint execution: OK"
+
 # --- WORKPLAN.md task format is parseable ---
 echo "Checking WORKPLAN.md format..."
 

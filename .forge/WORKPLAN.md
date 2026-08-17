@@ -580,12 +580,12 @@
 
 ## [TASK-037] Update /forge-next to execute checkpoint tasks with review packet
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-035, TASK-064, TASK-066
 - **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#data-model/status.md-data-model, SPEC#requirements/req-checkpoint-fresh-gates
 - **Gate:** `bash .forge/tests/smoke.sh && grep -qi "checkpoint" .claude/commands/forge-next.md && grep -qi "review packet" .claude/commands/forge-next.md && echo "forge-next checkpoint execution present"`
-- **Notes:** Checkpoint gates are always manual:. On block, append a STATUS.md Blockers row.
+- **Notes:** Specified checkpoint execution in forge-next.md (packet from Depends, fresh gates, blocked-on-fail + Blockers row) and locked it with prose.js assertions in smoke.sh; one deviation reconciling the span source against the Contract Interfaces bullet. Record: .forge/notes/TASK-037.md
 
 ## [TASK-038] Create /forge-sync command and .forge/VERSION stamp
 
