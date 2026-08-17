@@ -785,3 +785,20 @@
   Two constraints to carry in, both from the brainstorm's own "where the metaphor will bite you" section: rework is a cycle, not forward flow, so any graph over task *instances* grows at runtime and is really an append-only event log; and throughput is the wrong objective function — see VISION pillar 6, which now names the correct one explicitly.
 
   Sibling to TASK-041 (plugin packaging). Both are v0.4 scope-decision gates and both should land before any v0.4 planning pass.
+
+## [TASK-072] Anchor forge script roots to the script location, not the shell cwd
+
+- **Status:** pending
+- **Type:** fix
+- **Depends:** none
+- **Context:** CONTRACT#rules/workplan-access-discipline, CONTRACT#rules/gate-patterns, CONTRACT#boundaries/platform-constraints
+- **Gate:** `bash .forge/tests/test-wp.sh && bash .forge/tests/test-init-scripts.sh && bash .forge/tests/smoke.sh && (cd .forge/scripts && node wp.js status > /dev/null && node check-workplan.js > /dev/null) && echo "forge scripts resolve their own root"`
+- **Notes:** Every forge entry script anchors on the shell's working directory, so it only runs from the repo root: `wp.js:48` and `check-workplan.js:23` both set `const ROOT = process.cwd()`, `migrate-notes.js:39` does the same, and `check-ux-spec.js:16` joins `process.cwd()` with `.forge/UX.md` directly. Invoking any of them by absolute path from a subdirectory fails with ".forge/WORKPLAN.md not found" — the script cannot find the project it is installed inside.
+
+  Observed live: a session that had `cd`-ed into `.forge/` for an unrelated command hit the failure, then correctly retried with an absolute path to `wp.js` and hit the *same* error for a different reason. That second failure is the expensive one — the obvious recovery does not work, and the error message names a missing file rather than the real cause.
+
+  `wp.js` is already inconsistent about this on its own: line 257 uses `__dirname` to locate its sibling `check-workplan.js`, while line 48 uses `process.cwd()` to locate the workplan. It trusts its own installed location for one lookup and the shell for the other.
+
+  The fix is small because the plumbing already exists: `lib/workplan.js:149` takes `rootDir` as a parameter, so only the entry scripts decide it. Replace each with `path.resolve(__dirname, '..', '..')` (from `.forge/scripts/` that is the project root; `check-ux-spec.js` and the `createLoader(path.join(ROOT, '.forge'))` calls follow unchanged). If pointing the tooling at a different project is worth keeping, add a `--root` flag defaulting to the script location rather than leaving cwd as the implicit control — `check-spec.js` already takes an explicit path argument for exactly that case.
+
+  Two things not to miss. `wp.js` and `check-workplan.js` are embedded verbatim in `/forge-init` behind `<!-- forge-init:embed -->` markers and diffed by `test-init-scripts.sh`, so both blocks must be re-copied whole or the gate fails. And the test additions belong in `test-wp.sh`: assert the scripts succeed when invoked from a subdirectory, which is the behavior that regressed silently because nothing ever ran them from anywhere else.
