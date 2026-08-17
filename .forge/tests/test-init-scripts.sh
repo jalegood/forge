@@ -64,6 +64,9 @@ check ".forge/scripts/lib/markdown.js"
 check ".forge/scripts/lib/workplan.js"
 check ".forge/scripts/check-workplan.js"
 check ".forge/scripts/wp.js"
+check ".forge/scripts/guard-push.sh"
+check ".forge/scripts/guard-branch.sh"
+check ".forge/scripts/guard-secrets.sh"
 
 # The provisioning steps must also be reachable: unconditional, and creating the
 # lib/ subdirectory that markdown.js lives in.

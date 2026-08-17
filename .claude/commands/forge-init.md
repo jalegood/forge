@@ -748,11 +748,36 @@ Check if `.claude/settings.json` exists. If it does **not** exist, create `.clau
             "description": "Commit gate — disabled by default. Enable after test infrastructure exists by replacing with: npm test or equivalent."
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .forge/scripts/guard-push.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash .forge/scripts/guard-branch.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash .forge/scripts/guard-secrets.sh"
+          }
+        ]
       }
     ]
   }
 }
 ```
+
+The three unattended-execution guards in that second `PreToolUse` entry are **enabled by default**, unlike the commit gate above them (CONTRACT#boundaries/hook-configuration). The commit gate waits on test infrastructure that a fresh project does not have yet; the guards depend on nothing and enforce CONTRACT#rules/unattended-execution rules 1 and 3 mechanically, rather than by instruction-following. Step 11 creates the scripts themselves — `guard-push.sh`, `guard-branch.sh`, and `guard-secrets.sh`.
+
+Two of the three are inert in ordinary use, by design:
+
+- `guard-push.sh` blocks `git push` always. Publishing is human-only.
+- `guard-branch.sh` blocks `git commit` on the repository's default branch **only when the environment variable `FORGE_UNATTENDED=1` is set**. Interactive sessions never set it, so committing straight to the default branch — the normal, human-reviewed habit on a personal project — is untouched. The flag is set by the headless launcher that drives an unattended span, never typed by a human before a run: a forgotten `export` would restore default-branch committing in exactly the case where nobody is watching to catch it.
+- `guard-secrets.sh` blocks `git commit` when the staged diff adds a line matching a conservative secret pattern. A floor, not a substitute for a dedicated scanner.
 
 If `.claude/settings.json` exists, skip — do not overwrite.
 
@@ -778,9 +803,11 @@ Unconditional — these are not gated on the step 6 interface question. `/forge-
 
 Create `.forge/scripts/lib/` (both the `scripts` and `lib` directories) if needed.
 
-The four blocks below are exact copies of the engine's scripts. Copy them verbatim — they are diffed against the originals by `.forge/tests/test-init-scripts.sh`, and the `<!-- forge-init:embed -->` markers are what that test keys on. Do not edit the payloads in place; if a script changes, re-copy the whole block.
+The blocks below are exact copies of the engine's scripts. Copy them verbatim — they are diffed against the originals by `.forge/tests/test-init-scripts.sh`, and the `<!-- forge-init:embed -->` markers are what that test keys on. Do not edit the payloads in place; if a script changes, re-copy the whole block.
 
-Order matters only in that the two `lib/` modules must exist before the scripts that require them; create all four.
+The last three are the unattended-execution guards wired up in step 9 — `guard-push.sh`, `guard-branch.sh`, and `guard-secrets.sh`. They are as unconditional as the rest: the hook entries created in step 9 name them by path, so a project that skips them has three `PreToolUse` hooks pointing at nothing.
+
+Order matters only in that the two `lib/` modules must exist before the scripts that require them; create all of them.
 If `.forge/scripts/lib/markdown.js` does **not** exist, create it with:
 
 <!-- forge-init:embed .forge/scripts/lib/markdown.js -->
@@ -1900,6 +1927,202 @@ main(process.argv.slice(2));
 ```
 
 If it exists, skip — do not overwrite.
+If `.forge/scripts/guard-push.sh` does **not** exist, create it with Blocks `git push` unconditionally.
+
+<!-- forge-init:embed .forge/scripts/guard-push.sh -->
+
+```bash
+#!/usr/bin/env bash
+# guard-push.sh — PreToolUse hook: block `git push`, unconditionally.
+#
+# CONTRACT#rules/unattended-execution rule 3: "No pushing. Publishing is always
+# human." CONTRACT#boundaries/hook-configuration makes this guard always active
+# — it is not gated on FORGE_UNATTENDED, because the rule it enforces is not
+# either. An interactive session has a human at the keyboard who can lift the
+# hook deliberately; what must not exist is a path where publishing happens
+# because nobody remembered it shouldn't.
+#
+# Reads Claude Code's PreToolUse stdin contract (JSON, `tool_input.command`) and
+# exits 2 to block. Exit 2 specifically: Claude Code treats 2 as "block the call
+# and feed stderr back to the model", and any other nonzero as a non-blocking
+# error that lets the tool run anyway.
+
+set -u
+
+payload=$(cat)
+
+# Prefer the parsed command. If the envelope is unparseable, fall back to the
+# raw payload as the haystack rather than allowing the call: a guard that opens
+# the gate whenever it cannot read the request is defeatable by anything that
+# perturbs the envelope.
+command=$(printf '%s' "$payload" | node -e 'let s="";process.stdin.on("data",d=>{s+=d}).on("end",()=>{try{const j=JSON.parse(s);const c=j&&j.tool_input&&j.tool_input.command;if(typeof c==="string")process.stdout.write(c);}catch(e){}});' 2>/dev/null)
+[ -n "$command" ] || command="$payload"
+
+# `git push`, allowing global flags in between (`git -C dir push`, `git
+# --no-pager push`). The trailing boundary is what keeps `git pushed` and
+# `pushState` from matching — a substring test would block prose about pushing.
+if printf '%s\n' "$command" | grep -Eq '(^|[^[:alnum:]_-])git([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+push([[:space:]]|$)'; then
+  cat >&2 <<'MSG'
+Blocked by guard-push.sh: publishing is human-only.
+
+CONTRACT#rules/unattended-execution rule 3 — "No pushing. Publishing is always
+human." Commit the work and hand it to the human to push.
+MSG
+  exit 2
+fi
+
+exit 0
+```
+
+If it exists, skip — do not overwrite.
+
+If `.forge/scripts/guard-branch.sh` does **not** exist, create it with Blocks `git commit` on the default branch when `FORGE_UNATTENDED=1`.
+
+<!-- forge-init:embed .forge/scripts/guard-branch.sh -->
+
+```bash
+#!/usr/bin/env bash
+# guard-branch.sh — PreToolUse hook: during an unattended run, block `git
+# commit` on the repository's default branch.
+#
+# CONTRACT#rules/unattended-execution rule 1: "Work branch only. Never on the
+# default branch. The branch is the blast radius."
+#
+# The guard is armed only by FORGE_UNATTENDED=1 and is otherwise inert, so
+# ordinary interactive sessions — where committing straight to main is a normal,
+# human-reviewed habit on personal projects — are untouched. Per
+# CONTRACT#boundaries/hook-configuration the flag is set by the headless launcher
+# that drives the loop, never typed by a human before a run: a forgotten
+# `export` would silently restore main-committing behavior in exactly the case
+# where nobody is watching to catch it.
+#
+# Reads Claude Code's PreToolUse stdin contract (JSON, `tool_input.command`) and
+# exits 2 to block — Claude Code treats 2 as "block and show stderr to the
+# model", and any other nonzero as a non-blocking error.
+
+set -u
+
+payload=$(cat)
+
+# Not an unattended run: this guard has nothing to say. Checked before anything
+# else so the interactive path costs one string comparison.
+[ "${FORGE_UNATTENDED:-}" = "1" ] || exit 0
+
+command=$(printf '%s' "$payload" | node -e 'let s="";process.stdin.on("data",d=>{s+=d}).on("end",()=>{try{const j=JSON.parse(s);const c=j&&j.tool_input&&j.tool_input.command;if(typeof c==="string")process.stdout.write(c);}catch(e){}});' 2>/dev/null)
+[ -n "$command" ] || command="$payload"
+
+printf '%s\n' "$command" | grep -Eq '(^|[^[:alnum:]_-])git([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+commit([[:space:]]|$)' || exit 0
+
+current=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || exit 0
+[ -n "$current" ] || exit 0
+
+# The default branch is the repo's, not a hardcoded `main`: a project on `trunk`
+# or `master` must be protected on its own branch and nowhere else. Ask the
+# remote's HEAD first (authoritative where there is a remote), then the local
+# init default, then fall back.
+default=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')
+[ -n "$default" ] || default=$(git config --get init.defaultBranch 2>/dev/null)
+[ -n "$default" ] || default=main
+
+if [ "$current" = "$default" ]; then
+  cat >&2 <<MSG
+Blocked by guard-branch.sh: unattended commit on the default branch.
+
+FORGE_UNATTENDED=1 and HEAD is on "$current", the repository's default branch.
+CONTRACT#rules/unattended-execution rule 1 — "Work branch only. Never on the
+default branch. The branch is the blast radius."
+
+Create a work branch and commit there; the span reaches "$default" only through
+checkpoint approval and a human merge (rule 5).
+MSG
+  exit 2
+fi
+
+exit 0
+```
+
+If it exists, skip — do not overwrite.
+
+If `.forge/scripts/guard-secrets.sh` does **not** exist, create it with Blocks `git commit` when the staged diff adds a secret-shaped line.
+
+<!-- forge-init:embed .forge/scripts/guard-secrets.sh -->
+
+```bash
+#!/usr/bin/env bash
+# guard-secrets.sh — PreToolUse hook: block `git commit` when the staged diff
+# adds a line matching a conservative secret pattern.
+#
+# CONTRACT#boundaries/hook-configuration: "A floor, not a substitute for a
+# dedicated scanner." The pattern list is deliberately limited to the three
+# classes the Contract names — cloud access keys, private-key headers, common
+# API-key prefixes — all of which have distinctive fixed prefixes and fixed
+# lengths. Generic `password =` style heuristics are excluded on purpose: a
+# guard that cries wolf on ordinary code gets disabled, and a disabled guard
+# catches nothing.
+#
+# Scope is the *added* lines of the *staged* diff. Unstaged content is not about
+# to be committed, and deleting a line that contains a key is the fix, not the
+# offense.
+#
+# Reads Claude Code's PreToolUse stdin contract (JSON, `tool_input.command`) and
+# exits 2 to block — Claude Code treats 2 as "block and show stderr to the
+# model", and any other nonzero as a non-blocking error.
+
+set -u
+
+payload=$(cat)
+
+command=$(printf '%s' "$payload" | node -e 'let s="";process.stdin.on("data",d=>{s+=d}).on("end",()=>{try{const j=JSON.parse(s);const c=j&&j.tool_input&&j.tool_input.command;if(typeof c==="string")process.stdout.write(c);}catch(e){}});' 2>/dev/null)
+[ -n "$command" ] || command="$payload"
+
+printf '%s\n' "$command" | grep -Eq '(^|[^[:alnum:]_-])git([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+commit([[:space:]]|$)' || exit 0
+
+# Both greps take -E deliberately: in a basic regular expression GNU grep reads
+# `\+` as the repetition operator, so `grep -v '^\+\+\+'` silently discards
+# every line and the guard sees an empty diff.
+added=$(git diff --cached --unified=0 2>/dev/null | grep -E '^\+' | grep -Ev '^\+\+\+')
+[ -n "$added" ] || exit 0
+
+# Each entry is "label|ERE". Anchored prefixes with length constraints, so a
+# variable merely named `aws_key` does not trip anything.
+patterns='cloud access key (AWS)|(AKIA|ASIA)[0-9A-Z]{16}
+private key header|-----BEGIN [A-Z ]*PRIVATE KEY-----
+GitHub token|gh[pousr]_[A-Za-z0-9]{36}
+Slack token|xox[abprs]-[0-9A-Za-z-]{10,}
+Stripe live key|sk_live_[0-9A-Za-z]{16,}
+Anthropic API key|sk-ant-[A-Za-z0-9_-]{24,}
+Google API key|AIza[0-9A-Za-z_-]{35}'
+
+hits=""
+while IFS='|' read -r label regex; do
+  [ -n "$regex" ] || continue
+  if printf '%s\n' "$added" | grep -Eq -- "$regex"; then
+    hits="${hits}  - ${label}
+"
+  fi
+done <<EOF
+$patterns
+EOF
+
+if [ -n "$hits" ]; then
+  cat >&2 <<MSG
+Blocked by guard-secrets.sh: the staged diff adds what looks like a secret.
+
+Matched:
+${hits}
+Unstage the offending lines and move the value to an environment variable or an
+ignored file, then commit again. This guard is a floor, not a scanner — if it
+fired on a false positive, the value still deserves a second look before it
+enters history.
+MSG
+  exit 2
+fi
+
+exit 0
+```
+
+If it exists, skip — do not overwrite.
+
 ### 12. Report completion
 
 After creating all files, tell the user which files were created (existing files were not overwritten), listing only from this set — and only the ones actually created or modified, not skipped:
@@ -1923,8 +2146,9 @@ After creating all files, tell the user which files were created (existing files
 - `.forge/scripts/lib/workplan.js`
 - `.forge/scripts/check-workplan.js`
 - `.forge/scripts/wp.js`
-- `.forge/scripts/lib/markdown.js`
-- `.forge/scripts/check-workplan.js`
+- `.forge/scripts/guard-push.sh`
+- `.forge/scripts/guard-branch.sh`
+- `.forge/scripts/guard-secrets.sh`
 - `.claude/settings.json`
 - `CLAUDE.md` (integration block)
 

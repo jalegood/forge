@@ -598,23 +598,12 @@
 
 ## [TASK-047] Create unattended-execution guard hooks and wire into settings.json
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** none
 - **Context:** CONTRACT#boundaries/hook-configuration, CONTRACT#rules/unattended-execution, CONTRACT#interfaces/command-forge-init, CONTRACT#data-model/artifacts
 - **Gate:** `bash .forge/tests/test-guard-hooks.sh`
-- **Notes:** Three deterministic PreToolUse guard scripts per CONTRACT#boundaries/hook-configuration:
-  1. `.forge/scripts/guard-push.sh` — blocks any Bash command matching `git push`, unconditionally.
-  2. `.forge/scripts/guard-branch.sh` — blocks `git commit` when `FORGE_UNATTENDED=1` is set AND the current branch equals the repo's default branch; no-op otherwise (ordinary interactive sessions are untouched).
-  3. `.forge/scripts/guard-secrets.sh` — blocks `git commit` when the staged diff matches a conservative secret-pattern list (cloud access keys, private-key headers, common API-key prefixes).
-
-  `FORGE_UNATTENDED=1` must be set by the headless-loop launcher script itself (e.g. the `while ... claude -p "/forge-next" ... done` wrapper), never by a human typing `export` before a run. This is deliberate, not an implementation detail to skip: per human discussion (2026-07-31), this project is used both at work (branch-protected — direct main commits already impossible server-side) and on personal projects (direct main commits are the normal, human-reviewed, interactive habit). Making the flag manual would mean a forgotten `export` before an unattended run silently falls back to normal main-committing behavior — exactly the one case where nobody is watching to catch it. Sourcing the flag from the launcher script instead removes the "did I remember" failure mode in both directions: ordinary interactive `/forge-next` never has it set (guard stays inert, personal-project workflow untouched), and every unattended invocation has it set automatically (guard is always live). Building the launcher/wrapper script itself is out of scope for this task — it's a future task once headless looping is built; this task only defines and documents the convention the wrapper must follow (see CONTRACT#boundaries/hook-configuration).
-
-  Wire all three into `.claude/settings.json`'s `PreToolUse` array (Bash matcher), alongside the existing PostToolUse lint hook — do not remove or reorder it. Also update `.claude/commands/forge-init.md`'s settings.json-creation step so new projects get all three guards by default (per CONTRACT#interfaces/command-forge-init), following the TASK-043 precedent of keeping forge-init.md's embedded canonical copies in sync with the locally-deployed scripts.
-
-  Test script `.forge/tests/test-guard-hooks.sh` (mirrors TASK-025/TASK-030's fixture pattern) exercises, per guard: push guard blocks a `git push` command and passes one without; branch guard blocks only when both `FORGE_UNATTENDED=1` is set and the current branch is the default-branch fixture, passes when either condition is false; secret guard blocks a fixture staged diff containing a known secret pattern and passes a clean fixture diff. Each script reads the PreToolUse hook's stdin JSON contract (`tool_input.command`) and exits nonzero to block.
-
-  Origin: identified during a risk discussion on auto-commit during unattended execution (2026-07-31) — CONTRACT already specified the unattended-execution policy (work-branch-only, no-push, hard-stops) but nothing mechanically enforced it. Coverage gap resolved in CONTRACT.md by this planning pass before this task was generated (Boundaries#hook-configuration, Data Model#artifacts, Interfaces#command-forge-init).
+- **Notes:** Three PreToolUse guards (push/branch/secrets) live, wired into settings.json and provisioned by /forge-init; blocked = exit 2, guards fail closed, default branch read from the repo. Two decisions worth reading (exit-code semantics, narrow secret patterns) and two deviations (OBS-011 duplicates fixed in passing, BRE \+ trap). Record: .forge/notes/TASK-047.md
 
 ## [TASK-062] Make /forge-init provision check-workplan.js and lib/markdown.js
 
