@@ -165,6 +165,34 @@ node .forge/scripts/prose.js .claude/commands/forge-plan.md "observation" "accep
 node .forge/scripts/prose.js .claude/commands/forge-plan.md "secondary|never the only path"
 echo "  observation read paths: OK"
 
+# --- /forge-plan inserts checkpoint tasks at cadence (TASK-036) ---
+# CONTRACT#rules/checkpoint-cadence: a checkpoint lands at each dependency-phase
+# boundary or after every 5 consecutive non-checkpoint tasks, whichever comes
+# first. Its Depends names the whole span, and downstream tasks depend on the
+# checkpoint, so the DAG halts there until a human passes the packet. A plan
+# generated without them runs unattended to the end of the workplan with no
+# review point — the exact failure the rule exists to prevent.
+#
+# Asserted through prose.js, not grep: forge-plan.md fences its task-format
+# block, whose Type line already lists `checkpoint` in the enum. A plain grep
+# would match that fenced template and report the generation rule present when
+# only the enum was.
+echo "Checking forge-plan checkpoint cadence..."
+
+# the cadence itself — both triggers, which one wins, and what gets counted
+node .forge/scripts/prose.js .claude/commands/forge-plan.md \
+  "checkpoint" "cadence" "phase boundary" "non-checkpoint" \
+  "every 5|every five" "whichever comes first"
+# the span travels in Depends, and downstream work waits on the checkpoint
+node .forge/scripts/prose.js .claude/commands/forge-plan.md \
+  "Depends[^.]*every task|every task[^.]*Depends" "depend[^.]*on the checkpoint"
+# checkpoint gates are manual: — check-workplan.js invariant 7 rejects anything else
+node .forge/scripts/prose.js .claude/commands/forge-plan.md "checkpoint[^.]*manual:"
+# checkpoint is a generatable task type here, not just a name in the fenced enum
+node .forge/scripts/prose.js .claude/commands/forge-plan.md \
+  "review packet" "produces no code"
+echo "  forge-plan.md checkpoint cadence: OK"
+
 # --- WORKPLAN.md task format is parseable ---
 echo "Checking WORKPLAN.md format..."
 

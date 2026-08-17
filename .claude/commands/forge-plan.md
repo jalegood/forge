@@ -99,6 +99,7 @@ Analyze VISION.md and CONTRACT.md to determine the full set of deliverables, plu
 | `refactor`    | Improve structure, preserve behavior                          | Existing tests still pass                            |
 | `fix`         | Repair broken gate or bug                                     | Original failing command now passes                  |
 | `investigate` | Diagnose issues, explore unknowns                             | `manual:` gate                                       |
+| `checkpoint`  | Pause point closing a span. Assembles a review packet. Produces no code. | `manual:` — human approves the span       |
 
 **UX coverage — apply when UX.md is present and has flows:**
 
@@ -123,6 +124,22 @@ Every screen `feature` task's `Depends` field **must** include its paired `ux-sp
 Every requirement that implies a `feature` or `fix` deliverable gets a task whose manifest includes the requirement's `SPEC#requirements/req-slug` section (see step 5). A requirement is not itself a separate task type — it is coverage input to the `feature`/`fix` tasks it implies, the same way a Contract interface section is.
 
 **Dependency DAG:** No task may appear before all of its `Depends` entries in the file. Within the same dependency level, order by implementation risk — lower risk first.
+
+**Checkpoint cadence — apply once the DAG is ordered (CONTRACT#rules/checkpoint-cadence):**
+
+Walk the ordered task sequence and insert a `checkpoint` task at each **dependency-phase boundary** — where a set of tasks that could run in parallel gives way to the tasks depending on them — or after every 5 consecutive non-checkpoint tasks, whichever comes first. A checkpoint does not count toward its own cadence; the run length resets to zero at each one.
+
+Checkpoints concentrate human review at span boundaries instead of at every task. A plan generated without them runs unattended to the end of the workplan with no place for a human to stop it, which is the failure this cadence exists to prevent.
+
+Each inserted checkpoint:
+
+- **`Depends` lists every task in its span** — all of them, not just the last. The span is the run of tasks since the previous checkpoint, or since the start of the plan if there is none.
+- **Downstream tasks depend on the checkpoint**, not on the span's individual tasks. That substitution is what makes the DAG halt here: nothing after the span is unblocked until a human passes the packet.
+- **Type `checkpoint`, gate `manual:`** — `check-workplan.js` invariant 7 rejects a `checkpoint` task carrying any other gate form. Name the span in the gate text, e.g. `manual: Review TASK-004..TASK-008 — gates re-run fresh, span approved`.
+- **Produces no code.** Its deliverable is a review packet — the span's tasks and their file lists, freshly re-run gate results, any manual verification steps, and the current STATUS.md Open Questions and Risks. `.forge/templates/checkpoint.md` governs the packet's contents; do not restate them in the task description.
+- **Context:** `CONTRACT#rules/checkpoint-cadence`. The span arrives through `Depends`, so the manifest never enumerates it.
+
+Preserved `done` and `active` checkpoints stay exactly where step 3 left them and keep the spans they already closed. Count the cadence forward from the last preserved checkpoint, not from the top of the file — re-running this command must not renumber or re-span a checkpoint a human has already passed.
 
 ### 5. Generate context manifests
 
@@ -169,7 +186,7 @@ Do not generate a task with an incomplete manifest. The completeness test is the
 - **Stub detection first:** a `## Tokens` section only counts as present if it contains something beyond the forge-init stub's HTML-comment placeholders (`<!-- Seed colors... -->` etc. with no real values below them). A `### [Component Name]` heading with the literal bracket text is not a real component — never widen a manifest based on it. An untouched `.forge/DESIGN.md` must never trigger `DESIGN#tokens` or `DESIGN#components/*` inclusion.
 - When DESIGN.md is present and has a `## Tokens` section with real content, `feature` tasks implementing a screen **must** include `DESIGN#tokens` in their context manifests.
 - When DESIGN.md has a real (non-placeholder) component spec relevant to the screen (a `### ComponentName` subsection under `## Components`), widen the manifest to also include `DESIGN#components/[name]` for each relevant component.
-- Do not reference `DESIGN#` for non-screen tasks (`scaffold`, `ux-spec`, `clarify`, `investigate`).
+- Do not reference `DESIGN#` for non-screen tasks (`scaffold`, `ux-spec`, `clarify`, `investigate`, `checkpoint`).
 - Do not gate on DESIGN.md presence — if the file is absent, simply omit DESIGN# refs.
 
 **SPEC manifest rules:**
@@ -177,7 +194,7 @@ Do not generate a task with an incomplete manifest. The completeness test is the
 - **Stub detection first:** same as the SPEC coverage check in step 4 — a `### [REQ-slug] Requirement Name` heading with the literal bracket text is not a real requirement. Never reference it.
 - `feature` and `fix` tasks whose deliverable implements a SPEC requirement **must** include that requirement's `SPEC#requirements/req-slug` section (or `specs/name#requirements/req-slug` once split) in their context manifest, alongside the `CONTRACT#` sections constraining the same deliverable. Behavior and constraint travel together — see the completeness test above.
 - Once SPEC.md exceeds ~300 lines and is split into `.forge/specs/*.md`, reference the per-feature file (`specs/auth#requirements/req-login`) instead of `SPEC#`.
-- Do not reference `SPEC#` for tasks with no corresponding requirement (`scaffold`, `ux-spec`, `clarify`, `investigate`).
+- Do not reference `SPEC#` for tasks with no corresponding requirement (`scaffold`, `ux-spec`, `clarify`, `investigate`, `checkpoint`).
 - Do not gate task generation on SPEC.md presence — if neither SPEC.md nor `.forge/specs/` exists, simply omit SPEC# refs; CONTRACT.md alone remains sufficient coverage per Contract-First.
 
 ### 6. Generate gates
@@ -191,6 +208,7 @@ Each gate validates the deliverable structurally:
 | Markdown artifact | Required content + line count | `grep -q '{{context}}' file.md && test $(wc -l < file.md) -gt 10`      |
 | UX spec screen    | check-ux-spec.js              | `node .forge/scripts/check-ux-spec.js "Screen Name"`                   |
 | UX screen mapping | Screen count check            | `grep -c "^#### Screen:" .forge/UX.md \| awk '$1 >= N'`                |
+| Checkpoint span   | `manual:` prefix (enforced)   | `manual: Review TASK-004..TASK-008 — gates re-run fresh, span approved` |
 | Human judgment    | `manual:` prefix              | `manual: Verify the workflow completes 2-3 full cycles`                |
 
 Prefer automated gates. Use `manual:` only when no structural check is possible.

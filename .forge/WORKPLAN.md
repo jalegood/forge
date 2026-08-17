@@ -571,12 +571,12 @@
 
 ## [TASK-036] Update /forge-plan to insert checkpoint tasks at cadence
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-035, TASK-066
 - **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#rules/checkpoint-cadence, CONTRACT#interfaces/task-types
 - **Gate:** `bash .forge/tests/smoke.sh && node .forge/scripts/prose.js .claude/commands/forge-plan.md "checkpoint" "cadence" && echo "forge-plan checkpoint cadence present"`
-- **Notes:** Phase boundary or every 5 non-checkpoint tasks, whichever first; checkpoint Depends lists the full span; downstream tasks depend on the checkpoint.
+- **Notes:** Added checkpoint cadence generation to /forge-plan step 4 plus the missing checkpoint task type; real assertions went into smoke.sh since the declared gate is two bare words. One deviation (touched the step 5/6 type enumerations). Record: .forge/notes/TASK-036.md
 
 ## [TASK-037] Update /forge-next to execute checkpoint tasks with review packet
 
