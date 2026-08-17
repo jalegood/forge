@@ -506,13 +506,12 @@
 
 ## [TASK-030] Create check-spec.js spec readiness gate script
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-027, TASK-048, TASK-050
 - **Context:** CONTRACT#data-model/spec-data-model, CONTRACT#rules/gate-patterns
 - **Gate:** `bash .forge/tests/test-check-spec.sh`
-- **Notes:** Validates a spec file: required sections present (Overview, Requirements, Non-Goals), at least one REQ with acceptance criteria, no unresolved `<!-- UNRESOLVED -->` markers above threshold (default: zero blocking), no placeholder/TODO text in Requirements. Mirrors check-ux-spec.js structure.
-  Test fixtures are synthetic pass/fail cases as usual, but the suite must also assert exit 0 against the real `.forge/SPEC.md` from TASK-048 — a gate script that has never run against a genuine instance is untested.
+- **Notes:** Added check-spec.js (spec readiness gate: required sections, acceptance criteria, unresolved-marker threshold, placeholder/TODO check) consuming lib/markdown.js; test suite passes against synthetic fixtures and the real SPEC.md. No deviations. Record: .forge/notes/TASK-030.md
 
 ## [TASK-032] Create /forge-spec intake command
 
