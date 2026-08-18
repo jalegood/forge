@@ -626,7 +626,7 @@
 
 ## [TASK-067] Reconcile the Contract's Interfaces bullets with STATUS.md's five-table Data Model
 
-- **Status:** pending
+- **Status:** done
 - **Type:** clarify
 - **Depends:** none
 - **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#interfaces/command-forge-plan, CONTRACT#data-model/status.md-data-model, CONTRACT#rules/contract-amendment-protocol
@@ -637,6 +637,8 @@
   2. **OBS-004** — `Interfaces/Command: /forge-plan`'s Reads line annotates `.forge/STATUS.md` as "(when present — blocking open questions)", though the same interface's Does line requires accepted-Observations intake from that file. Target wording: "(when present — blocking open questions, observations marked accepted)".
 
   Log one dated Decisions row covering both. The gate's `-gt 24` is the row count at planning time, so it requires the row to exist without demanding a specific total.
+  Applied both corrections verbatim from the planned target wording: /forge-init now names five stub tables, /forge-plan Reads now names accepted-observation intake. One dated Decisions row logged; OBS-001 and OBS-004 moved accepted -> closed. Contract-text only, no command or script changes.
+  Files: .forge/CONTRACT.md, .forge/STATUS.md
 
 ## [TASK-068] Reconcile the Contract's check-spec.js invocation with the script's unresolved-marker threshold
 

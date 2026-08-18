@@ -309,7 +309,7 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
   - Creates `.forge/templates/` directory with all 7 unconditional template files if absent: scaffold.md, feature.md, clarify.md, refactor.md, fix.md, investigate.md, checkpoint.md (ux-spec.md is conditional — see below)
   - Creates the Forge-managed scripts under `.forge/scripts/` if absent — `lib/markdown.js`, `lib/workplan.js`, `check-workplan.js`, `wp.js`, `check-spec.js`, `prose.js`, `migrate-notes.js`. All seven are unconditional, and each is load-bearing for a command or a generated gate: `/forge-plan` and `/forge-next` block on the workplan lint, `/forge-next` and `/forge-status` reach the workplan only through `wp.js`, `/forge-spec` gates on `check-spec.js`, generated gates on markdown deliverables call `prose.js`, and `migrate-notes.js` is the remedy a project needs once its workplan predates the externalization threshold. A project missing any of them cannot complete a task whose gate names it.
   - Creates `.forge/SPEC.md` if absent (stub with Overview, Requirements, Flows, Non-Goals sections)
-  - Creates `.forge/STATUS.md` if absent (stub with Open Questions, Decisions, Risks, Blockers tables)
+  - Creates `.forge/STATUS.md` if absent (stub with Open Questions, Decisions, Risks, Blockers, and Observations tables)
   - Creates `.forge/VERSION` if absent (engine version stamp + canonical repo URL)
   - **Asks the human:** "Does this project have a user-facing interface (UI/UX)?" before touching any UX/DESIGN artifact. If the answer is unclear, ask again — do not guess.
     - **If yes:** creates `.forge/UX.md` if absent — stub with Global section (Copy Tone, Interaction Notes) and one placeholder Flow with one placeholder Screen, including mandatory fields as HTML comments; creates `.forge/templates/ux-spec.md` if absent (the ux-spec prompt template — pointless boilerplate without UX.md, so it's gated here rather than with the other 7 unconditional templates); creates `.forge/DESIGN.md` if absent — stub with Tokens (Colors, Typography, Spacing, Radius) and Components sections, each with HTML comment placeholders; creates `.forge/scripts/check-ux-spec.js` if absent (the ux-spec gate script)
@@ -326,7 +326,7 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
 
 ### Command: `/forge-plan`
 
-- **Reads:** `.forge/VISION.md` (What/Who/Pillars format), `.forge/CONTRACT.md` (sections: Data Model, State Machines, Interfaces, Rules, Boundaries), `.forge/SPEC.md` and `.forge/specs/*.md` (when present — requirements, acceptance criteria), `.forge/UX.md` (when present — Flows, screens), `.forge/DESIGN.md` (when present — tokens, components), `.forge/STATUS.md` (when present — blocking open questions), `.forge/WORKPLAN.md` (if exists)
+- **Reads:** `.forge/VISION.md` (What/Who/Pillars format), `.forge/CONTRACT.md` (sections: Data Model, State Machines, Interfaces, Rules, Boundaries), `.forge/SPEC.md` and `.forge/specs/*.md` (when present — requirements, acceptance criteria), `.forge/UX.md` (when present — Flows, screens), `.forge/DESIGN.md` (when present — tokens, components), `.forge/STATUS.md` (when present — blocking open questions, observations marked accepted), `.forge/WORKPLAN.md` (if exists)
 - **Does:**
   - Assumes scaffold has already run (via `/forge-init`). Always reads context and validates/generates the workplan.
   - Runs a two-check Contract readiness validation before generating any tasks:
