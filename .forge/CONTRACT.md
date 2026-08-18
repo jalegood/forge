@@ -17,7 +17,7 @@ Forge operates on these file artifacts:
 | CLAUDE.md | `CLAUDE.md` (project root)    | Human-configured       | Minimal pipeline pointer (3 lines max)                        |
 | UX Spec   | `.forge/UX.md`                | Human (70%) / AI (30%) | Screen-level experience spec: flows, states, copy, interactions. Created only if the project has a user-facing interface (see Interfaces/`/forge-init`). |
 | UX Gate   | `.forge/scripts/check-ux-spec.js` | Forge-managed      | Deterministic ux-spec gate — validates one screen by name. Created only if the project has a user-facing interface. |
-| DESIGN.md | `.forge/DESIGN.md`            | Human (100%) | Visual design system: tokens, typography, spacing, component specs. Hand-authored markdown. Created only if the project has a user-facing interface. <!-- ASSUMED: tool-agnostic markdown artifact mirrors UX.md pattern --> |
+| DESIGN.md | `.forge/DESIGN.md`            | Human (100%) | Visual design system: tokens, typography, spacing, component specs. Hand-authored markdown. Created only if the project has a user-facing interface. |
 | Spec      | `.forge/SPEC.md`, `.forge/specs/*.md` | Human (60%) / AI (40%) | Behavioral spec: what the system should do — requirements, acceptance criteria, flows, rationale. Lives beside the Contract; Contract wins on conflict |
 | Status    | `.forge/STATUS.md`            | AI (60%) / Human (40%) | Living project log: open questions, decisions, risks, blockers          |
 | Workplan Lint | `.forge/scripts/check-workplan.js` | Forge-managed    | Deterministic workplan invariant checker                                 |
@@ -26,7 +26,7 @@ Forge operates on these file artifacts:
 | Version   | `.forge/VERSION`              | Forge-managed          | Engine version stamp + canonical repo pointer, consumed by `/forge-sync` |
 | Task Records | `.forge/notes/TASK-XXX.md`   | AI (90%) / Human (10%) | Durable per-task narrative: outcome, decisions, deviations, files. Manifest-addressable. Self-sufficient without git |
 | Workplan Script | `.forge/scripts/wp.js`     | Forge-managed          | Deterministic workplan query and mutation — task selection, status projection, targeted field writes, gate-discrimination probe at `pending → active` |
-| Markdown Resolver | `.forge/scripts/lib/markdown.js` | Forge-managed    | Shared fence-aware heading parser and manifest-reference resolver; every check script consumes it <!-- ASSUMED: table row added to close OBS-005; the file was already named in Interfaces/`/forge-init` but never listed as an artifact --> |
+| Markdown Resolver | `.forge/scripts/lib/markdown.js` | Forge-managed    | Shared fence-aware heading parser and manifest-reference resolver; every check script consumes it |
 | Workplan Parser | `.forge/scripts/lib/workplan.js` | Forge-managed     | The one parser for the WORKPLAN.md format, shared by `check-workplan.js` and `wp.js` |
 | Prose Gate Helper | `.forge/scripts/prose.js`  | Forge-managed          | Greps a markdown file's prose while ignoring fenced payloads, so a gate cannot pass on text inside an embedded script |
 | Notes Migration | `.forge/scripts/migrate-notes.js` | Forge-managed    | One-shot externalization of oversized inline Notes into task records, for workplans predating the threshold |
@@ -51,7 +51,7 @@ A context manifest is a list of Contract section references in a task's `Context
 - `UX#flows/flow-name/screen-name` — one screen spec from UX.md
 - `UX#flows/flow-name` — full flow including all screens from UX.md
 - `UX#global` — global copy tone and style notes from UX.md
-- `DESIGN#section-name` — references a top-level section of DESIGN.md (e.g., `DESIGN#tokens`) <!-- ASSUMED: same resolution pattern as UX# -->
+- `DESIGN#section-name` — references a top-level section of DESIGN.md (e.g., `DESIGN#tokens`). Resolved by the shared resolver like every other prefix, matching plain heading slugs — unlike UX#, DESIGN headings carry no `Flow:`/`Screen:` label prefix to strip
 - `DESIGN#section-name/subsection` — references a subsection (e.g., `DESIGN#components/button`)
 - `SPEC#section-name` — references a top-level section of SPEC.md (e.g., `SPEC#requirements`)
 - `SPEC#section-name/subsection` — references a subsection (e.g., `SPEC#requirements/req-login`)
@@ -113,8 +113,6 @@ UX.md is the screen-level experience spec. Structure:
 **Boundaries:** UX.md describes user experience. CONTRACT.md owns system state machines, data shapes, business rules, and API contracts. UX.md references CONTRACT.md — it does not duplicate it.
 
 ### DESIGN.md Data Model
-
-<!-- ASSUMED: tool-agnostic visual system spec; no dependency on any specific authoring tool -->
 
 DESIGN.md is the visual design system spec. It captures design tokens and component rules that feature tasks consume during implementation. Structure:
 
@@ -309,15 +307,15 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
   - Creates `.forge/VISION.md` if absent (stub template with What/Who/Pillars sections)
   - Creates `.forge/CONTRACT.md` if absent (stub template with all top-level sections)
   - Creates `.forge/templates/` directory with all 7 unconditional template files if absent: scaffold.md, feature.md, clarify.md, refactor.md, fix.md, investigate.md, checkpoint.md (ux-spec.md is conditional — see below)
-  - Creates the Forge-managed scripts under `.forge/scripts/` if absent — `lib/markdown.js`, `lib/workplan.js`, `check-workplan.js`, `wp.js`, `check-spec.js`, `prose.js`, `migrate-notes.js`. All seven are unconditional, and each is load-bearing for a command or a generated gate: `/forge-plan` and `/forge-next` block on the workplan lint, `/forge-next` and `/forge-status` reach the workplan only through `wp.js`, `/forge-spec` gates on `check-spec.js`, generated gates on markdown deliverables call `prose.js`, and `migrate-notes.js` is the remedy a project needs once its workplan predates the externalization threshold. A project missing any of them cannot complete a task whose gate names it. <!-- ASSUMED: prose.js and migrate-notes.js added to the provisioned set to close OBS-005; the first is already a hard dependency of four existing gates, the second is inert until needed -->
+  - Creates the Forge-managed scripts under `.forge/scripts/` if absent — `lib/markdown.js`, `lib/workplan.js`, `check-workplan.js`, `wp.js`, `check-spec.js`, `prose.js`, `migrate-notes.js`. All seven are unconditional, and each is load-bearing for a command or a generated gate: `/forge-plan` and `/forge-next` block on the workplan lint, `/forge-next` and `/forge-status` reach the workplan only through `wp.js`, `/forge-spec` gates on `check-spec.js`, generated gates on markdown deliverables call `prose.js`, and `migrate-notes.js` is the remedy a project needs once its workplan predates the externalization threshold. A project missing any of them cannot complete a task whose gate names it.
   - Creates `.forge/SPEC.md` if absent (stub with Overview, Requirements, Flows, Non-Goals sections)
   - Creates `.forge/STATUS.md` if absent (stub with Open Questions, Decisions, Risks, Blockers tables)
   - Creates `.forge/VERSION` if absent (engine version stamp + canonical repo URL)
-  - **Asks the human:** "Does this project have a user-facing interface (UI/UX)?" before touching any UX/DESIGN artifact. If the answer is unclear, ask again — do not guess. <!-- ASSUMED: single yes/no gate at init time; per-artifact granularity or re-asking later is left to a future task -->
+  - **Asks the human:** "Does this project have a user-facing interface (UI/UX)?" before touching any UX/DESIGN artifact. If the answer is unclear, ask again — do not guess.
     - **If yes:** creates `.forge/UX.md` if absent — stub with Global section (Copy Tone, Interaction Notes) and one placeholder Flow with one placeholder Screen, including mandatory fields as HTML comments; creates `.forge/templates/ux-spec.md` if absent (the ux-spec prompt template — pointless boilerplate without UX.md, so it's gated here rather than with the other 7 unconditional templates); creates `.forge/DESIGN.md` if absent — stub with Tokens (Colors, Typography, Spacing, Radius) and Components sections, each with HTML comment placeholders; creates `.forge/scripts/check-ux-spec.js` if absent (the ux-spec gate script)
     - **If no:** skips all four — does not create `.forge/UX.md`, `.forge/templates/ux-spec.md`, `.forge/DESIGN.md`, or `.forge/scripts/check-ux-spec.js`. Downstream, `/forge-plan` already treats these as optional ("if it exists" / "do not gate on DESIGN.md presence") so no other command needs to change.
     - **Changing the answer later:** re-running `/forge-init` asks the question again. Since the no-overwrite rule only skips files that already exist, answering "yes" on a later run creates the four files at that point; answering "no" after they already exist has no effect (existing files are never deleted).
-  - Writes `.claude/settings.json` if absent (PostToolUse lint hook; PreToolUse commit hook disabled by default; PreToolUse unattended-execution guards — push guard, branch guard, secret guard — enabled by default, see Boundaries#hook-configuration) <!-- ASSUMED: new projects should ship the guards by default, same as the dogfood instance -->
+  - Writes `.claude/settings.json` if absent (PostToolUse lint hook; PreToolUse commit hook disabled by default; PreToolUse unattended-execution guards — push guard, branch guard, secret guard — enabled by default, see Boundaries#hook-configuration)
   - Creates `.forge/scripts/guard-push.sh`, `.forge/scripts/guard-branch.sh`, `.forge/scripts/guard-secrets.sh` if absent (the unattended-execution guard scripts referenced by the settings.json hooks above)
   - Appends the Forge integration block to `CLAUDE.md` if not already present
   - Never overwrites any file that already exists
@@ -336,11 +334,11 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
     2. **Unknown check** — scans CONTRACT.md for plan-blocking unknowns: `<!-- UNRESOLVED -->` markers, technology choices without documented rationale, external dependencies without constraints, rules referencing undefined concepts. Classifies each as *plan-blocking* (would change which tasks exist, their order, or their gates — treated like a coverage gap) or *implementation-detail* (only affects one task's internals — deferred to a `clarify` task). Both checks resolve together in a single pass; gaps and plan-blocking unknowns are written to CONTRACT.md with `<!-- ASSUMED: reason -->` annotations, then task generation proceeds immediately.
   - Regenerates only `pending` tasks; preserves `done` and `active` tasks exactly as-is.
   - Orders tasks as a dependency DAG — no task runs before its `Depends` entries are all `done`.
-  - **UX coverage:** When UX.md is present and has flows, every screen referenced in a planned flow must have a `ux-spec` task gated `done` before its `feature` task is unblocked. Missing screen specs are plan-blocking. When UX.md has flows but no screens yet, generates a flow-mapping `ux-spec` task first to enumerate all screens before any are individually specced. Gate for the mapping task: `grep -c "^#### Screen:" .forge/UX.md | awk '$1 >= N'` (N = expected count). **Stub detection:** a `### Flow:` or `#### Screen:` heading counts toward "has flows"/"has screens" only if its name is not the literal forge-init stub placeholder (`[Name]`) — the untouched stub must never be treated as authored content. <!-- ASSUMED: closes the stub-vs-real-content gap found during TASK-024; same detection principle as the VISION.md stub check in step 1 -->
-  - **DESIGN coverage stub detection:** likewise, a `## Tokens` or `### [Component Name]` heading counts as present only if it contains something beyond the forge-init stub's HTML-comment placeholders and literal bracket component name. An untouched DESIGN.md stub must never trigger `DESIGN#tokens`/`DESIGN#components/*` manifest inclusion. <!-- ASSUMED: mirrors the UX.md stub-detection fix -->
+  - **UX coverage:** When UX.md is present and has flows, every screen referenced in a planned flow must have a `ux-spec` task gated `done` before its `feature` task is unblocked. Missing screen specs are plan-blocking. When UX.md has flows but no screens yet, generates a flow-mapping `ux-spec` task first to enumerate all screens before any are individually specced. Gate for the mapping task: `grep -c "^#### Screen:" .forge/UX.md | awk '$1 >= N'` (N = expected count). **Stub detection:** a `### Flow:` or `#### Screen:` heading counts toward "has flows"/"has screens" only if its name is not the literal forge-init stub placeholder (`[Name]`) — the untouched stub must never be treated as authored content.
+  - **DESIGN coverage stub detection:** likewise, a `## Tokens` or `### [Component Name]` heading counts as present only if it contains something beyond the forge-init stub's HTML-comment placeholders and literal bracket component name. An untouched DESIGN.md stub must never trigger `DESIGN#tokens`/`DESIGN#components/*` manifest inclusion.
 
   - **UX task DAG shape:** TASK-A (map all screens) → TASK-B, TASK-C, TASK-D (one ux-spec per screen, independent) → TASK-E, TASK-F, TASK-G (one feature per screen, depends only on its paired ux-spec).
-  - **DESIGN coverage:** When DESIGN.md is present and has tokens, feature tasks implementing screens include `DESIGN#tokens` in their context manifests. When DESIGN.md has component specs relevant to a screen, widen to include `DESIGN#components/[name]`. <!-- ASSUMED: additive to existing manifest rules; does not gate on DESIGN.md presence -->
+  - **DESIGN coverage:** When DESIGN.md is present and has tokens, feature tasks implementing screens include `DESIGN#tokens` in their context manifests. When DESIGN.md has component specs relevant to a screen, widen to include `DESIGN#components/[name]`.
   - **SPEC coverage:** When SPEC.md (or `.forge/specs/`) is present, `feature` and `fix` task manifests include the `SPEC#` requirement sections their deliverable implements, alongside the `CONTRACT#` sections that constrain it. The manifest completeness test spans both files — behavior detail without its constraint, or constraint without its behavior, fails the test (see Rules/Spec Precedence).
   - **Checkpoint cadence:** Inserts a `checkpoint` task at each dependency-phase boundary or after every 5 consecutive non-checkpoint tasks, whichever comes first, listing the span's tasks in `Depends` (see Rules/Checkpoint Cadence). <!-- ASSUMED: cadence of 5 -->
   - **Gate discrimination:** authors every gate so it fails against the pre-work state and passes after the work (see Rules/Gate Discrimination). A gate asserting a topic word the target file may already contain is rejected at authoring time in favour of one asserting the change, the covering test suite, or `manual:`.
@@ -401,7 +399,7 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
 
 ### Command: `/forge-sync`
 
-- **Reads:** `.forge/VERSION` (line 1: engine version; line 2: canonical repo URL <!-- ASSUMED: VERSION file carries the repo pointer -->), the canonical Forge repository
+- **Reads:** `.forge/VERSION` (line 1: engine version; line 2: canonical repo URL), the canonical Forge repository
 - **Does:**
   - Fetches the canonical versions of Forge-managed files: `.claude/commands/forge-*.md`, `.forge/templates/*.md`, `.forge/scripts/check-*.js`
   - Diffs each against the local copy and presents a per-file summary: unchanged, local-only customization, upstream-updated, or conflicting
@@ -645,7 +643,7 @@ Three obligations, at three points in the pipeline:
 
 3. **Repair, not bypass.** A refused transition is fixed by rewriting the gate to discriminate, in the same session and the same diff as the task's work. A gate that passes because a *prior* task already delivered this task's scope is not a gate defect — it is the OBS-008 condition, and it is reported to the human as a scope finding rather than silently absorbed.
 
-**Why not `check-workplan.js`.** The lint parses; it does not execute. Judging a gate vacuous without running it requires an allowlist of side-effect-free commands, and nearly every gate in a Forge project opens with `bash .forge/tests/…`, which no allowlist can clear by inspection. The lint would therefore skip exactly the gates that matter, while reading as coverage. The transition probe runs the real command at the real moment and needs no allowlist. <!-- ASSUMED: allowlist infeasibility argued from this repo's own gate corpus, where all but two pending-task gates invoke a shell script -->
+**Why not `check-workplan.js`.** The lint parses; it does not execute. Judging a gate vacuous without running it requires an allowlist of side-effect-free commands, and nearly every gate in a Forge project opens with `bash .forge/tests/…`, which no allowlist can clear by inspection. The lint would therefore skip exactly the gates that matter, while reading as coverage. The transition probe runs the real command at the real moment and needs no allowlist.
 
 **Precedence over `manual:` avoidance.** Rules/Gate Patterns prefers automated gates. It does not prefer an automated gate that certifies nothing: where no discriminating automated check exists, the gate is `manual:`.
 
@@ -723,7 +721,7 @@ Between checkpoints, the loop (e.g., repeated headless `/forge-next` invocations
 4. **Hard stops.** The loop halts at: a `checkpoint` task, a `clarify` task, any task entering `blocked`, or a second consecutive gate failure on the same task, or a new `foundation`-severity observation (the current task finishes cleanly first).
 5. **Merge is human.** The span reaches the default branch only through checkpoint approval and a human merge.
 
-Rules 1 and 3 are mechanically enforced by the branch guard and push guard hooks, not by instruction-following alone (see Boundaries#hook-configuration). <!-- ASSUMED: ties policy to its enforcing mechanism, per Design Principle #2 -->
+Rules 1 and 3 are mechanically enforced by the branch guard and push guard hooks, not by instruction-following alone (see Boundaries#hook-configuration).
 
 The `foundation`-observation stop in rule 4 is likewise mechanical, not advisory: `wp.js next` refuses to select a task while an open `foundation`-severity row exists in STATUS.md Observations, exiting 2 and printing the offending rows. A halt that depends on the executing agent noticing its own warning is not a halt — and this is the one stop an agent must trigger against its own momentum, so it is the one that most needs a mechanism. Two consequences follow:
 
@@ -761,7 +759,7 @@ The `foundation`-observation stop in rule 4 is likewise mechanical, not advisory
   2. **Branch guard** (`guard-branch.sh`) — when the environment variable `FORGE_UNATTENDED=1` is set, blocks `git commit` if the current branch is the repository's default branch. Inert in ordinary interactive sessions. The headless/looped invocation driving an unattended span (see Rules#unattended-execution) sets `FORGE_UNATTENDED=1` before invoking `/forge-next`.
   3. **Secret guard** (`guard-secrets.sh`) — blocks `git commit` when the staged diff matches a conservative set of common secret patterns (cloud access keys, private-key headers, common API-key prefixes). A floor, not a substitute for a dedicated scanner.
 
-  Each guard reads the tool call via Claude Code's PreToolUse hook stdin contract and exits nonzero to block. <!-- ASSUMED: hook I/O contract (stdin JSON with tool_input.command, nonzero exit blocks) per Claude Code's documented PreToolUse hook behavior -->
+  Each guard reads the tool call via Claude Code's PreToolUse hook stdin contract and exits **2** to block. Exit 2 is the only blocking code — Claude Code treats every other nonzero exit as a non-blocking error and lets the tool run anyway.
 
 This avoids broken hooks on first run while ensuring deterministic enforcement is available as early as possible. The human may edit `settings.json` at any time to adjust hook behavior.
 

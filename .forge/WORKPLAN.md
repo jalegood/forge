@@ -617,22 +617,12 @@
 
 ## [TASK-051] Triage the ASSUMED marker backlog into STATUS.md
 
-- **Status:** pending
+- **Status:** done
 - **Type:** clarify
 - **Depends:** TASK-066
 - **Context:** CONTRACT#data-model/status.md-data-model, CONTRACT#rules/contract-amendment-protocol, CONTRACT#rules/contract-first
 - **Gate:** `bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && test $(grep -c "ASSUMED" .forge/CONTRACT.md) -lt 18 && test $(grep -c "^| 2026-" .forge/STATUS.md) -gt 8 && echo "assumption backlog triaged"`
-- **Notes:** 18 `<!-- ASSUMED -->` markers sit in CONTRACT.md, 4 more in WORKPLAN.md, 1 each in STATUS.md and forge-plan.md. Every one is an inference the pipeline made on the human's behalf and never revisited — accumulating inside the automation boundary that every task, manifest, and gate derives from.
-
-  Triage each marker into exactly one of two outcomes:
-  - **Confirm** — remove the marker, log a dated row in STATUS.md Decisions with the rationale and what was rejected.
-  - **Surface** — keep the marker, add a STATUS.md Open Questions row so it stays visible in `/forge-status` and in every checkpoint packet.
-
-  Never silently delete a marker; that converts an unreviewed inference into an invisible one.
-
-  Gate thresholds are the literal counts at authoring time (18 markers, 8 decision rows). It requires at least one marker resolved and at least one decision logged — not full resolution, which would force rushed calls on genuinely open questions. Sequenced before TASK-046 so the checkpoint reviews a triaged Contract instead of a three-week backlog.
-
-  Origin: the "byproducts / waste stream" observation in forge-factory-brainstorm.md — every AI execution emits annotations, and a waste stream with no processing line accumulates until it poisons the base. Justified independently of that model: CONTRACT is the automation boundary, and unreviewed assumptions there propagate into every downstream task.
+- **Notes:** Triaged all 18 CONTRACT ASSUMED markers: 14 confirmed and removed, 4 surfaced against Q-002/Q-003/new Q-007. Two were corrections, not clean confirms — the guard hook contract said "nonzero blocks" when only exit 2 does, and DESIGN# resolution was misdescribed as identical to UX#. Five Decisions rows logged. Record: .forge/notes/TASK-051.md
 
 ## [TASK-067] Reconcile the Contract's Interfaces bullets with STATUS.md's five-table Data Model
 
