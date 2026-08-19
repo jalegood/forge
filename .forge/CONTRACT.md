@@ -393,7 +393,7 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
   - Drafts the spec per the SPEC Data Model: Overview, Requirements with EARS-style statements (`WHEN <trigger>, THE SYSTEM SHALL <response>`) and testable acceptance criteria, Flows, Non-Goals.
   - Annotates every inference with `<!-- ASSUMED: reason -->` and every unresolvable unknown with `<!-- UNRESOLVED: ... -->`.
   - Appends unresolved unknowns to STATUS.md Open Questions.
-  - Runs `node .forge/scripts/check-spec.js <file>` and fixes structural failures before reporting.
+  - Runs `node .forge/scripts/check-spec.js <file> --max-unresolved N` and fixes structural failures before reporting. The script fails on **any** `<!-- UNRESOLVED -->` marker at its default `--max-unresolved 0`; that strict default holds for every other caller. `N` is the number of markers this command is deliberately carrying — a declaration, not a discovery — and may be passed only once each marker has its STATUS.md Open Questions row. `N` is reported to the human. Deleting a marker to satisfy the default is a defect, not a fix.
 - **Outputs:** `.forge/SPEC.md` or `.forge/specs/<feature>.md`, updated `.forge/STATUS.md`
 - **Human action required:** Answer interview questions; review the spec before `/forge-plan` consumes it. `/forge-plan` treats a spec with unresolved plan-blocking questions as a coverage gap.
 

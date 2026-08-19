@@ -642,7 +642,7 @@
 
 ## [TASK-068] Reconcile the Contract's check-spec.js invocation with the script's unresolved-marker threshold
 
-- **Status:** pending
+- **Status:** done
 - **Type:** clarify
 - **Depends:** none
 - **Context:** CONTRACT#interfaces/command-forge-spec, CONTRACT#data-model/spec-data-model, CONTRACT#rules/contract-amendment-protocol, notes/TASK-032#decisions
@@ -650,6 +650,8 @@
 - **Notes:** Closes OBS-007. `Interfaces/Command: /forge-spec` mandates two things that contradict each other as written: annotate every unresolvable unknown with `<!-- UNRESOLVED: ... -->`, and run `node .forge/scripts/check-spec.js <file>`. The script treats any unresolved marker as a failure unless `--max-unresolved N` is passed, so following the Contract literally produces a spec that cannot pass its own gate. The reconciliation exists only in `forge-spec.md` prose (`--max-unresolved 2`) — a command file, and therefore not manifest-addressable, which is the same failure mode as the requirement-heading rule fixed on 2026-08-16.
 
   Decide which side is authoritative and amend the Contract to say so: either the invocation carries a threshold (state the default and where it comes from), or the script's default changes and `forge-spec.md`'s flag use is dropped. `notes/TASK-032#decisions` records why the flag was introduced — read it before choosing. Log a dated Decisions row with the rejected alternative.
+  Resolved via Option A: CONTRACT#interfaces/command-forge-spec now invokes the gate as `check-spec.js <file> --max-unresolved N`, script default stays 0, N declares the markers deliberately carried (each Q-row backed) and is reported to the human. Closes OBS-007; forge-spec.md needed no change. Raised OBS-018 (foundation) — five workplan gates count dated STATUS.md rows against absolute thresholds now all below the actual count.
+  Files: .forge/CONTRACT.md, .forge/STATUS.md
 
 ## [TASK-069] Make /forge-init provision check-spec.js, prose.js, and migrate-notes.js
 
