@@ -134,6 +134,8 @@ Check for each of the following files. For any that do **not** exist, create the
 
 **`.forge/templates/scaffold.md`** — if absent, create:
 
+<!-- forge-init:embed .forge/templates/scaffold.md -->
+
 ```markdown
 # Scaffold Task
 
@@ -180,6 +182,8 @@ When you believe the scaffold is complete:
 
 **`.forge/templates/feature.md`** — if absent, create:
 
+<!-- forge-init:embed .forge/templates/feature.md -->
+
 ```markdown
 # Feature Task
 
@@ -199,13 +203,16 @@ The following Contract sections are relevant to this task. Stay within these con
 
 ## Instructions
 
-Follow test-first development:
+Follow this test-first ordering strictly:
 
-1. **Write tests first.** Write tests that specify the expected behavior before writing any implementation code. Run the test command to confirm the tests fail (they should — implementation doesn't exist yet).
-2. **Write implementation.** Write the minimum implementation needed to satisfy the tests.
-3. **Run the full gate.** Run `{{gate}}` to confirm everything passes.
-4. **Stay in scope.** Only implement what's described in the task. Don't add features, helpers, or abstractions beyond what's needed.
-5. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
+1. **Write tests** that specify the expected behavior. Tests come before implementation — express what the feature must do, not how.
+2. **Run the test command** to confirm the tests exercise new behavior (they may fail or be skipped — that's expected at this stage).
+3. **Write implementation** to satisfy the tests. Stop when tests pass.
+4. **One concern only.** This task should touch one API endpoint, one component, or one data flow. If you find yourself reaching into unrelated areas, stop — that's a separate task.
+5. **Contract is law.** The context above defines what this feature must do. Don't invent requirements beyond what's specified. Don't skip requirements that are specified.
+6. **Interfaces matter.** Match the shapes, types, and contracts defined above. Downstream tasks depend on your interfaces being correct.
+7. **Keep it tight.** No premature abstractions, no "while I'm here" improvements, no speculative generality.
+8. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
    - Row format: `| OBS-XXX | {{task_id}} | design/bug/scope/... | normal or foundation | One-line observation. | open |`, where `OBS-XXX` is the highest existing OBS id plus one.
    - One line per observation — a pointer, not a report.
    - No observation spawns a task on its own. Only a human promotes one, later.
@@ -227,10 +234,12 @@ When you believe the feature is complete:
 
 **`.forge/templates/fix.md`** — if absent, create:
 
+<!-- forge-init:embed .forge/templates/fix.md -->
+
 ```markdown
 # Fix Task
 
-You are executing a **fix** task. Your job is to repair a broken gate or bug.
+You are executing a **fix** task. Your job is to fix a broken gate or bug from a previous task.
 
 ## Task
 
@@ -240,18 +249,21 @@ You are executing a **fix** task. Your job is to repair a broken gate or bug.
 
 ## Contract Context
 
-The following Contract sections are relevant to this task. Stay within these constraints.
+The following Contract sections define the expected behavior that is currently broken.
 
 {{context}}
 
 ## Instructions
 
-Follow test-first development:
+Follow this test-first ordering strictly:
 
-1. **Write a failing test first.** Before touching implementation, write a test that reproduces the bug or exercises the broken behavior. Confirm it fails.
-2. **Fix the root cause.** Implement the minimal fix that makes the test pass. Avoid unrelated changes.
-3. **Run the full gate.** Run `{{gate}}` to confirm the fix holds and nothing regressed.
-4. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
+1. **Reproduce first.** Run the failing gate command or test to see the actual error. Don't guess at the problem.
+2. **Read the diagnostics.** Check the `Notes` field from the previous task — it may contain error output or a diagnosis.
+3. **Write a failing test** that captures the bug behavior. This anchors the fix and prevents regression. Skip this step only if an existing test already isolates the failure.
+4. **Root cause, not symptoms.** Find why it broke, not just what broke. A surface fix that passes the gate but leaves the underlying issue will fail again downstream.
+5. **Minimal fix.** Change only what's necessary to fix the issue. Don't refactor, don't improve, don't clean up surrounding code.
+6. **Verify the original gate.** The gate for this fix task should include the original failing command. Make sure that specific command passes.
+7. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
    - Row format: `| OBS-XXX | {{task_id}} | design/bug/scope/... | normal or foundation | One-line observation. | open |`, where `OBS-XXX` is the highest existing OBS id plus one.
    - One line per observation — a pointer, not a report.
    - No observation spawns a task on its own. Only a human promotes one, later.
@@ -260,23 +272,25 @@ Follow test-first development:
 
 ## Completion
 
-When you believe the fix is complete:
+When the fix is applied:
 
 1. Run the gate command: `{{gate}}`
 2. If the gate **passes**: report success and suggest a commit message.
-3. If the gate **fails**: diagnose the failure, fix it, and re-run the gate.
+3. If the gate **fails**: diagnose further. If you're stuck, write a detailed diagnostic to `Notes` so the next session can pick up.
 4. If you **cannot complete** the task in this session, update the `Notes` field in WORKPLAN.md with:
-   - What was done
-   - What remains
-   - Any decisions or blockers encountered
+   - The root cause (if identified)
+   - What you tried
+   - What remains to investigate
 ```
 
 **`.forge/templates/clarify.md`** — if absent, create:
 
+<!-- forge-init:embed .forge/templates/clarify.md -->
+
 ```markdown
 # Clarify Task
 
-You are executing a **clarify** task. Your job is to resolve ambiguities in CONTRACT.md.
+You are executing a **clarify** task. Your job is to resolve an ambiguity or open question in the Contract.
 
 ## Task
 
@@ -286,23 +300,28 @@ You are executing a **clarify** task. Your job is to resolve ambiguities in CONT
 
 ## Contract Context
 
-The following Contract sections are relevant to this task. Stay within these constraints.
+The following Contract sections contain the ambiguity or `<!-- UNRESOLVED -->` item to address.
 
 {{context}}
 
 ## Instructions
 
-1. **Identify the ambiguity.** Read the relevant Contract section and note the specific `<!-- UNRESOLVED -->` marker or unclear language.
-2. **Draft a resolution.** Propose specific, precise language to replace the ambiguity. The resolution must be concrete enough to generate unambiguous gates and tasks.
-3. **Present to the human.** Show the proposed change and ask for approval before modifying CONTRACT.md.
-4. **Apply after approval.** Once the human approves, update CONTRACT.md with the resolved text.
+1. **Identify the ambiguity.** Locate the specific `<!-- UNRESOLVED: ... -->` comment or unclear requirement in the context above.
+2. **Present options.** Lay out 2-3 concrete options for resolving the ambiguity. For each option, state:
+   - What it means concretely
+   - Trade-offs (complexity, flexibility, constraints)
+   - Your recommendation and why
+3. **Wait for the human.** This task requires a human decision. Present your analysis and options clearly, then ask the human to choose.
+4. **Apply the decision.** Once the human decides, update CONTRACT.md:
+   - Remove the `<!-- UNRESOLVED -->` comment
+   - Replace it with the resolved specification
+   - Ensure the resolution is testable (can you write an assertion for it?)
 5. **Log the decision in `.forge/STATUS.md`.** The Contract edit records *what* the answer is; the Decisions table records *why it is that answer* — and it is the only place the reasoning survives the session.
    - Append a row to the Decisions table: `| YYYY-MM-DD | What was decided | Why | Alternatives rejected |`. Use today's real date.
    - **The rejected alternatives are mandatory, not decoration.** The options from step 2 the human turned down go in that column, each with the reason it lost. Omit them and the next session re-opens the settled question and re-derives the same answers.
    - **If the ambiguity was tracked as an Open Questions row, delete that row.** The question *moves* to Decisions — it does not exist in both tables. A resolved question left sitting under Open Questions is indistinguishable from an unresolved one to everyone who reads that table, including `/forge-status`.
    - If no Open Questions row existed, still write the Decisions row. The trigger is a decision being made, not a question having been filed.
-6. **Assess workplan impact.** Note any `pending` tasks whose Context references the changed section — they may need re-scoping.
-7. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
+6. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
    - Row format: `| OBS-XXX | {{task_id}} | design/bug/scope/... | normal or foundation | One-line observation. | open |`, where `OBS-XXX` is the highest existing OBS id plus one.
    - One line per observation — a pointer, not a report.
    - No observation spawns a task on its own. Only a human promotes one, later.
@@ -313,20 +332,23 @@ The following Contract sections are relevant to this task. Stay within these con
 
 When the ambiguity is resolved:
 
-1. Confirm the gate: `{{gate}}`
+1. Run the gate command: `{{gate}}`
 2. If the gate **passes**: report success and suggest a commit message.
-3. If you **cannot complete** the task in this session, update the `Notes` field in WORKPLAN.md with:
-   - What was clarified
-   - What remains unresolved
-   - Any decisions or blockers encountered
+3. If the gate **fails**: diagnose the failure, fix it, and re-run the gate.
+4. If you **cannot complete** the task (e.g., awaiting human decision), update the `Notes` field in WORKPLAN.md with:
+   - The options you presented
+   - Which option(s) the human is considering
+   - Any context that would help the next session
 ```
 
 **`.forge/templates/refactor.md`** — if absent, create:
 
+<!-- forge-init:embed .forge/templates/refactor.md -->
+
 ```markdown
 # Refactor Task
 
-You are executing a **refactor** task. Your job is to improve structure while preserving behavior.
+You are executing a **refactor** task. Your job is to improve code structure without changing behavior.
 
 ## Task
 
@@ -336,17 +358,17 @@ You are executing a **refactor** task. Your job is to improve structure while pr
 
 ## Contract Context
 
-The following Contract sections are relevant to this task. Stay within these constraints.
+The following Contract sections define the interfaces and rules that must be preserved.
 
 {{context}}
 
 ## Instructions
 
-1. **Confirm existing tests pass.** Run the gate before touching any code. If tests fail, stop — this is a fix task, not a refactor.
-2. **Write characterization tests if needed.** If coverage is insufficient, write tests that pin current behavior before changing anything.
-3. **Refactor in small steps.** Make one structural change at a time. Run the gate after each step.
-4. **Preserve behavior.** The gate must pass before and after. If behavior changes, stop and reassess.
-5. **No scope creep.** Don't add features or fix unrelated bugs during a refactor.
+1. **Behavior stays the same.** This is a refactor, not a feature. All existing tests must continue to pass. All interfaces must remain compatible.
+2. **Read first.** Understand the current structure before changing it. Identify what's wrong and why the refactor is needed.
+3. **One structural change.** Don't refactor everything — address the specific concern in the task description.
+4. **Tests are your safety net.** Run existing tests frequently. If tests don't exist for the code you're changing, write them first (as characterization tests), then refactor.
+5. **Small steps.** Make incremental changes and verify after each step. Don't rewrite entire files in one pass.
 6. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
    - Row format: `| OBS-XXX | {{task_id}} | design/bug/scope/... | normal or foundation | One-line observation. | open |`, where `OBS-XXX` is the highest existing OBS id plus one.
    - One line per observation — a pointer, not a report.
@@ -369,10 +391,12 @@ When the refactor is complete:
 
 **`.forge/templates/investigate.md`** — if absent, create:
 
+<!-- forge-init:embed .forge/templates/investigate.md -->
+
 ```markdown
 # Investigate Task
 
-You are executing an **investigate** task. Your job is to diagnose issues or explore unknowns and document findings.
+You are executing an **investigate** task. Your job is to diagnose an issue, explore a problem space, or gather information needed for future tasks.
 
 ## Task
 
@@ -382,16 +406,16 @@ You are executing an **investigate** task. Your job is to diagnose issues or exp
 
 ## Contract Context
 
-The following Contract sections are relevant to this task. Stay within these constraints.
+The following Contract sections are relevant to this investigation.
 
 {{context}}
 
 ## Instructions
 
-1. **Define the question.** What specific unknown needs to be resolved? State it clearly before starting.
-2. **Explore systematically.** Read relevant files, run diagnostic commands, trace execution paths.
-3. **Document as you go.** Write findings incrementally — don't wait until the end.
-4. **Produce actionable output.** The deliverable is a clear finding: what is happening, why, and what should be done next.
+1. **Reproduce first.** If this is a bug or issue, reproduce it reliably before theorizing. Document the reproduction steps.
+2. **Trace, don't guess.** Follow the actual execution path. Read logs, add instrumentation, check state at each step.
+3. **Document as you go.** Write findings to the Notes field incrementally — don't wait until the end.
+4. **Scope your investigation.** Answer the specific question in the task description. Don't fix things yet — that's a separate task.
 5. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
    - Row format: `| OBS-XXX | {{task_id}} | design/bug/scope/... | normal or foundation | One-line observation. | open |`, where `OBS-XXX` is the highest existing OBS id plus one.
    - One line per observation — a pointer, not a report.
@@ -403,16 +427,21 @@ The following Contract sections are relevant to this task. Stay within these con
 
 When the investigation is complete:
 
-1. Present findings to the human (the gate is `manual:` — the human confirms pass/fail).
-2. Update the `Notes` field in WORKPLAN.md with a summary of findings.
-3. If the gate **passes**: report success and suggest a commit message.
-4. If you **cannot complete** the task in this session, update the `Notes` field in WORKPLAN.md with:
-   - What was investigated
-   - What remains unclear
-   - Any decisions or blockers encountered
+1. Run the gate command: `{{gate}}`
+2. If the gate is `manual:`, present your findings and proposed next steps to the human for review.
+3. Ensure the `Notes` field in WORKPLAN.md contains:
+   - Root cause or key findings
+   - Evidence (error messages, log excerpts, relevant code paths)
+   - Recommended next steps, written as findings for the human — you do not add tasks to the workplan yourself
+4. If you **cannot complete** the investigation in this session, update `Notes` with:
+   - What you've learned so far
+   - What remains to explore
+   - Any hypotheses to test next
 ```
 
 **`.forge/templates/checkpoint.md`** — if absent, create:
+
+<!-- forge-init:embed .forge/templates/checkpoint.md -->
 
 ```markdown
 # Checkpoint Task
@@ -522,6 +551,8 @@ Check if `.forge/UX.md` exists. If it does **not** exist, create it with this st
 If it exists, skip — do not overwrite.
 
 Also create `.forge/templates/ux-spec.md` if absent (only reached when step 6 was answered "yes" — skipped otherwise):
+
+<!-- forge-init:embed .forge/templates/ux-spec.md -->
 
 ```markdown
 # UX Spec Task

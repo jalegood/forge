@@ -10,15 +10,22 @@
 # becomes a mix of one-line pointers and memos.
 #
 # Two copies exist and both are checked. The live templates under
-# .forge/templates/ are what /forge-next injects in this project. The blocks
-# embedded in /forge-init are what a *new* project gets — unlike the script
-# payloads, they carry no forge-init:embed marker and are not diffed against
-# the live files, so nothing else would notice them going stale.
+# .forge/templates/ are what /forge-next injects in this project; the field
+# assertions below run against them. The blocks embedded in /forge-init are
+# what a *new* project gets — each carries a `<!-- forge-init:embed <path> -->`
+# marker and is content-diffed against its live original, the same discipline
+# test-init-scripts.sh applies to the script payloads
+# (CONTRACT#rules/embedded-payload-synchronization). The diff makes separate
+# field assertions on the embedded copies redundant: byte-identical to a
+# passing original means passing.
 
 set -e
 
 INIT=".claude/commands/forge-init.md"
 TEMPLATES=(scaffold feature fix clarify refactor investigate ux-spec checkpoint)
+TMP="${TMPDIR:-/tmp}/forge-init-templates.$$"
+mkdir -p "$TMP"
+trap 'rm -rf "$TMP"' EXIT
 
 # The wording that carries the step. Each phrase pins one mandatory element of
 # CONTRACT#data-model/status.md-data-model, Observations — dropping any one of
@@ -98,11 +105,16 @@ check_clarify_body() {
   done
 }
 
-# Extract the fenced template body that follows the `.forge/templates/X.md`
-# heading in forge-init.md.
+# Extract the fenced block following the embed marker for $1 — keyed on the
+# marker, not on prose or fence position, so rewording the surrounding
+# instructions cannot silently disable the check.
 extract_init() {
   awk -v want="$1" '
-    index($0, "`.forge/templates/" want ".md`") { armed = 1; next }
+    $0 ~ /^<!-- forge-init:embed / {
+      path = $3
+      armed = (path == want)
+      next
+    }
     armed && /^```/ { infence = !infence; if (!infence) exit; next }
     armed && infence { print }
   ' "$INIT"
@@ -116,13 +128,33 @@ for name in "${TEMPLATES[@]}"; do
   echo "  $path: OK"
 done
 
-echo "Checking templates embedded in $INIT..."
+echo "Checking templates embedded in $INIT (content diff, keyed on markers)..."
 test -s "$INIT"
-for name in "${TEMPLATES[@]}"; do
-  body="$(extract_init "$name")"
-  test -n "$body" || { echo "FAIL: $INIT has no template block for $name.md"; exit 1; }
-  check_body "$INIT ($name.md block)" "$body"
-  echo "  $name.md block: OK"
+
+# Both directions matter: a live template with no marker is a template a new
+# project silently never receives (the OBS-002/OBS-003 failure mode), and a
+# marker whose payload has drifted ships a stale engine. The file glob rather
+# than a hardcoded list means a template added later is covered the moment it
+# exists.
+for path in .forge/templates/*.md; do
+  grep -q "^<!-- forge-init:embed $path -->\$" "$INIT" || {
+    echo "FAIL: $INIT has no embed marker for $path"
+    echo "      expected a line: <!-- forge-init:embed $path -->"
+    exit 1
+  }
+
+  extract_init "$path" | tr -d '\r' > "$TMP/embedded"
+  tr -d '\r' < "$path" > "$TMP/actual"
+
+  test -s "$TMP/embedded" || { echo "FAIL: embedded block for $path is empty"; exit 1; }
+
+  if ! diff -q "$TMP/actual" "$TMP/embedded" >/dev/null; then
+    echo "FAIL: embedded copy of $path has drifted from the live file."
+    echo "      Re-copy the file into its fenced block in $INIT."
+    diff -u "$TMP/actual" "$TMP/embedded" | head -30
+    exit 1
+  fi
+  echo "  $path block: matches live"
 done
 
 # The investigate template used to close by drafting workplan entries for a
@@ -130,31 +162,21 @@ done
 # proposal went nowhere — the observation step replaces it. Task-drafting
 # language returning here would reintroduce the orphaned channel.
 echo "Checking that investigate.md no longer drafts workplan entries..."
-for source in ".forge/templates/investigate.md" "<init>"; do
-  if [ "$source" = "<init>" ]; then
-    body="$(extract_init investigate)"
-    label="$INIT (investigate.md block)"
-  else
-    body="$(cat "$source")"
-    label="$source"
+body="$(cat .forge/templates/investigate.md)"
+for phrase in "added to the workplan" "add to WORKPLAN.md" "draft task entries"; do
+  if printf '%s' "$body" | grep -qiF -- "$phrase"; then
+    echo "FAIL: .forge/templates/investigate.md still tells the agent to draft workplan entries: $phrase"
+    exit 1
   fi
-  for phrase in "added to the workplan" "add to WORKPLAN.md" "draft task entries"; do
-    if printf '%s' "$body" | grep -qiF -- "$phrase"; then
-      echo "FAIL: $label still tells the agent to draft workplan entries: $phrase"
-      exit 1
-    fi
-  done
-  echo "  $label: OK"
 done
+echo "  .forge/templates/investigate.md: OK (embedded copy covered by the content diff)"
 
-# Both copies of the clarify template must close the STATUS.md loop. The live
-# one is what /forge-next injects here; the embedded one is what a new project
-# gets, and it carries no forge-init:embed marker, so nothing else diffs it.
+# The clarify template must close the STATUS.md loop. The embedded copy is
+# byte-identical by the content diff above, so checking the live file covers
+# both.
 echo "Checking that clarify.md logs decisions to STATUS.md..."
 check_clarify_body ".forge/templates/clarify.md" "$(cat .forge/templates/clarify.md)"
 echo "  .forge/templates/clarify.md: OK"
-check_clarify_body "$INIT (clarify.md block)" "$(extract_init clarify)"
-echo "  $INIT (clarify.md block): OK"
 
 echo ""
 echo "All template checks passed."

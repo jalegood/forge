@@ -685,20 +685,12 @@
 
 ## [TASK-070] Bring forge-init's embedded template payloads under the script payloads' drift test
 
-- **Status:** pending
+- **Status:** done
 - **Type:** fix
 - **Depends:** none
 - **Context:** CONTRACT#rules/embedded-payload-synchronization, CONTRACT#interfaces/command-forge-init, CONTRACT#interfaces/prompt-template-interface, notes/TASK-054#deviations
 - **Gate:** `bash .forge/tests/test-templates.sh && bash .forge/tests/smoke.sh && grep -q "forge-init:embed .forge/templates/feature.md" .claude/commands/forge-init.md && echo "template payloads content-diffed"`
-- **Notes:** Closes OBS-003. `test-templates.sh` checks that each embedded template block contains the specific fields the test names, which keeps exactly those fields in sync and lets everything else drift — worse than no test, because it reads as coverage. The script payloads solved this in TASK-062 with `<!-- forge-init:embed <path> -->` markers plus a whole-content diff; the template blocks never got either.
-
-  Three changes, one concern:
-
-  1. Add a `forge-init:embed` marker before each of the seven embedded template blocks in `forge-init.md`.
-  2. Re-copy any block that has drifted from its `.forge/templates/` original — the observation reports drift already exists, so expect the new diff to fail before it passes. Determine which direction is correct per block: the live template is normally authoritative, but check for cases where `forge-init.md` carries a fix the live file never received.
-  3. Rewrite `test-templates.sh`'s embedded-block section as a content diff keyed on the markers, mirroring `test-init-scripts.sh`. Keep the live-template field assertions — those check a different property (that each template satisfies the Prompt Template Interface) and are not made redundant by the diff.
-
-  `checkpoint.md` does not exist yet (TASK-035); write the diff to cover whatever template blocks are present rather than a hardcoded count of seven, so TASK-035 does not have to revisit this test.
+- **Notes:** Markers on all 8 template blocks, marker-keyed glob-driven content diff in test-templates.sh, five stale bodies re-copied (live authoritative); resolves Q-007. Record: .forge/notes/TASK-070.md
 
 ## [TASK-071] Restore SPEC traceability on TASK-032's context manifest
 
