@@ -19,13 +19,15 @@ Forge operates on these file artifacts:
 | UX Gate   | `.forge/scripts/check-ux-spec.js` | Forge-managed      | Deterministic ux-spec gate — validates one screen by name. Created only if the project has a user-facing interface. |
 | DESIGN.md | `.forge/DESIGN.md`            | Human (100%) | Visual design system: tokens, typography, spacing, component specs. Hand-authored markdown. Created only if the project has a user-facing interface. |
 | Spec      | `.forge/SPEC.md`, `.forge/specs/*.md` | Human (60%) / AI (40%) | Behavioral spec: what the system should do — requirements, acceptance criteria, flows, rationale. Lives beside the Contract; Contract wins on conflict |
-| Status    | `.forge/STATUS.md`            | AI (60%) / Human (40%) | Living project log: open questions, decisions, risks, blockers          |
+| Status    | `.forge/STATUS.md`            | AI (60%) / Human (40%) | Living project log: open questions, decisions, risks, blockers, observations |
 | Workplan Lint | `.forge/scripts/check-workplan.js` | Forge-managed    | Deterministic workplan invariant checker                                 |
 | Spec Gate | `.forge/scripts/check-spec.js` | Forge-managed         | Deterministic spec readiness gate                                        |
+| Status Lint | `.forge/scripts/check-status.js` | Forge-managed      | Deterministic STATUS.md invariant checker — table shape, enum values, observation link integrity |
 | Unattended Guards | `.forge/scripts/guard-push.sh`, `.forge/scripts/guard-branch.sh`, `.forge/scripts/guard-secrets.sh` | Forge-managed | Deterministic PreToolUse hooks: block `git push`, block off-branch commits during unattended runs, block commits matching common secret patterns |
 | Version   | `.forge/VERSION`              | Forge-managed          | Engine version stamp + canonical repo pointer, consumed by `/forge-sync` |
 | Task Records | `.forge/notes/TASK-XXX.md`   | AI (90%) / Human (10%) | Durable per-task narrative: outcome, decisions, deviations, files. Manifest-addressable. Self-sufficient without git |
 | Workplan Script | `.forge/scripts/wp.js`     | Forge-managed          | Deterministic workplan query and mutation — task selection, status projection, targeted field writes, gate-discrimination probe at `pending → active` |
+| Observation Script | `.forge/scripts/obs.js` | Forge-managed         | Deterministic Observations query and mutation — the only writer of the Observations table |
 | Markdown Resolver | `.forge/scripts/lib/markdown.js` | Forge-managed    | Shared fence-aware heading parser and manifest-reference resolver; every check script consumes it |
 | Workplan Parser | `.forge/scripts/lib/workplan.js` | Forge-managed     | The one parser for the WORKPLAN.md format, shared by `check-workplan.js` and `wp.js` |
 | Prose Gate Helper | `.forge/scripts/prose.js`  | Forge-managed          | Greps a markdown file's prose while ignoring fenced payloads, so a gate cannot pass on text inside an embedded script |
@@ -63,6 +65,18 @@ Resolution: parse the references, extract matching markdown sections (header thr
 **Requirement-heading matching:** requirement headings are the one exception to standard slug matching. A `### [req-slug] Requirement Name` heading under `## Requirements` matches the subsection reference `req-slug` by comparing the bracketed portion alone — strip the brackets, lowercase, compare directly — ignoring the trailing name text. So `SPEC#requirements/req-login` matches `### [req-login] User Login` however the name is later reworded, which is the point: requirement names are prose and change, slugs are identifiers and do not.
 
 **Budget:** Resolved context must not exceed ~200 lines of Contract content per task. Exceeding this signals the Contract section is too large or the task scope is too broad. One screen per task.
+
+### Markdown Table Parsing
+
+Several Forge artifacts carry data in markdown tables that scripts read back — STATUS.md's five tables above all, and the UX.md States table. Those tables are a data format, not decoration, and they need one stated rule because the failure they produce is silent.
+
+**A bare `|` inside a cell terminates that cell.** This is standard markdown, not a Forge choice. A cell whose text needs a literal pipe — a shell snippet, a regex alternation, a table inside prose — must escape it as `\|`. An unescaped pipe splits one row into more cells than the table has columns.
+
+**Readers parse by column name, never by position.** A positional reader on a row with the wrong cell count does not fail; it silently reads a value out of the middle of some other cell and carries on. Header-keyed parsing degrades to a clean, detectable error instead, and it survives a column being added — which is why `test-wp.sh`'s six-column fixtures must keep working after a seventh column lands.
+
+**The shared parser is `.forge/scripts/lib/markdown.js`.** It handles `\|` escaping and backtick spans; no caller re-implements table splitting. The one parser rule here is the same one Rules/Workplan Access Discipline applies to WORKPLAN.md: a format with two parsers has two behaviors.
+
+**A malformed row is a lint error, not a dropped row.** Silently skipping a row a reader cannot parse is how an `open` observation becomes invisible while still reading as filed — and, at `foundation` severity, how the pipeline's one mechanical hard stop fails to fire while every report says the queue is clear. Rules/Status Lint enforces this for STATUS.md.
 
 ### UX.md Data Model
 
@@ -207,13 +221,22 @@ STATUS.md is the living project log — the single place for open questions, dec
 
 ## Observations
 
-| ID | Raised by | Kind | Severity | Observation | Disposition |
-| -- | --------- | ---- | -------- | ----------- | ----------- |
+| ID | Date | Raised by | Kind | Severity | Observation | Disposition |
+| -- | ---- | --------- | ---- | -------- | ----------- | ----------- |
 ```
 
-**Writers:** `/forge-spec` appends open questions raised during intake. `clarify` tasks move resolved questions to Decisions (dated, with rationale). `/forge-next` appends a Blockers row when marking a task `blocked`. The human edits freely. **Readers:** `/forge-status` surfaces open questions and blockers; `checkpoint` review packets embed the file. A status file nothing reads goes stale — these integrations are mandatory, not optional.
+**Writers:** `/forge-spec` appends open questions raised during intake. `clarify` tasks move resolved questions to Decisions (dated, with rationale). `/forge-next` appends a Blockers row when marking a task `blocked`, and records observations via `obs.js add`. `/forge-plan` advances an accepted observation to `planned:TASK-XXX` when it generates the task. The human edits freely. Every write to the Observations table goes through `obs.js`; the other four tables are written directly. **Readers:** `/forge-status` surfaces open questions, blockers, and the observation backlog; `checkpoint` review packets embed the file. A status file nothing reads goes stale — these integrations are mandatory, not optional.
 
-**Observations:** Any task may append an Observations row for something noticed but outside its scope. The governing test is: **if the fix is covered by this task's gate and belongs in this task's diff, make it — no observation needed. Otherwise log one line and move on.** The channel exists to capture what would otherwise be lost, not to intercept what would otherwise be fixed.
+**Observations:** Any task may record an Observations row for something noticed but outside its scope. The governing test is: **if the fix is covered by this task's gate and belongs in this task's diff, make it — no observation needed. Otherwise log one line and move on.** The channel exists to capture what would otherwise be lost, not to intercept what would otherwise be fixed.
+
+**Rows are written by `.forge/scripts/obs.js`, never hand-authored.** The script mints the ID, stamps the date, escapes the cell text, and re-validates the table before the write stands (Interfaces/Observation Script). Hand-writing a row is how a literal `|` reaches a cell and silently removes the row from every reader (Data Model/Markdown Table Parsing) — and how an ID collides, since `max(existing) + 1` computed by eye against a stale read is the same race Rules/Task Ordering documents for task IDs. Humans may still edit STATUS.md in any text editor; Rules/Status Lint is what catches a bad edit from either hand.
+
+Columns beyond the self-evident:
+
+- **Date** — ISO date the row was recorded, stamped by `obs.js add`. Age is triage input in its own right: a row that has survived twenty tasks is evidence about the observation, not merely about the backlog.
+- **Kind** — one of `design`, `bug`, `scope`, `friction`. A closed set, so it can be counted on, filtered, and linted.
+- **Severity** — `normal` or `foundation`.
+- **Disposition** — see State Machines/Observation Lifecycle for the values and the transitions among them.
 
 Constraints, all mandatory:
 
@@ -222,7 +245,7 @@ Constraints, all mandatory:
 - **More than three observations from a single task collapse into one `foundation` observation.** Volume of small complaints is itself the signal that the foundation is wrong; recording it as volume buries that signal.
 - **`foundation` severity** means the spec, contract, or approach is suspect and continuing to build compounds debt. Everything else is `normal`.
 
-**Observation readers:** `/forge-next` reports open `foundation` rows before selecting a task — this is the primary loop closure, because `/forge-next` is the command that actually runs every session. `checkpoint` packets list all open rows for triage. `/forge-status` lists them. `/forge-plan` consumes `accepted` rows as planning input when it happens to run — secondary, never the only path.
+**Observation readers:** `/forge-next` sweeps the table and reports open `foundation` rows before selecting a task — this is the primary loop closure, because `/forge-next` is the command that actually runs every session. `checkpoint` packets list all open rows and ask the human for a disposition on each. `/forge-status` lists them with age and backlog counts. `/forge-plan` consumes `accepted` rows as planning input when it happens to run — secondary, never the only path.
 
 ### Task Record Data Model
 
@@ -298,6 +321,33 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
 2. If resuming an `active` task, `Notes` field provides continuity
 3. Fresh context window — full reasoning capacity
 
+### Observation Lifecycle
+
+```
+open ──→ accepted ──→ planned:TASK-XXX ──→ closed
+ │                                          ▲
+ ├──→ declined ─────────────────────────────┤
+ └──→ duplicate:OBS-YYY ────────────────────┘
+```
+
+- **open:** Recorded, untriaged. The only state `obs.js add` can produce. Surfaces in `/forge-status`, checkpoint packets, and — at `foundation` severity — the `/forge-next` hard stop.
+- **accepted:** A human agreed the work is worth doing; no task exists yet. **Not terminal, and not silent** — an `accepted` row appears in `/forge-status` as an awaiting-planning queue until it reaches `planned:`.
+- **planned:TASK-XXX:** A task exists for it. The reference must resolve to a real task (Rules/Status Lint).
+- **declined:** A human decided against it. Terminal.
+- **duplicate:OBS-YYY:** Folded into another row, which must exist and must not itself be a `duplicate:`. Terminal.
+- **closed:** Resolved. Terminal.
+
+Valid transitions: `open→accepted`, `open→declined`, `open→duplicate:`, `accepted→planned:`, `accepted→declined`, `planned:→closed`, `planned:→open` (when the task is deleted or abandoned).
+
+**Who may move a row.** Every transition out of `open` is a judgment, and the default owner is the human. Two exceptions, both narrow and both `normal`-severity only:
+
+1. **`planned:TASK-XXX → closed` is deterministic and automatic.** When the named task reaches `done`, the observation is resolved by definition. `obs.js sweep` performs this with no judgment and no human. This is what stops `accepted` from being a dead letter — the state advances on its own once work lands.
+2. **An agent may set `duplicate:` or `planned:` on a `normal` row** where the duplicate target or the covering task already exists, recording a dated Decisions row with its reasoning for review at the next checkpoint (Rules/Unattended Execution).
+
+**A `foundation` row is never auto-dispositioned.** That severity asserts the approach itself is suspect; an agent that can clear its own foundation rows can retire the one signal designed to interrupt its momentum. This is the same reasoning that makes the `foundation` hard stop mechanical rather than advisory.
+
+**No transition creates a task.** `planned:TASK-XXX` records that a human already decided the task should exist; it never causes one. Agents do not promote observations into work — see the constraint under Data Model/STATUS.md Data Model, which this lifecycle implements rather than relaxes.
+
 ## Interfaces
 
 ### Command: `/forge-init`
@@ -307,9 +357,9 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
   - Creates `.forge/VISION.md` if absent (stub template with What/Who/Pillars sections)
   - Creates `.forge/CONTRACT.md` if absent (stub template with all top-level sections)
   - Creates `.forge/templates/` directory with all 7 unconditional template files if absent: scaffold.md, feature.md, clarify.md, refactor.md, fix.md, investigate.md, checkpoint.md (ux-spec.md is conditional — see below)
-  - Creates the Forge-managed scripts under `.forge/scripts/` if absent — `lib/markdown.js`, `lib/workplan.js`, `check-workplan.js`, `wp.js`, `check-spec.js`, `prose.js`, `migrate-notes.js`. All seven are unconditional, and each is load-bearing for a command or a generated gate: `/forge-plan` and `/forge-next` block on the workplan lint, `/forge-next` and `/forge-status` reach the workplan only through `wp.js`, `/forge-spec` gates on `check-spec.js`, generated gates on markdown deliverables call `prose.js`, and `migrate-notes.js` is the remedy a project needs once its workplan predates the externalization threshold. A project missing any of them cannot complete a task whose gate names it.
+  - Creates the Forge-managed scripts under `.forge/scripts/` if absent — `lib/markdown.js`, `lib/workplan.js`, `check-workplan.js`, `wp.js`, `check-spec.js`, `check-status.js`, `obs.js`, `prose.js`, `migrate-notes.js`. All nine are unconditional, and each is load-bearing for a command or a generated gate: `/forge-plan` and `/forge-next` block on the workplan lint, `/forge-next` and `/forge-status` reach the workplan only through `wp.js`, `/forge-spec` gates on `check-spec.js`, every observation is recorded through `obs.js` and validated by `check-status.js`, generated gates on markdown deliverables call `prose.js`, and `migrate-notes.js` is the remedy a project needs once its workplan predates the externalization threshold. A project missing any of them cannot complete a task whose gate names it.
   - Creates `.forge/SPEC.md` if absent (stub with Overview, Requirements, Flows, Non-Goals sections)
-  - Creates `.forge/STATUS.md` if absent (stub with Open Questions, Decisions, Risks, Blockers, and Observations tables)
+  - Creates `.forge/STATUS.md` if absent (stub with Open Questions, Decisions, Risks, Blockers, and Observations tables, each carrying the exact columns its Data Model skeleton declares — a stub whose columns disagree with the skeleton makes every row `obs.js` writes malformed on arrival)
   - Creates `.forge/VERSION` if absent (engine version stamp + canonical repo URL)
   - **Asks the human:** "Does this project have a user-facing interface (UI/UX)?" before touching any UX/DESIGN artifact. If the answer is unclear, ask again — do not guess.
     - **If yes:** creates `.forge/UX.md` if absent — stub with Global section (Copy Tone, Interaction Notes) and one placeholder Flow with one placeholder Screen, including mandatory fields as HTML comments; creates `.forge/templates/ux-spec.md` if absent (the ux-spec prompt template — pointless boilerplate without UX.md, so it's gated here rather than with the other 7 unconditional templates); creates `.forge/DESIGN.md` if absent — stub with Tokens (Colors, Typography, Spacing, Radius) and Components sections, each with HTML comment placeholders; creates `.forge/scripts/check-ux-spec.js` if absent (the ux-spec gate script)
@@ -343,7 +393,7 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
   - **Checkpoint cadence:** Inserts a `checkpoint` task at each dependency-phase boundary or after every 5 consecutive non-checkpoint tasks, whichever comes first, listing the span's tasks in `Depends` (see Rules/Checkpoint Cadence). <!-- ASSUMED: cadence of 5 -->
   - **Gate discrimination:** authors every gate so it fails against the pre-work state and passes after the work (see Rules/Gate Discrimination). A gate asserting a topic word the target file may already contain is rejected at authoring time in favour of one asserting the change, the covering test suite, or `manual:`.
   - **Workplan lint:** After writing WORKPLAN.md, runs `node .forge/scripts/check-workplan.js`. A nonzero exit means the generated plan violates an invariant — fix and re-run before reporting completion.
-  - **Observation intake:** Consumes STATUS.md Observations rows marked `accepted` as planning input. Each becomes a candidate task, subject to the same Contract-First coverage requirement as any other deliverable. Rows marked `open` or `declined` are not planned.
+  - **Observation intake:** Consumes STATUS.md Observations rows marked `accepted` as planning input. Each becomes a candidate task, subject to the same Contract-First coverage requirement as any other deliverable. Rows in any other disposition are not planned — `open` means nobody has triaged it, and the rest are settled. When planning generates a task for an accepted row, it advances that row to `planned:TASK-XXX` via `obs.js set`, closing the loop that previously let an accepted row sit unplanned and unseen. This is the one STATUS.md write this command makes.
 - **Output task format:** Each task in WORKPLAN.md uses this structure: `## [TASK-XXX] Description` followed by fields — Status (`pending` for new tasks), Type (`scaffold|feature|clarify|refactor|fix|investigate|ux-spec|checkpoint`), Depends (`none` or comma-separated task IDs), Context (manifest references like `CONTRACT#section-name` or `UX#flows/flow-name/screen-name`), Gate (shell command or `manual:` prefix), Notes (empty for new tasks). Task IDs are unique and assigned from a monotonic counter: the next ID is `max(existing) + 1`, computed at write time against the current file — never inferred from the last ID read earlier in the session. Gaps are normal (deleted or abandoned tasks). An ID's ordinal carries no ordering meaning; see Rules/Task Ordering.
 - **Task sizing:** One task per concern. If a description uses "and" connecting two distinct pieces of work, split it. Each task should complete in a single clean session.
 - **Manifest generation:** Each task's Context field must list all Contract sections needed to execute independently (see Manifest Completeness rule). Context manifests for `ux-spec` tasks reference `UX#flows/flow-name` (the stub to complete). Context manifests for `feature` tasks implementing a screen reference `UX#flows/flow-name/screen-name` plus any `CONTRACT#` sections for data shapes the screen consumes.
@@ -369,7 +419,7 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
 - **Record externalization:** On marking a task `done`, writes the task's narrative to `.forge/notes/TASK-XXX.md` when it would exceed 3 lines, and leaves a one-line summary plus the path in the workplan `Notes` field (see Data Model/Task Record Data Model). Short notes stay inline.
 - **Projection, not reading:** Task selection runs through `wp.js`, which returns only the selected task's fields. The command never loads the full workplan into context.
 - **Workplan lint:** After any write to WORKPLAN.md, runs `node .forge/scripts/check-workplan.js`; a nonzero exit blocks proceeding until fixed.
-- **Observations:** Before selecting a task, reads STATUS.md Observations and reports every `open` row with `foundation` severity. On task completion, appends any observation rows the execution produced, per Data Model/STATUS.md Data Model. Never promotes an observation to a task.
+- **Observations:** Runs `obs.js sweep` before selecting a task, then reports every `open` row with `foundation` severity. On an exit-3 halt, enters the guided triage flow rather than merely relaying the refusal (Rules/Unattended Execution). On task completion, records any observations the execution produced via `obs.js add`. Never promotes an observation to a task.
 - **Outputs:** Executed code changes, gate result, updated WORKPLAN.md
 
 ### Command: `/forge-status`
@@ -381,7 +431,7 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
   - Obtains all counts, the next unblocked task, and clarify/observation listings from `.forge/scripts/wp.js` rather than reading and parsing WORKPLAN.md in context
   - Identifies next unblocked task: first `pending` task whose `Depends` are all `done` or `none`
   - Lists any `clarify`-type tasks that are `pending` or `active` (these need human decisions)
-  - Surfaces STATUS.md Observations: `open` rows, `foundation` severity listed first
+  - Surfaces STATUS.md Observations: `open` rows with `foundation` severity listed first, each with the description of the task that raised it and its age in days; the `accepted` queue awaiting planning; and backlog counts by disposition. A bare ID is not a report — the reader must be able to act without opening another file or running another command.
   - Surfaces STATUS.md items when present: open questions (flagging any marked Blocking), and blockers
 - **Outputs:** Progress summary to the user — task counts by status, next unblocked task ID and description, clarify tasks awaiting input (if any), open questions and blockers from STATUS.md (if any). Read-only — no file modifications, no side effects.
 
@@ -401,13 +451,42 @@ start ──→ execute ──→ gate ──→ commit ──→ clear
 
 - **Reads:** `.forge/VERSION` (line 1: engine version; line 2: canonical repo URL), the canonical Forge repository
 - **Does:**
-  - Fetches the canonical versions of Forge-managed files: `.claude/commands/forge-*.md`, `.forge/templates/*.md`, `.forge/scripts/check-*.js`
+  - Fetches the canonical versions of Forge-managed files: `.claude/commands/forge-*.md`, `.forge/templates/*.md`, and every script the Artifacts table marks Forge-managed — `.forge/scripts/*.js`, `.forge/scripts/lib/*.js`, and `.forge/scripts/guard-*.sh`. The glob covers what the Artifacts table declares, rather than a narrower hand-maintained pattern: a script marked Forge-managed but excluded from sync drifts permanently in every installed project, which is what a `check-*.js`-only glob did to `wp.js`, `prose.js`, `lib/`, and the guards
   - Diffs each against the local copy and presents a per-file summary: unchanged, local-only customization, upstream-updated, or conflicting
   - Applies only the updates the human approves, file by file
   - **Never touches project-owned artifacts:** VISION.md, CONTRACT.md, SPEC.md, specs/, WORKPLAN.md, STATUS.md, UX.md, DESIGN.md
   - Updates `.forge/VERSION` after a successful sync
 - **Outputs:** Updated Forge-managed files (approved subset), updated `.forge/VERSION`
 - **Human action required:** Approve or decline each file update. Local customizations are never silently overwritten.
+
+### Script Exit Codes
+
+Callers branch on these, so they are contract, not implementation detail. A map that lives only in a code comment cannot be cited by a context manifest, which means no task can be written against it and every consumer re-derives it by reading the source.
+
+**Forge scripts** (`wp.js`, `obs.js`, `check-*.js`):
+
+| Code | Meaning |
+| ---- | ------- |
+| 0 | Success |
+| 1 | Usage or validation error — bad arguments, missing file, failed lint, refused transition |
+| 2 | Nothing to select — no unblocked task, or another task is already active |
+| 3 | Halted by an open `foundation`-severity observation (Rules/Unattended Execution, hard stop 4) |
+| 4 | Gate-discrimination probe refused the `pending → active` transition (Rules/Gate Discrimination) |
+
+Codes 3 and 4 are split out from 2 deliberately. All three once shared code 2, which forced every caller wanting to distinguish "there is no work" from "there is work but you must stop" to parse the message text. A caller that must read prose to learn what happened has no interface.
+
+**Hook scripts** (`guard-*.sh`, and any script wired as a PreToolUse or PostToolUse hook) do **not** use the table above. They follow Claude Code's hook contract, where **exit 2 blocks the tool call and every other nonzero exit is a non-blocking error that lets the tool run anyway**. A hook that signals failure with exit 1 reports a problem and prevents nothing. When a Forge script is wired as a hook, the wrapper translates — the script keeps its own codes and the hook exits 2 on the conditions that must block.
+
+### Observation Script
+
+`.forge/scripts/obs.js` is to STATUS.md's Observations table what `wp.js` is to WORKPLAN.md: the deterministic read and write surface, so the format has one writer instead of eighteen.
+
+- **`obs.js add --kind K --severity S --task TASK-XXX "<text>"`** — appends a row. Mints the next ID against the file at write time, stamps the date, escapes pipes in the text, sets Disposition `open`, then validates via `check-status.js` and reverts the write if validation fails. This is the only supported way to record an observation.
+- **`obs.js set OBS-XXX <field> <value>`** — a targeted field write, refusing any Disposition change that is not a valid transition per State Machines/Observation Lifecycle. Same write-validate-revert discipline.
+- **`obs.js list [--json] [--disposition D] [--severity S]`** — projection. Returns rows with computed age in days; never loads STATUS.md into a caller's context in full.
+- **`obs.js sweep`** — the deterministic triage pass. Closes every `planned:TASK-XXX` row whose task is `done`, reports `accepted` rows carrying no task link, and reports exact-duplicate observation text. Makes no judgment call and takes no human input; anything requiring either is reported, not applied.
+
+Writes follow the write-lint-revert pattern `wp.js` already uses: write the file, run the lint, restore the original and fail loudly if the lint rejects it. A mutation that leaves the artifact invalid is worse than a refused one.
 
 ### Prompt Template Interface
 
@@ -417,7 +496,7 @@ Each template in `.forge/templates/` must contain:
 - Task-type-specific instructions
 - A reminder to run the gate command before reporting completion
 - An instruction to update `Notes` if work is incomplete
-- An instruction to record out-of-scope findings as STATUS.md Observations rows, applying the in-scope fix test rather than logging reflexively
+- An instruction to record out-of-scope findings by invoking `obs.js add`, applying the in-scope fix test rather than logging reflexively. The template carries the *judgment* — whether a finding is worth recording at all, and at what severity — and delegates the *format* to the script. A template that restates the row layout is reintroducing the duplication `obs.js` exists to remove.
 
 Templates are ~30-50 lines. They are injected fresh each session.
 
@@ -692,6 +771,20 @@ WORKPLAN.md invariants are enforced deterministically by `.forge/scripts/check-w
 
 `/forge-plan` and `/forge-next` run the script after any WORKPLAN.md write; a nonzero exit blocks proceeding. It may additionally be wired as a PostToolUse hook for edits made outside the commands.
 
+### Status Lint
+
+STATUS.md invariants are enforced deterministically by `.forge/scripts/check-status.js`. WORKPLAN.md has had a lint since v0.2; STATUS.md has had none, while carrying a table that a hard stop reads every session. The script validates:
+
+1. Every table present in the file has the columns its Data Model skeleton declares, in order.
+2. Every row parses to exactly that column count — a row that does not is an **error**, never a skipped row (Data Model/Markdown Table Parsing). This is the invariant that matters most: a dropped row is indistinguishable from an absent one, and at `foundation` severity it disables the hard stop while every report shows a clear queue.
+3. Observation IDs are unique and monotonic; `Kind`, `Severity`, and `Disposition` hold enumerated values only.
+4. Every `planned:TASK-XXX` names a task that exists in WORKPLAN.md; every `duplicate:OBS-YYY` names a row that exists and is not itself a `duplicate:`.
+5. No `accepted` row is older than one checkpoint span without a task link — reported as a **warning**, since it is a triage backlog rather than a malformed artifact.
+
+Errors exit 1 and block; warnings print and do not. `obs.js` runs the script after any write and reverts on failure. It is additionally wired as a PostToolUse hook so a hand edit is caught at the moment it is made rather than at the next command — and because STATUS.md is the one artifact this Contract explicitly invites the human to edit freely, hand edits are the expected case, not the exception.
+
+Per Interfaces/Script Exit Codes, a PostToolUse hook must exit **2** to block; the hook wrapper translates the script's exit 1 accordingly. A status-lint hook that exits 1 reports a malformed table and prevents nothing.
+
 ### Embedded Payload Synchronization
 
 `/forge-init` scaffolds a project by writing out copies of Forge-managed files that also exist in the engine repository — script sources and prompt templates alike. Every such copy is a **payload**. A payload that has drifted from its original ships a stale engine to every new project while the dogfood instance stays correct, and the drift is invisible: both files run, they simply disagree.
@@ -725,10 +818,21 @@ Between checkpoints, the loop (e.g., repeated headless `/forge-next` invocations
 
 Rules 1 and 3 are mechanically enforced by the branch guard and push guard hooks, not by instruction-following alone (see Boundaries#hook-configuration).
 
-The `foundation`-observation stop in rule 4 is likewise mechanical, not advisory: `wp.js next` refuses to select a task while an open `foundation`-severity row exists in STATUS.md Observations, exiting 2 and printing the offending rows. A halt that depends on the executing agent noticing its own warning is not a halt — and this is the one stop an agent must trigger against its own momentum, so it is the one that most needs a mechanism. Two consequences follow:
+The `foundation`-observation stop in rule 4 is likewise mechanical, not advisory: `wp.js next` refuses to select a task while an open `foundation`-severity row exists in STATUS.md Observations, exiting **3** (Interfaces/Script Exit Codes) and printing the offending rows. A halt that depends on the executing agent noticing its own warning is not a halt — and this is the one stop an agent must trigger against its own momentum, so it is the one that most needs a mechanism. Two consequences follow:
 
 - **Resuming an `active` task is still permitted.** The contract says the current task finishes cleanly first; refusal applies to selecting new work, never to `resume-active`.
-- **The human clears the stop by triaging, not by overriding.** Moving the row's Disposition off `open` — to `accepted` or `declined` — is the designed exit, and it is what makes the observation channel a queue rather than a log. `wp.js next --force` exists for the human who has read the row and wants to continue anyway; agents do not pass it.
+- **The human clears the stop by triaging, not by overriding.** Moving the row's Disposition off `open` per State Machines/Observation Lifecycle is the designed exit, and it is what makes the observation channel a queue rather than a log. `wp.js next --force` exists for the human who has read the row and wants to continue anyway; agents do not pass it.
+
+**Triage on halt.** A halt is not the end of the session — it is the start of a triage one. On exit 3, `/forge-next` presents each open row in plain language with a recommended disposition and its reasoning, applies the human's answers through `obs.js set`, and retries selection. This is deliberately not a separate command: the halt already occurs inside a running session, so the guided flow costs the human nothing to reach and nothing to remember. There is no `/forge-triage`, and Boundaries/Platform Constraints stays at six commands.
+
+**Autonomous triage during an unattended span.** Rule 4's halt is unchanged, but not every row needs to reach it. Two passes run without human input:
+
+1. **`obs.js sweep`, every session.** Purely deterministic — closes `planned:` rows whose task is `done`, reports unlinked `accepted` rows and duplicate text. No judgment, so no risk.
+2. **Agent disposition of `normal` rows only.** Where the duplicate target or the covering task demonstrably already exists, the agent may set `duplicate:` or `planned:` and record a dated Decisions row stating which row or task and why. The checkpoint reviews those Decisions rows; a disposition applied without one is a checkpoint finding.
+
+Novel `normal` rows stay `open` and wait for the checkpoint — they do not halt the span. **`foundation` rows are never auto-dispositioned under any circumstance**, per State Machines/Observation Lifecycle. When a span halts on one and no human is present, the loop writes the triage packet to disk and stops, so the operator finds a decision waiting rather than an error to reconstruct.
+
+This is the division the whole channel rests on: the pipeline may clear what is provably redundant, and only what is provably redundant. Everything else is a decision, and decisions are the human's — Vision pillar 6 maximizes correct decisions per unit of human attention, which means spending that attention on the rows that are actually decisions.
 
 ## Boundaries
 
@@ -752,9 +856,10 @@ The `foundation`-observation stop in rule 4 is likewise mechanical, not advisory
 
 ### Hook Configuration
 
-`/forge-plan` writes `.claude/settings.json` during initial scaffold **only if the file does not already exist**. The default configuration:
+`/forge-init` writes `.claude/settings.json` during initial scaffold **only if the file does not already exist** (this section previously credited `/forge-plan`, contradicting Interfaces/`/forge-init`, which has always been the command that writes it). The default configuration:
 
 - **PostToolUse (file edit):** Auto-lint/format after every file write (~200ms, non-blocking). Configured for the detected tech stack, or a no-op placeholder if no linter is detected.
+- **PostToolUse (STATUS.md edit):** Runs the status lint (`check-status.js`) after any write touching `.forge/STATUS.md`, **enabled by default**. STATUS.md is the artifact this Contract most explicitly invites the human to hand-edit, and the only one whose malformed rows are read by a mechanical hard stop — so it is the artifact where an edit-time check pays for itself most. Per Interfaces/Script Exit Codes the wrapper exits **2** on a lint error, since any other nonzero exit reports the problem without preventing it.
 - **PreToolUse (git commit):** Block commits unless test suite passes (exit 0 required). **Disabled by default** — enabled by a later workplan task after test infrastructure exists.
 - **PreToolUse (unattended-execution guards):** Three deterministic checks, **enabled by default** — unlike the test-gate hook above, these do not depend on test infrastructure existing:
   1. **Push guard** (`guard-push.sh`) — blocks any Bash command matching `git push`. Always active; publishing is human-only (see Boundaries#what-forge-does-not-do).

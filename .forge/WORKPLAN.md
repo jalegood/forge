@@ -653,13 +653,22 @@
   Resolved via Option A: CONTRACT#interfaces/command-forge-spec now invokes the gate as `check-spec.js <file> --max-unresolved N`, script default stays 0, N declares the markers deliberately carried (each Q-row backed) and is reported to the human. Closes OBS-007; forge-spec.md needed no change. Raised OBS-018 (foundation) — five workplan gates count dated STATUS.md rows against absolute thresholds now all below the actual count.
   Files: .forge/CONTRACT.md, .forge/STATUS.md
 
+## [TASK-094] Isolate FORGE_UNATTENDED in the guard hook test
+
+- **Status:** pending
+- **Type:** fix
+- **Depends:** none
+- **Context:** CONTRACT#boundaries/hook-configuration, CONTRACT#rules/test-first-convention, CONTRACT#rules/gate-patterns
+- **Gate:** `FORGE_UNATTENDED=1 bash .forge/tests/test-guard-hooks.sh && env -u FORGE_UNATTENDED bash .forge/tests/test-guard-hooks.sh && bash .forge/tests/smoke.sh && grep -q "env -u FORGE_UNATTENDED" .forge/tests/test-guard-hooks.sh && echo "guard tests control their environment"`
+- **Notes:** Found 2026-08-30 at headless-run start: the suite went red the moment the session environment armed `FORGE_UNATTENDED=1`, because `test-guard-hooks.sh`'s interactive-case assertions rely on the flag being *absent from the inherited environment* rather than unsetting it. A guard test that inherits its arming state from whoever runs it fails in exactly the unattended context the guards exist for. Fix: run every interactive-case invocation under `env -u FORGE_UNATTENDED`; armed cases keep setting the flag explicitly per case. Gate discrimination: the first clause fails today (with the flag set, the inert-guard assertion reports a false block) and the grep clause fails today (`env -u` appears nowhere in the file).
+
 ## [TASK-069] Make /forge-init provision check-spec.js, prose.js, and migrate-notes.js
 
 - **Status:** pending
 - **Type:** fix
 - **Depends:** none
 - **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#data-model/artifacts, CONTRACT#rules/embedded-payload-synchronization, notes/TASK-062#decisions
-- **Gate:** `bash .forge/tests/test-init-scripts.sh && bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && echo "init provisions all seven scripts"`
+- **Gate:** `bash .forge/tests/test-init-scripts.sh && bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && echo "init provisions the three missing gate scripts"`
 - **Notes:** Closes OBS-005, which is wider than the row states. `forge-init.md` embeds four script payloads — `lib/markdown.js`, `lib/workplan.js`, `check-workplan.js`, `wp.js` — and omits three:
 
   - **`check-spec.js`** is the most serious: the Contract has always required `/forge-init` to create it, and `forge-init.md` mentions it zero times. A scaffolded project cannot run `/forge-spec`'s gate at all. This is a live Contract violation, not a gap.
@@ -742,6 +751,8 @@
   Fixtures in `test-wp.sh` (the gate greps for `vacuous` there, so the fixture names are load-bearing): a task whose gate fails pre-work transitions cleanly; a task whose gate passes pre-work is refused with the distinguishing exit code; a `manual:` gate transitions without probing; `--force` overrides the refusal. Check each passing fixture for discrimination the way TASK-056 did — a fixture that would pass with the feature reverted proves nothing.
 
   `wp.js` is embedded verbatim in `/forge-init` behind a `<!-- forge-init:embed -->` marker and content-diffed by `test-init-scripts.sh`, so the block must be re-copied whole (CONTRACT#rules/embedded-payload-synchronization). TASK-072 also rewrites `wp.js` and re-copies the same block; whichever lands second re-copies over the other's change rather than reverting it.
+
+  **Scope added 2026-08-30 (Observations-overhaul amendment):** the refusal's exit code is **4** per `CONTRACT#interfaces/script-exit-codes`, and the same table renumbers the existing foundation-observation halt in `wp.js next` from exit 2 to exit **3** — land both in this diff, since both are the Script Exit Codes table reaching `wp.js`, and update the usage text (which currently documents the halt as exit 2). Exit 2 stays "nothing to select". `/forge-next`'s prose catches up in TASK-084.
 
 ## [TASK-075] Update /forge-next to handle a refused gate-discrimination probe
 
@@ -885,20 +896,181 @@
 
   **Scope boundary:** this is a check over the existing enum, not a change to it. Adding, removing, or renaming a task type is out of scope; if the test surfaces a genuine disagreement about what the enum *should* contain, log it and stop rather than picking a side.
 
+## [TASK-072] Anchor forge script roots to the script location, not the shell cwd
+
+- **Status:** pending
+- **Type:** fix
+- **Depends:** none
+- **Context:** CONTRACT#rules/workplan-access-discipline, CONTRACT#rules/gate-patterns, CONTRACT#boundaries/platform-constraints
+- **Gate:** `bash .forge/tests/test-wp.sh && bash .forge/tests/test-init-scripts.sh && bash .forge/tests/smoke.sh && (cd .forge/scripts && node wp.js status > /dev/null && node check-workplan.js > /dev/null) && echo "forge scripts resolve their own root"`
+- **Notes:** Every forge entry script anchors on the shell's working directory, so it only runs from the repo root: `wp.js:48` and `check-workplan.js:23` both set `const ROOT = process.cwd()`, `migrate-notes.js:39` does the same, and `check-ux-spec.js:16` joins `process.cwd()` with `.forge/UX.md` directly. Invoking any of them by absolute path from a subdirectory fails with ".forge/WORKPLAN.md not found" — the script cannot find the project it is installed inside.
+
+  Observed live: a session that had `cd`-ed into `.forge/` for an unrelated command hit the failure, then correctly retried with an absolute path to `wp.js` and hit the *same* error for a different reason. That second failure is the expensive one — the obvious recovery does not work, and the error message names a missing file rather than the real cause.
+
+  `wp.js` is already inconsistent about this on its own: line 257 uses `__dirname` to locate its sibling `check-workplan.js`, while line 48 uses `process.cwd()` to locate the workplan. It trusts its own installed location for one lookup and the shell for the other.
+
+  The fix is small because the plumbing already exists: `lib/workplan.js:149` takes `rootDir` as a parameter, so only the entry scripts decide it. Replace each with `path.resolve(__dirname, '..', '..')` (from `.forge/scripts/` that is the project root; `check-ux-spec.js` and the `createLoader(path.join(ROOT, '.forge'))` calls follow unchanged). If pointing the tooling at a different project is worth keeping, add a `--root` flag defaulting to the script location rather than leaving cwd as the implicit control — `check-spec.js` already takes an explicit path argument for exactly that case.
+
+  Two things not to miss. `wp.js` and `check-workplan.js` are embedded verbatim in `/forge-init` behind `<!-- forge-init:embed -->` markers and diffed by `test-init-scripts.sh`, so both blocks must be re-copied whole or the gate fails. And the test additions belong in `test-wp.sh`: assert the scripts succeed when invoked from a subdirectory, which is the behavior that regressed silently because nothing ever ran them from anywhere else.
+
 ## [TASK-046] Checkpoint: v0.3 machinery complete
 
 - **Status:** pending
 - **Type:** checkpoint
-- **Depends:** TASK-026, TASK-028, TASK-029, TASK-032, TASK-033, TASK-034, TASK-036, TASK-037, TASK-038, TASK-047, TASK-051, TASK-053, TASK-054, TASK-055, TASK-059, TASK-060, TASK-062, TASK-067, TASK-068, TASK-069, TASK-070, TASK-071, TASK-073, TASK-074, TASK-075, TASK-076, TASK-077, TASK-078, TASK-079, TASK-080
+- **Depends:** TASK-026, TASK-028, TASK-029, TASK-032, TASK-033, TASK-034, TASK-036, TASK-037, TASK-038, TASK-047, TASK-051, TASK-053, TASK-054, TASK-055, TASK-059, TASK-060, TASK-062, TASK-067, TASK-068, TASK-069, TASK-070, TASK-071, TASK-072, TASK-073, TASK-074, TASK-075, TASK-076, TASK-077, TASK-078, TASK-079, TASK-080, TASK-094
 - **Context:** CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#data-model/status.md-data-model
 - **Gate:** `manual: Review the v0.3 build span before validation and docs. Packet must contain: each task completed in the span with its description and Files line, the gate result for each, check-workplan.js output on the current workplan, current STATUS.md Open Questions and Risks, and the span's starting commit for rollback.`
 - **Notes:** First executable checkpoint in Forge's history — executing it is itself the live validation that TASK-035 and TASK-037 work. Span is 20 tasks, far over the cadence of 5: v0.3's own plan predates its checkpoint machinery, so this is the only position where a checkpoint is executable (see STATUS.md Decisions, 2026-07-31) — inserting a second checkpoint earlier in the span would hit the same "Template file missing" hard stop. Normal cadence applies from v0.4. Depends lists the span's leaf tasks, which transitively cover all of TASK-025..038 plus TASK-047 (added in a later planning pass the same day — the guard hooks are part of v0.3's unattended-execution machinery and must be reviewed in the same checkpoint, not deferred to v0.4) plus TASK-067..071 (the 2026-08-16 observation-backlog triage — these repair v0.3 machinery this checkpoint reviews, and TASK-069 in particular must land before TASK-039, whose gate asserts that `/forge-init` creates both check scripts) plus TASK-073..075 (the OBS-013 gate-discrimination work — these must land *before* this packet, not after, because the packet re-runs every gate in the span and a span of vacuous gates re-run fresh is a span of evidence that proves nothing) plus TASK-076..078 (the 2026-08-17 workflow audit — TASK-076 repairs three already-shipped gates that cannot fail, which is the same fresh-re-run argument as TASK-073..075; TASK-077 reconciles three self-contradicting Contract passages the packet's readers would otherwise hit; TASK-078 fixes a stale `/forge-init` payload shipping a reverted bug fix to every new project). Q-006 evaluation: after passing or failing the packet, record whether this span read as a coherent review unit or as unrelated work reviewed together — that judgment is the evidence for or against feature-aligned checkpoint cadence, and it cannot be recovered later.
+
+## [TASK-093] Convert STATUS.md Decisions from a table to dated sections
+
+- **Status:** pending
+- **Type:** refactor
+- **Depends:** TASK-046
+- **Context:** CONTRACT#data-model/status.md-data-model, CONTRACT#rules/contract-amendment-protocol, CONTRACT#data-model/markdown-table-parsing, CONTRACT#rules/status-lint
+- **Gate:** `grep -q "^### 2026-" .forge/STATUS.md && ! grep -q "Alternatives rejected" .forge/STATUS.md && node .forge/scripts/prose.js .forge/CONTRACT.md "one dated section per decision" && bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && echo "decisions read as history"`
+- **Notes:** ideas/ux-nearterm.md item 4, decided 2026-08-30 (see STATUS Decisions). STATUS.md is ~95KB in ~90 lines with single Decisions cells over 2,100 characters — unreadable in a terminal, unreviewable in a diff, hostile to hand-editing. Decisions are append-only prose history; a table is the wrong container. Amend `CONTRACT#data-model/status.md-data-model`: `## Decisions` holds `### YYYY-MM-DD — Title` sections, newest first, body free prose with recommended **Why:** and **Alternatives rejected:** paragraphs — one dated section per decision. The other four tables stay tables (machine-read, short cells). Update the skeleton in the Data Model, the Rules/Status Lint scope wording (four tables plus the Decisions heading shape), and every Contract reference to a "Decisions row" (unattended-execution auto-disposition wording, observation-lifecycle exception 2, /forge-plan) to "Decisions entry". Migrate every existing row mechanically — date plus bolded lead becomes the heading, cells become paragraphs; content is preserved verbatim, not rewritten. Sequenced **before** TASK-082 so check-status.js is built once against the final shape. Gate discrimination: no `### 2026-` heading exists in STATUS.md today; the "Alternatives rejected" column header does (clause 2 fails pre-work); the prose.js phrase appears nowhere in CONTRACT.md.
+
+## [TASK-081] Teach lib/markdown.js to parse tables by column name
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-046
+- **Context:** CONTRACT#data-model/markdown-table-parsing, CONTRACT#data-model/status.md-data-model, CONTRACT#rules/test-first-convention
+- **Gate:** `bash .forge/tests/test-markdown.sh && grep -q "parseTable" .forge/tests/test-markdown.sh && bash .forge/tests/smoke.sh && echo "one table parser"`
+- **Notes:** The foundation for check-status.js and obs.js, per `CONTRACT#data-model/markdown-table-parsing`: the shared parser lives in `lib/markdown.js`, and no caller re-implements table splitting. Export a `parseTable` that returns header-keyed rows (parse by column name, never position), honors `\|` escapes and pipes inside backtick spans, and reports a row with the wrong cell count as a structured error — never a silently dropped row. Test-first in `test-markdown.sh`: fixtures must include an escaped pipe in a cell, a pipe inside a backtick span, and a malformed row, and the malformed-row fixture must fail if the parser skips instead of erroring. Scope boundary: migrating check-ux-spec.js's States-table reading onto the new parser is out of scope — log an observation if the duplication matters.
+
+## [TASK-082] Build check-status.js and bring the live STATUS.md under it
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-081, TASK-093
+- **Context:** CONTRACT#rules/status-lint, CONTRACT#data-model/status.md-data-model, CONTRACT#state-machines/observation-lifecycle, CONTRACT#interfaces/script-exit-codes, CONTRACT#data-model/markdown-table-parsing
+- **Gate:** `bash .forge/tests/test-check-status.sh && node .forge/scripts/check-status.js && grep -q "test-check-status" .forge/tests/smoke.sh && bash .forge/tests/smoke.sh && echo "status lint live"`
+- **Notes:** Implements `CONTRACT#rules/status-lint` on the post-TASK-093 shape: every table present has the columns its Data Model skeleton declares in order; every row parses to exactly that column count (error, never a skipped row); Observation IDs unique and monotonic; Kind/Severity/Disposition enumerated; `planned:TASK-XXX` names an existing task and `duplicate:OBS-YYY` names an existing non-duplicate row; `accepted` rows older than one checkpoint span without a task link warn; Decisions headings match `### YYYY-MM-DD — `. Errors exit 1 and block, warnings print. **Migration lands in the same diff:** the live Observations table gains its mandated Date column (dates recovered from the git history of each row's introduction), because the moment check-status.js exists the headless-run pre-commit breaker arms it — the file and the lint must go green together. The PostToolUse hook wiring is TASK-088's scope, not here.
+
+## [TASK-083] Build obs.js as the sole Observations writer
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-082
+- **Context:** CONTRACT#interfaces/observation-script, CONTRACT#state-machines/observation-lifecycle, CONTRACT#rules/status-lint, CONTRACT#interfaces/script-exit-codes, CONTRACT#data-model/status.md-data-model
+- **Gate:** `bash .forge/tests/test-obs.sh && grep -q "test-obs" .forge/tests/smoke.sh && bash .forge/tests/smoke.sh && node .forge/scripts/obs.js list > /dev/null && echo "observations have one writer"`
+- **Notes:** Implements `CONTRACT#interfaces/observation-script` exactly: `add` (mints ID at write time, stamps date, escapes pipes, Disposition `open`), `set` (targeted field write refusing invalid lifecycle transitions), `list` (projection with computed age in days, `--json`, disposition/severity filters), `sweep` (closes `planned:` rows whose task is `done`, reports unlinked `accepted` rows and exact-duplicate text — no judgment, no input). Every write follows write-validate-revert through check-status.js, the pattern wp.js established. Fixture discipline per TASK-056: a fixture that passes with the feature reverted proves nothing — the transition-refusal fixture must attempt a genuinely invalid transition, and sweep's close fixture must include a `planned:` row whose task is *not* done and assert it survives. First live `sweep` will close several rows this planning pass left at `planned:` with their tasks already done — run it and record the result in this task's notes.
+
+## [TASK-095] Checkpoint: observation machinery core
+
+- **Status:** pending
+- **Type:** checkpoint
+- **Depends:** TASK-093, TASK-081, TASK-082, TASK-083
+- **Context:** CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#data-model/status.md-data-model
+- **Gate:** `manual: Review the observation-machinery core span. Packet must contain: each task in the span with description and Files, fresh re-runs of every automated gate in the span with regressions flagged, check-workplan.js and check-status.js output on the current artifacts, current STATUS.md Open Questions and Risks, and the span's starting commit for rollback.`
+- **Notes:** First checkpoint inserted by the 2026-08-30 headless planning pass, at the Contract's cadence of 5 (4 tasks + this). Under HEADLESS-RUN.md authority the run itself reviews the packet and records pass/fail; the packet is written to `.forge/notes/TASK-095.md` so the human can re-review the span at merge.
+
+## [TASK-084] Integrate obs.js into /forge-next
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-095
+- **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#rules/unattended-execution, CONTRACT#interfaces/observation-script, CONTRACT#interfaces/script-exit-codes
+- **Gate:** `node .forge/scripts/prose.js .claude/commands/forge-next.md "obs.js sweep" "guided triage" && bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && echo "the loop closes at forge-next"`
+- **Notes:** The command-side half of the Observations overhaul, per the amended `CONTRACT#interfaces/command-forge-next`: run `obs.js sweep` before selection; on the exit-**3** halt enter the guided triage flow (present each open row in plain language with a recommended disposition and reasoning, apply answers via `obs.js set`, retry selection — never a separate command); during unattended spans, apply only the two permitted auto-dispositions and otherwise write the triage packet to disk and stop; record completion-time observations via `obs.js add`, replacing any hand-written row-format instruction (the format belongs to the script — `CONTRACT#interfaces/prompt-template-interface` reasoning applies to command prose too); never promote an observation to a task. Update the wp.js output-shape block for the exit-code split TASK-074 landed. This also delivers ideas/ux-nearterm.md item 5's substance — the alert surface at session start, where attention already is.
+
+## [TASK-085] Project the observation backlog through /forge-status
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-095
+- **Context:** CONTRACT#interfaces/command-forge-status, CONTRACT#interfaces/observation-script, CONTRACT#data-model/status.md-data-model
+- **Gate:** `node .forge/scripts/prose.js .claude/commands/forge-status.md "obs.js list" "backlog counts by disposition" && bash .forge/tests/smoke.sh && echo "status reads the queue"`
+- **Notes:** Per the amended `CONTRACT#interfaces/command-forge-status`: open `foundation` rows first, each with the raising task's description and age in days; the `accepted` awaiting-planning queue; backlog counts by disposition — all obtained through `obs.js list --json`, never by reading STATUS.md in full. A bare ID is not a report: the reader must be able to act without opening another file. Verify at execution that the gate's phrases are genuinely absent from forge-status.md pre-work; tighten them if not.
+
+## [TASK-086] Close the accepted-observation loop in /forge-plan
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-095
+- **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#interfaces/observation-script, CONTRACT#state-machines/observation-lifecycle
+- **Gate:** `node .forge/scripts/prose.js .claude/commands/forge-plan.md "obs.js set" && bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && echo "accepted rows reach planned"`
+- **Notes:** Per the amended `CONTRACT#interfaces/command-forge-plan`: observation intake consumes `accepted` rows as planning input, and when planning generates a task for one, it advances the row to `planned:TASK-XXX` via `obs.js set` — the one STATUS.md write this command makes, closing the loop that previously let an accepted row sit unplanned and unseen. Rows in any other disposition are not planned. Update forge-plan.md's intake step accordingly; keep the change scoped to command prose.
+
+## [TASK-087] Delegate observation recording in the templates to obs.js
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-095, TASK-070
+- **Context:** CONTRACT#interfaces/prompt-template-interface, CONTRACT#interfaces/observation-script, CONTRACT#rules/embedded-payload-synchronization
+- **Gate:** `grep -rq "obs.js add" .forge/templates && bash .forge/tests/test-templates.sh && bash .forge/tests/test-init-scripts.sh && bash .forge/tests/smoke.sh && echo "templates carry judgment not format"`
+- **Notes:** Per `CONTRACT#interfaces/prompt-template-interface`: every template instructs recording out-of-scope findings by invoking `obs.js add`, applying the in-scope fix test rather than logging reflexively — the template carries the *judgment*, the script owns the *format*. Remove any restatement of the row layout from the templates (reintroducing it is the duplication obs.js exists to remove). Re-copy every changed template's forge-init.md payload whole; the TASK-070 marker diff enforces this mechanically.
+
+## [TASK-088] Ship the observation machinery in /forge-init
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-069, TASK-083, TASK-087
+- **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#rules/embedded-payload-synchronization, CONTRACT#boundaries/hook-configuration, CONTRACT#rules/status-lint
+- **Gate:** `grep -q "forge-init:embed .forge/scripts/obs.js" .claude/commands/forge-init.md && grep -q "forge-init:embed .forge/scripts/check-status.js" .claude/commands/forge-init.md && grep -q "check-status" .claude/settings.json && bash .forge/tests/test-init-scripts.sh && bash .forge/tests/smoke.sh && echo "scaffolds get the machinery"`
+- **Notes:** Three changes, one concern — a scaffolded project must receive the observation machinery whole: (1) embed `obs.js` and `check-status.js` payloads with `forge-init:embed` markers so the content diff covers them (the nine-script bullet in the amended Contract already mandates both); (2) the STATUS.md stub gains the Date column so its columns match the Data Model skeleton exactly — a stub whose columns disagree makes every row obs.js writes malformed on arrival; (3) the settings.json payload gains the PostToolUse STATUS.md hook invoking check-status.js through a wrapper that exits **2** on lint failure per `CONTRACT#interfaces/script-exit-codes`'s hook-contract paragraph, and this repo's own `.claude/settings.json` gets the same hook (dogfood; hook config snapshots at session start, so it arms from the next session).
+
+## [TASK-096] Checkpoint: observation machinery integrated
+
+- **Status:** pending
+- **Type:** checkpoint
+- **Depends:** TASK-084, TASK-085, TASK-086, TASK-087, TASK-088
+- **Context:** CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#data-model/status.md-data-model
+- **Gate:** `manual: Review the observation-integration span. Packet must contain: each task in the span with description and Files, fresh re-runs of every automated gate in the span with regressions flagged, check-workplan.js and check-status.js output, current STATUS.md Open Questions and Risks, and the span's starting commit for rollback.`
+- **Notes:** Second checkpoint of the headless planning pass, closing the five command/template integration tasks. Same review-and-record protocol as TASK-095.
+
+## [TASK-089] Give /forge-init its missing VERSION step
+
+- **Status:** pending
+- **Type:** fix
+- **Depends:** TASK-096
+- **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#interfaces/command-forge-sync, CONTRACT#data-model/artifacts
+- **Gate:** `grep -q "forge/VERSION" .claude/commands/forge-init.md && grep -q "VERSION" .forge/tests/test-init-scripts.sh && bash .forge/tests/test-init-scripts.sh && bash .forge/tests/smoke.sh && echo "init stamps the engine version"`
+- **Notes:** Closes OBS-014. `CONTRACT#interfaces/command-forge-init` requires creating `.forge/VERSION` if absent (line 1: engine version stamp; line 2: canonical repo URL — read the live file for the exact format), but forge-init.md contains no VERSION step at all, so a newly scaffolded project has no stamp and `/forge-sync` stops at step 1. Add the step, the created-files list entry, and a `test-init-scripts.sh` assertion. Gate discrimination verified at planning: `forge/VERSION` appears nowhere in forge-init.md and `VERSION` nowhere in test-init-scripts.sh.
+
+## [TASK-090] Widen forge-sync.md's managed globs to the Contract's set
+
+- **Status:** pending
+- **Type:** fix
+- **Depends:** TASK-096
+- **Context:** CONTRACT#interfaces/command-forge-sync, CONTRACT#data-model/artifacts
+- **Gate:** `grep -q "scripts/lib" .claude/commands/forge-sync.md && grep -q "guard-" .claude/commands/forge-sync.md && bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && echo "sync sees every managed script"`
+- **Notes:** Closes OBS-015. The 2026-08-29 Contract amendment already widened `CONTRACT#interfaces/command-forge-sync`'s globs to `.forge/scripts/*.js`, `.forge/scripts/lib/*.js`, and `.forge/scripts/guard-*.sh`; forge-sync.md still says `check-*.js` only, at three sites (the managed-globs list near line 13, the example diff listing near line 81, and the "Only the three managed globs are writable" constraint near line 108). Reconcile all three to the Contract's set. Gate discrimination verified at planning: `scripts/lib` and `guard-` appear nowhere in forge-sync.md.
+
+## [TASK-091] Emit the workplan graph from wp.js
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-096
+- **Context:** CONTRACT#rules/workplan-access-discipline, CONTRACT#rules/task-ordering, CONTRACT#data-model/artifacts, CONTRACT#rules/embedded-payload-synchronization
+- **Gate:** `bash .forge/tests/test-wp.sh && grep -q "graph --mermaid" .forge/tests/test-wp.sh && node .forge/scripts/wp.js graph --mermaid | grep -q "flowchart" && bash .forge/tests/smoke.sh && echo "the DAG is visible"`
+- **Notes:** ideas/ux-nearterm.md item 1 — the highest-leverage item on its list. `wp.js graph --json` emits nodes (id, description, status, type) and edges (depends); `--mermaid` renders the same structure as a flowchart, which displays in GitHub and terminal-adjacent tooling for zero rendering code. This is the DAG's data model; every later rendering layer consumes it, and TASK-092 is its first consumer. Projection only — no new state, no workplan mutation. Re-copy the wp.js forge-init payload whole (the marker diff enforces).
+
+## [TASK-092] Make /forge-status graph-aware
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** TASK-091
+- **Context:** CONTRACT#interfaces/command-forge-status, CONTRACT#rules/workplan-access-discipline
+- **Gate:** `node .forge/scripts/prose.js .claude/commands/forge-status.md "startable" "choke point" && bash .forge/tests/smoke.sh && echo "position not just counts"`
+- **Notes:** ideas/ux-nearterm.md item 2: replace "18 pending, next: TASK-XXX" with the shape of remaining work — depth, width, the full startable set, and choke points (high fan-in nodes such as checkpoints) — derived from two traversals over `wp.js graph --json`. The current report shows a queue of one while ten tasks are equally startable; correct for an unattended span, a real loss for a human deciding where to spend a session. Verify at execution that "startable" and "choke point" are absent from forge-status.md pre-work.
+
+## [TASK-097] Checkpoint: v0.3+ projection and repairs
+
+- **Status:** pending
+- **Type:** checkpoint
+- **Depends:** TASK-089, TASK-090, TASK-091, TASK-092
+- **Context:** CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#data-model/status.md-data-model
+- **Gate:** `manual: Review the projection-and-repairs span. Packet must contain: each task in the span with description and Files, fresh re-runs of every automated gate in the span with regressions flagged, check-workplan.js and check-status.js output, current STATUS.md Open Questions and Risks, and the span's starting commit for rollback.`
+- **Notes:** Third checkpoint of the headless planning pass, closing the graph-projection and observation-repair span before end-to-end validation and docs. Same review-and-record protocol as TASK-095.
 
 ## [TASK-039] End-to-end validation of v0.3 pipeline
 
 - **Status:** pending
 - **Type:** investigate
-- **Depends:** TASK-046
+- **Depends:** TASK-097
 - **Context:** CONTRACT#interfaces/command-forge-spec, CONTRACT#rules/workplan-lint, CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#rules/spec-precedence
 - **Gate:** `manual: In a scratch project: (1) forge-init creates SPEC.md, STATUS.md, checkpoint.md, both check scripts, and VERSION without overwriting; (2) forge-spec runs an intake interview and produces a spec that passes check-spec.js with open questions logged to STATUS.md; (3) forge-plan emits SPEC# manifests and a checkpoint task, and check-workplan.js passes; (4) forge-next resolves SPEC# refs and executes a checkpoint with a complete review packet; (5) forge-status surfaces STATUS.md items; (6) simulate a 2-3 task unattended span on a work branch honoring the hard stops`
 - **Notes:**
@@ -952,19 +1124,3 @@
 
   Sibling to TASK-041 (plugin packaging). Both are v0.4 scope-decision gates and both should land before any v0.4 planning pass.
 
-## [TASK-072] Anchor forge script roots to the script location, not the shell cwd
-
-- **Status:** pending
-- **Type:** fix
-- **Depends:** none
-- **Context:** CONTRACT#rules/workplan-access-discipline, CONTRACT#rules/gate-patterns, CONTRACT#boundaries/platform-constraints
-- **Gate:** `bash .forge/tests/test-wp.sh && bash .forge/tests/test-init-scripts.sh && bash .forge/tests/smoke.sh && (cd .forge/scripts && node wp.js status > /dev/null && node check-workplan.js > /dev/null) && echo "forge scripts resolve their own root"`
-- **Notes:** Every forge entry script anchors on the shell's working directory, so it only runs from the repo root: `wp.js:48` and `check-workplan.js:23` both set `const ROOT = process.cwd()`, `migrate-notes.js:39` does the same, and `check-ux-spec.js:16` joins `process.cwd()` with `.forge/UX.md` directly. Invoking any of them by absolute path from a subdirectory fails with ".forge/WORKPLAN.md not found" — the script cannot find the project it is installed inside.
-
-  Observed live: a session that had `cd`-ed into `.forge/` for an unrelated command hit the failure, then correctly retried with an absolute path to `wp.js` and hit the *same* error for a different reason. That second failure is the expensive one — the obvious recovery does not work, and the error message names a missing file rather than the real cause.
-
-  `wp.js` is already inconsistent about this on its own: line 257 uses `__dirname` to locate its sibling `check-workplan.js`, while line 48 uses `process.cwd()` to locate the workplan. It trusts its own installed location for one lookup and the shell for the other.
-
-  The fix is small because the plumbing already exists: `lib/workplan.js:149` takes `rootDir` as a parameter, so only the entry scripts decide it. Replace each with `path.resolve(__dirname, '..', '..')` (from `.forge/scripts/` that is the project root; `check-ux-spec.js` and the `createLoader(path.join(ROOT, '.forge'))` calls follow unchanged). If pointing the tooling at a different project is worth keeping, add a `--root` flag defaulting to the script location rather than leaving cwd as the implicit control — `check-spec.js` already takes an explicit path argument for exactly that case.
-
-  Two things not to miss. `wp.js` and `check-workplan.js` are embedded verbatim in `/forge-init` behind `<!-- forge-init:embed -->` markers and diffed by `test-init-scripts.sh`, so both blocks must be re-copied whole or the gate fails. And the test additions belong in `test-wp.sh`: assert the scripts succeed when invoked from a subdirectory, which is the behavior that regressed silently because nothing ever ran them from anywhere else.
