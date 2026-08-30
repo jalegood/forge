@@ -666,7 +666,7 @@
 
 ## [TASK-069] Make /forge-init provision check-spec.js, prose.js, and migrate-notes.js
 
-- **Status:** pending
+- **Status:** done
 - **Type:** fix
 - **Depends:** none
 - **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#data-model/artifacts, CONTRACT#rules/embedded-payload-synchronization, notes/TASK-062#decisions
@@ -680,6 +680,8 @@
   The Contract was amended by this planning pass to name all seven scripts in one bullet and to add Artifacts rows for the four that had none. Follow `notes/TASK-062#decisions` for the established pattern: copy each payload whole, precede it with `<!-- forge-init:embed <path> -->`, and extend `test-init-scripts.sh` so the content diff covers the new blocks. Also fix `forge-init.md`'s created-files summary, which currently lists `lib/markdown.js` and `check-workplan.js` twice.
 
   Scope boundary: do not restructure how `forge-init.md` distributes scripts. It is already ~1,900 lines and mostly fenced payload, and that is a real design smell — but replacing verbatim embedding is a v0.4 distribution question that overlaps TASK-041 (plugin packaging), not this repair.
+  Embedded check-spec.js, prose.js, migrate-notes.js payloads with markers in step 11; test-init-scripts.sh now diffs all ten payloads. Deviation: the claimed duplicate summary entries no longer exist (fixed with OBS-011), so only the three new entries were added.
+  Files: .claude/commands/forge-init.md, .forge/tests/test-init-scripts.sh
 
 ## [TASK-070] Bring forge-init's embedded template payloads under the script payloads' drift test
 
