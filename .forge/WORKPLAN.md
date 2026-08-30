@@ -518,7 +518,7 @@
 - **Status:** done
 - **Type:** feature
 - **Depends:** TASK-030, TASK-031
-- **Context:** CONTRACT#interfaces/command-forge-spec, CONTRACT#data-model/spec-data-model, CONTRACT#data-model/status.md-data-model
+- **Context:** CONTRACT#interfaces/command-forge-spec, CONTRACT#data-model/spec-data-model, CONTRACT#data-model/status.md-data-model, SPEC#requirements/req-intake-coverage, SPEC#requirements/req-intake-disqualification
 - **Gate:** `test -s .claude/commands/forge-spec.md && grep -q "ASSUMED" .claude/commands/forge-spec.md && grep -q "STATUS.md" .claude/commands/forge-spec.md && grep -q "check-spec" .claude/commands/forge-spec.md && grep -qi "interview" .claude/commands/forge-spec.md && echo "forge-spec command valid"`
 - **Notes:** Created /forge-spec: adaptive five-category intake interview before drafting, draft disqualification on unasked plan-blocking unknowns, STATUS.md Q-row handoff, check-spec.js gate. Two decisions worth reading (out-of-manifest SPEC refs; --max-unresolved reconciliation) and one deviation. Record: .forge/notes/TASK-032.md
 
@@ -694,7 +694,7 @@
 
 ## [TASK-071] Restore SPEC traceability on TASK-032's context manifest
 
-- **Status:** pending
+- **Status:** done
 - **Type:** fix
 - **Depends:** none
 - **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#rules/spec-precedence, SPEC#requirements/req-intake-coverage, SPEC#requirements/req-intake-disqualification, notes/TASK-032#outcome
@@ -706,6 +706,8 @@
   Amending a `done` task's manifest is deliberate and narrow. `/forge-plan` preserves done tasks on regeneration; it does not forbid a corrective task from editing one, and Rules/Contract Amendment Protocol step 3 contemplates exactly this reconciliation. Use `wp.js` for the write so the file stays byte-identical elsewhere and is re-linted automatically.
 
   **Considered and rejected:** a `check-workplan.js` invariant warning when a `feature`/`fix` task carries no `SPEC#` ref. Forge's SPEC.md covers only intake, checkpoints, and unattended spans, so most tasks legitimately implement no requirement — the check would warn on roughly six current pending tasks and train readers to ignore warnings. The requirement-coverage lint in Q-006 remains the right home for this, once Q-003 settles whether per-feature specs give tasks a feature identity.
+  Added both SPEC refs to TASK-032 Context via wp.js. Verified the resume-the-interview criterion already exists at forge-spec.md:129 (go back to step 3, ask, draft again) — no command change needed.
+  Files: .forge/WORKPLAN.md
 
 ## [TASK-073] Add the gate discrimination requirement to /forge-plan's gate authoring
 
