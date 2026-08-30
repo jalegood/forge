@@ -655,12 +655,14 @@
 
 ## [TASK-094] Isolate FORGE_UNATTENDED in the guard hook test
 
-- **Status:** pending
+- **Status:** done
 - **Type:** fix
 - **Depends:** none
 - **Context:** CONTRACT#boundaries/hook-configuration, CONTRACT#rules/test-first-convention, CONTRACT#rules/gate-patterns
 - **Gate:** `FORGE_UNATTENDED=1 bash .forge/tests/test-guard-hooks.sh && env -u FORGE_UNATTENDED bash .forge/tests/test-guard-hooks.sh && bash .forge/tests/smoke.sh && grep -q "env -u FORGE_UNATTENDED" .forge/tests/test-guard-hooks.sh && echo "guard tests control their environment"`
 - **Notes:** Found 2026-08-30 at headless-run start: the suite went red the moment the session environment armed `FORGE_UNATTENDED=1`, because `test-guard-hooks.sh`'s interactive-case assertions rely on the flag being *absent from the inherited environment* rather than unsetting it. A guard test that inherits its arming state from whoever runs it fails in exactly the unattended context the guards exist for. Fix: run every interactive-case invocation under `env -u FORGE_UNATTENDED`; armed cases keep setting the flag explicitly per case. Gate discrimination: the first clause fails today (with the flag set, the inert-guard assertion reports a false block) and the grep clause fails today (`env -u` appears nowhere in the file).
+  Fixed: interactive-case guard-branch invocations (default-branch inert case, work-branch case) now run under env -u FORGE_UNATTENDED; armed cases already set the flag per case. No deviations.
+  Files: .forge/tests/test-guard-hooks.sh
 
 ## [TASK-069] Make /forge-init provision check-spec.js, prose.js, and migrate-notes.js
 

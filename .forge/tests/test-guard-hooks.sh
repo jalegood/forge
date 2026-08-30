@@ -114,7 +114,11 @@ RC=0; OUT=$(hook_json 'git commit -m "work (TASK-001)"' | FORGE_UNATTENDED=1 bas
 blocked "an unattended commit on the default branch must be blocked"
 [ -n "$OUT" ] || fail "a blocked commit must explain itself on stderr"
 
-RC=0; OUT=$(hook_json 'git commit -m "work (TASK-001)"' | bash "$BRANCH" 2>&1) || RC=$?
+# env -u, not bare invocation: the interactive case is "flag absent", and a
+# session that exports FORGE_UNATTENDED=1 (a headless run testing itself) would
+# otherwise leak its arming state into this assertion and read a correct block
+# as a failure.
+RC=0; OUT=$(hook_json 'git commit -m "work (TASK-001)"' | env -u FORGE_UNATTENDED bash "$BRANCH" 2>&1) || RC=$?
 allowed "an interactive commit on the default branch must pass — the guard is inert without the flag"
 
 RC=0; OUT=$(hook_json 'git commit -m "work"' | FORGE_UNATTENDED=0 bash "$BRANCH" 2>&1) || RC=$?
@@ -129,7 +133,7 @@ git checkout -q -b feature/task-047
 RC=0; OUT=$(hook_json 'git commit -m "work (TASK-047)"' | FORGE_UNATTENDED=1 bash "$BRANCH" 2>&1) || RC=$?
 allowed "an unattended commit on a work branch must pass — this is the supported path"
 
-RC=0; OUT=$(hook_json 'git commit -m "work (TASK-047)"' | bash "$BRANCH" 2>&1) || RC=$?
+RC=0; OUT=$(hook_json 'git commit -m "work (TASK-047)"' | env -u FORGE_UNATTENDED bash "$BRANCH" 2>&1) || RC=$?
 allowed "an interactive commit on a work branch must pass"
 echo "  work branch: never blocks: OK"
 
