@@ -819,7 +819,7 @@
 
 ## [TASK-079] Make the manifest slug-matching rule normative in the Contract
 
-- **Status:** pending
+- **Status:** done
 - **Type:** clarify
 - **Depends:** none
 - **Context:** CONTRACT#data-model/context-manifest, CONTRACT#interfaces/command-forge-next, CONTRACT#rules/contract-amendment-protocol, CONTRACT#rules/manifest-completeness
@@ -847,6 +847,8 @@
   **Not in scope: changing the implementation.** `normalizeSlug` is correct and the Contract should ratify it. A strict hyphen-preserving slugify would break every `.md`-derived reference in this workplan — TASK-025 rejected that explicitly. This task moves the rule to where it is addressable, it does not relitigate it.
 
   Gate discrimination: `alphanumeric compaction` appears in neither CONTRACT.md, forge-next.md, nor STATUS.md today, and `test-markdown.sh` has no `claudemd-integration-block` fixture — all four clauses verified failing at authoring time. The Decisions-row assertion is phrase-based rather than a row count, for the reason spelled out in TASK-077's notes.
+  Rule stated normatively in Context Manifest (compaction both sides, with the why), forge-next step 3 rewritten to match reality and defer to the Contract, punctuation-mismatch fixtures pinned in test-markdown.sh incl. the hyphen-variant. Implementation unchanged by design.
+  Files: .forge/CONTRACT.md, .claude/commands/forge-next.md, .forge/tests/test-markdown.sh, .forge/STATUS.md
 
 ## [TASK-080] Add a drift test over the task-type enum's five restatements
 

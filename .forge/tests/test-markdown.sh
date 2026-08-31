@@ -133,6 +133,29 @@ check('heading-like lines inside a fence are not headings', () => {
   assert.ok(!decoy.ok, 'a fenced example heading must not be addressable');
 });
 
+check('punctuation-mismatched references match by alphanumeric compaction', () => {
+  // Normative rule in CONTRACT#data-model/context-manifest (TASK-079): both
+  // heading text and reference segment reduce to lowercase alphanumerics
+  // before comparison. The pinned case is live in this repo's TASK-006 —
+  // `claudemd-integration-block` against `### CLAUDE.md Integration Block` —
+  // which a hyphen-preserving slugify breaks ("claude-md-..." vs "claudemd-...").
+  // This file exists because a matching rule was silently dropped once
+  // (req-slug, 2026-08-16); this is the second such rule made addressable.
+  const doc = [
+    '# Contract', '', '## Interfaces', '',
+    '### CLAUDE.md Integration Block', '', 'Three lines.', '',
+    '### UX.md Data Model', '', 'Structure.', '',
+  ].join('\n');
+  const load = loaderFor({ 'CONTRACT.md': doc });
+  const r = md.resolveRef('CONTRACT#interfaces/claudemd-integration-block', load);
+  assert.ok(r.ok, 'claudemd-integration-block must match CLAUDE.md Integration Block: ' + (r.reason || ''));
+  assert.ok(r.section.includes('Three lines.'));
+  const r2 = md.resolveRef('CONTRACT#interfaces/ux.md-data-model', load);
+  assert.ok(r2.ok, 'ux.md-data-model must match UX.md Data Model: ' + (r2.reason || ''));
+  const r3 = md.resolveRef('CONTRACT#interfaces/claude-md-integration-block', load);
+  assert.ok(r3.ok, 'the hyphen-variant reference must also compact to a match');
+});
+
 check('UX label prefixes are stripped before matching', () => {
   const doc = [
     '# UX Spec', '', '## Flows', '', '### Flow: Sign In', '',

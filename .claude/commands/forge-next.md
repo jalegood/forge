@@ -94,10 +94,12 @@ Parse the selected task's `Context` field into a list of references. Each refere
 
 **For each reference, extract the matching markdown section from the appropriate file:**
 
-1. **Slugify and match headers.** To match a reference segment to a markdown heading:
+1. **Match headers by alphanumeric compaction** (normative rule: CONTRACT#data-model/context-manifest):
    - Take the heading text (strip `#` markers, formatting characters like backticks, asterisks)
-   - Lowercase it, replace runs of non-alphanumeric characters with single hyphens, trim leading/trailing hyphens
-   - Compare to the reference segment
+   - Reduce **both** the heading text and the reference segment to lowercase alphanumerics — strip every other character outright rather than turning it into hyphens
+   - Compare the compacted forms directly
+
+   Compacting both sides is what lets the mixed punctuation live in real Context fields match: `claudemd-integration-block` and `CLAUDE.md Integration Block` both compact to `claudemdintegrationblock`. A hyphen-preserving slugify would report a correct reference as unresolvable.
 
    Examples of slug matches:
    - `data-model` matches `## Data Model`
