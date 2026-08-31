@@ -497,6 +497,28 @@ OUT=$(node "$WP" status 2>&1) || RC=$?
 echo "$OUT" | grep -qi "total" || fail "status must report a task total on the real workplan"
 echo "  real WORKPLAN.md: OK"
 
+# Root resolution walks up from the working directory to the nearest ancestor
+# holding .forge/ (TASK-072). Two regressions to pin: a subdirectory of a
+# project must resolve to that project (this silently never worked before —
+# nothing ever ran the scripts from anywhere but the root), and a fixture
+# project must still win over the installation root when cwd is inside it,
+# which is what every TMPDIR test above relies on.
+echo "Checking root resolution from a subdirectory..."
+
+RC=0
+OUT=$(cd .forge/scripts && node wp.js status 2>&1) || RC=$?
+[ "$RC" = "0" ] || fail "wp.js status must work from a subdirectory of the project (got exit $RC)"
+RC=0
+OUT=$(cd .forge/scripts && node check-workplan.js 2>&1) || RC=$?
+[ "$RC" = "0" ] || fail "check-workplan.js must work from a subdirectory of the project (got exit $RC)"
+
+# The fixture project must be selected by cwd even though the scripts are
+# installed in this repo: its task ids are TASK-0xx fixtures, not this repo's.
+RC=0
+OUT=$(cd "$TMPDIR/.forge" && node "$WP" status 2>&1) || RC=$?
+[ "$RC" = "0" ] || fail "wp.js status must work from a subdirectory of a fixture project (got exit $RC)"
+echo "  nearest .forge/ ancestor wins: OK"
+
 echo "Checking usage errors..."
 
 run

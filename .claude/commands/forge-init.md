@@ -1019,6 +1019,24 @@ function resolveRef(ref, loadFile, opts = {}) {
   return Object.assign({ file: prefix }, result);
 }
 
+// Locate the project root: the nearest ancestor of startDir (default: the
+// shell's working directory) that contains a .forge directory — the same
+// walk-up git performs for .git. Falls back to the installation root (three
+// levels above lib/) when no ancestor qualifies, so an absolute-path
+// invocation from outside any project still finds the project the script is
+// installed in. Entry scripts anchor on this instead of bare process.cwd(),
+// which only worked from the repo root (TASK-072).
+function findRoot(startDir) {
+  let dir = path.resolve(startDir || process.cwd());
+  for (;;) {
+    if (fs.existsSync(path.join(dir, '.forge'))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return path.resolve(__dirname, '..', '..', '..');
+}
+
 module.exports = {
   normalizeSlug,
   headingCompact,
@@ -1028,6 +1046,7 @@ module.exports = {
   resolveSegments,
   createLoader,
   resolveRef,
+  findRoot,
 };
 ```
 
@@ -1360,7 +1379,7 @@ If `.forge/scripts/check-workplan.js` does **not** exist, create it with:
 
 const fs = require('fs');
 const path = require('path');
-const { createLoader, resolveRef } = require('./lib/markdown');
+const { createLoader, resolveRef, findRoot } = require('./lib/markdown');
 const {
   VALID_STATUSES,
   VALID_TYPES,
@@ -1368,7 +1387,10 @@ const {
   dependsList,
 } = require('./lib/workplan');
 
-const ROOT = process.cwd();
+// Nearest ancestor of the working directory holding .forge/, falling back to
+// the installed location — works from a subdirectory and by absolute path
+// (TASK-072).
+const ROOT = findRoot();
 const workplanPath = path.join(ROOT, '.forge', 'WORKPLAN.md');
 
 if (!fs.existsSync(workplanPath)) {
@@ -1645,9 +1667,12 @@ const {
   setField,
   appendNotes,
 } = require('./lib/workplan');
-const { createLoader, resolveRef } = require('./lib/markdown');
+const { createLoader, resolveRef, findRoot } = require('./lib/markdown');
 
-const ROOT = process.cwd();
+// Nearest ancestor of the working directory holding .forge/, falling back to
+// the installed location — works from a subdirectory and by absolute path
+// (TASK-072).
+const ROOT = findRoot();
 
 const USAGE = `usage: node .forge/scripts/wp.js <command>
 
@@ -2168,8 +2193,10 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const { readWorkplan, parseWorkplan, setField } = require('./lib/workplan');
+const { findRoot } = require('./lib/markdown');
 
-const ROOT = process.cwd();
+// Nearest ancestor of the working directory holding .forge/ (TASK-072).
+const ROOT = findRoot();
 const WORKPLAN_PATH = path.join(ROOT, '.forge', 'WORKPLAN.md');
 const NOTES_DIR = path.join(ROOT, '.forge', 'notes');
 const BACKUP_PATH = `${WORKPLAN_PATH}.bak`;

@@ -5,7 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { parseHeadings, normalizeSlug, findHeading, sectionRange } = require('./lib/markdown');
+const { parseHeadings, normalizeSlug, findHeading, sectionRange, findRoot } = require('./lib/markdown');
 
 const screenName = process.argv[2];
 if (!screenName) {
@@ -13,7 +13,8 @@ if (!screenName) {
   process.exit(1);
 }
 
-const uxPath = path.join(process.cwd(), '.forge', 'UX.md');
+// Nearest ancestor of the working directory holding .forge/ (TASK-072).
+const uxPath = path.join(findRoot(), '.forge', 'UX.md');
 if (!fs.existsSync(uxPath)) {
   console.error('Error: .forge/UX.md not found');
   process.exit(1);

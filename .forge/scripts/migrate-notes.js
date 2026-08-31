@@ -35,8 +35,10 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const { readWorkplan, parseWorkplan, setField } = require('./lib/workplan');
+const { findRoot } = require('./lib/markdown');
 
-const ROOT = process.cwd();
+// Nearest ancestor of the working directory holding .forge/ (TASK-072).
+const ROOT = findRoot();
 const WORKPLAN_PATH = path.join(ROOT, '.forge', 'WORKPLAN.md');
 const NOTES_DIR = path.join(ROOT, '.forge', 'notes');
 const BACKUP_PATH = `${WORKPLAN_PATH}.bak`;

@@ -43,9 +43,12 @@ const {
   setField,
   appendNotes,
 } = require('./lib/workplan');
-const { createLoader, resolveRef } = require('./lib/markdown');
+const { createLoader, resolveRef, findRoot } = require('./lib/markdown');
 
-const ROOT = process.cwd();
+// Nearest ancestor of the working directory holding .forge/, falling back to
+// the installed location — works from a subdirectory and by absolute path
+// (TASK-072).
+const ROOT = findRoot();
 
 const USAGE = `usage: node .forge/scripts/wp.js <command>
 

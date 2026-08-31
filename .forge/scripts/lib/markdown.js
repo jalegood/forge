@@ -173,6 +173,24 @@ function resolveRef(ref, loadFile, opts = {}) {
   return Object.assign({ file: prefix }, result);
 }
 
+// Locate the project root: the nearest ancestor of startDir (default: the
+// shell's working directory) that contains a .forge directory — the same
+// walk-up git performs for .git. Falls back to the installation root (three
+// levels above lib/) when no ancestor qualifies, so an absolute-path
+// invocation from outside any project still finds the project the script is
+// installed in. Entry scripts anchor on this instead of bare process.cwd(),
+// which only worked from the repo root (TASK-072).
+function findRoot(startDir) {
+  let dir = path.resolve(startDir || process.cwd());
+  for (;;) {
+    if (fs.existsSync(path.join(dir, '.forge'))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return path.resolve(__dirname, '..', '..', '..');
+}
+
 module.exports = {
   normalizeSlug,
   headingCompact,
@@ -182,4 +200,5 @@ module.exports = {
   resolveSegments,
   createLoader,
   resolveRef,
+  findRoot,
 };
