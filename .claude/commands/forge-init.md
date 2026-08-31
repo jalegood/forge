@@ -316,11 +316,11 @@ The following Contract sections contain the ambiguity or `<!-- UNRESOLVED -->` i
    - Remove the `<!-- UNRESOLVED -->` comment
    - Replace it with the resolved specification
    - Ensure the resolution is testable (can you write an assertion for it?)
-5. **Log the decision in `.forge/STATUS.md`.** The Contract edit records *what* the answer is; the Decisions table records *why it is that answer* — and it is the only place the reasoning survives the session.
-   - Append a row to the Decisions table: `| YYYY-MM-DD | What was decided | Why | Alternatives rejected |`. Use today's real date.
-   - **The rejected alternatives are mandatory, not decoration.** The options from step 2 the human turned down go in that column, each with the reason it lost. Omit them and the next session re-opens the settled question and re-derives the same answers.
-   - **If the ambiguity was tracked as an Open Questions row, delete that row.** The question *moves* to Decisions — it does not exist in both tables. A resolved question left sitting under Open Questions is indistinguishable from an unresolved one to everyone who reads that table, including `/forge-status`.
-   - If no Open Questions row existed, still write the Decisions row. The trigger is a decision being made, not a question having been filed.
+5. **Log the decision in `.forge/STATUS.md`.** The Contract edit records *what* the answer is; the Decisions section records *why it is that answer* — and it is the only place the reasoning survives the session.
+   - Add a dated section at the top of `## Decisions` (newest first): `### YYYY-MM-DD — Short title`, then the decision as prose, then a `**Why:**` paragraph, then a `**Rejected alternatives:**` paragraph. Use today's real date.
+   - **The rejected alternatives are mandatory, not decoration.** The options from step 2 the human turned down go in that paragraph, each with the reason it lost. Omit them and the next session re-opens the settled question and re-derives the same answers.
+   - **If the ambiguity was tracked as an Open Questions row, delete that row.** The question *moves* to Decisions — it does not exist in both places. A resolved question left sitting under Open Questions is indistinguishable from an unresolved one to everyone who reads that table, including `/forge-status`.
+   - If no Open Questions row existed, still write the Decisions entry. The trigger is a decision being made, not a question having been filed.
 6. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
    - Row format: `| OBS-XXX | {{task_id}} | design/bug/scope/... | normal or foundation | One-line observation. | open |`, where `OBS-XXX` is the highest existing OBS id plus one.
    - One line per observation — a pointer, not a report.
@@ -470,7 +470,7 @@ The span is exactly the task IDs in this checkpoint's `Depends` field. Read each
 3. **Excerpt `.forge/STATUS.md` into the packet** — quote the rows, never cite the file by reference:
    - Open Questions (all rows, flagging any marked Blocking) and Risks (all rows).
    - Open Observations rows, `foundation` severity first.
-   - Any Decisions row dated inside the span that records a mid-span course correction — a redirect the human made mid-flight is the thing least likely to be remembered and most likely to need review.
+   - Any Decisions entry (dated section) inside the span that records a mid-span course correction — a redirect the human made mid-flight is the thing least likely to be remembered and most likely to need review.
 4. **Name the rollback.** Give the span's starting commit and the one command that undoes the span. Resolve the commit with `git log --format='%H %s' | grep -F '(TASK-FIRST)'` for the span's first task, then take its parent (`<sha>^`); if the span's tasks were not committed individually, use the merge-base with the branch the span started from. State plainly that the command discards the span's work — the human runs it, you never do.
 5. **The packet must stand on its own.** The human passes or fails this span by reading what you present and nothing else. Any sentence that sends them to a file to find out what happened is a defect in the packet, not a reference.
 6. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.

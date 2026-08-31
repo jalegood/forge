@@ -914,12 +914,12 @@
 
 ## [TASK-093] Convert STATUS.md Decisions from a table to dated sections
 
-- **Status:** pending
+- **Status:** done
 - **Type:** refactor
 - **Depends:** TASK-046
 - **Context:** CONTRACT#data-model/status.md-data-model, CONTRACT#rules/contract-amendment-protocol, CONTRACT#data-model/markdown-table-parsing, CONTRACT#rules/status-lint
-- **Gate:** `grep -q "^### 2026-" .forge/STATUS.md && ! grep -q "Alternatives rejected" .forge/STATUS.md && node .forge/scripts/prose.js .forge/CONTRACT.md "one dated section per decision" && bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && echo "decisions read as history"`
-- **Notes:** ideas/ux-nearterm.md item 4, decided 2026-08-30 (see STATUS Decisions). STATUS.md is ~95KB in ~90 lines with single Decisions cells over 2,100 characters — unreadable in a terminal, unreviewable in a diff, hostile to hand-editing. Decisions are append-only prose history; a table is the wrong container. Amend `CONTRACT#data-model/status.md-data-model`: `## Decisions` holds `### YYYY-MM-DD — Title` sections, newest first, body free prose with recommended **Why:** and **Alternatives rejected:** paragraphs — one dated section per decision. The other four tables stay tables (machine-read, short cells). Update the skeleton in the Data Model, the Rules/Status Lint scope wording (four tables plus the Decisions heading shape), and every Contract reference to a "Decisions row" (unattended-execution auto-disposition wording, observation-lifecycle exception 2, /forge-plan) to "Decisions entry". Migrate every existing row mechanically — date plus bolded lead becomes the heading, cells become paragraphs; content is preserved verbatim, not rewritten. Sequenced **before** TASK-082 so check-status.js is built once against the final shape. Gate discrimination: no `### 2026-` heading exists in STATUS.md today; the "Alternatives rejected" column header does (clause 2 fails pre-work); the prose.js phrase appears nowhere in CONTRACT.md.
+- **Gate:** grep -q "^### 2026-" .forge/STATUS.md && ! grep -qF "| Alternatives rejected |" .forge/STATUS.md && node .forge/scripts/prose.js .forge/CONTRACT.md "one dated section per decision" && bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && echo "decisions read as history"
+- **Notes:** 44 rows migrated verbatim to dated sections; Contract skeleton, lint scope, templates, and packet wording follow in the same diff; gate narrowed pre-activation to the table-header literal. Record: .forge/notes/TASK-093.md
 
 ## [TASK-081] Teach lib/markdown.js to parse tables by column name
 

@@ -85,12 +85,13 @@ check_clarify_body() {
   local body="$2"
   local phrase
   local -a required=(
-    # the destination table, named concretely enough to append to
-    "Decisions table"
-    # the row's shape — a decision with no date cannot be ordered against others
-    "YYYY-MM-DD"
-    # the column agents drop first, and the word that stops them
-    "Alternatives rejected"
+    # the destination, named concretely enough to write to (dated sections
+    # since TASK-093, not table rows)
+    "Decisions section"
+    # the entry's shape — a decision with no date cannot be ordered against others
+    "### YYYY-MM-DD"
+    # the paragraph agents drop first, and the word that stops them
+    "Rejected alternatives"
     "mandatory"
     # the question moves out of Open Questions; it is not copied into Decisions
     "Open Questions"

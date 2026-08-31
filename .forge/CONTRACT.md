@@ -70,7 +70,7 @@ Resolution: parse the references, extract matching markdown sections (header thr
 
 ### Markdown Table Parsing
 
-Several Forge artifacts carry data in markdown tables that scripts read back — STATUS.md's five tables above all, and the UX.md States table. Those tables are a data format, not decoration, and they need one stated rule because the failure they produce is silent.
+Several Forge artifacts carry data in markdown tables that scripts read back — STATUS.md's four tables above all, and the UX.md States table. Those tables are a data format, not decoration, and they need one stated rule because the failure they produce is silent.
 
 **A bare `|` inside a cell terminates that cell.** This is standard markdown, not a Forge choice. A cell whose text needs a literal pipe — a shell snippet, a regex alternation, a table inside prose — must escape it as `\|`. An unescaped pipe splits one row into more cells than the table has columns.
 
@@ -208,8 +208,13 @@ STATUS.md is the living project log — the single place for open questions, dec
 
 ## Decisions
 
-| Date | Decision | Why | Alternatives rejected |
-| ---- | -------- | --- | --------------------- |
+### YYYY-MM-DD — Short title of the decision
+
+The decision itself, as prose.
+
+**Why:** the reasoning.
+
+**Rejected alternatives:** what was turned down, and why.
 
 ## Risks
 
@@ -226,6 +231,8 @@ STATUS.md is the living project log — the single place for open questions, dec
 | ID | Date | Raised by | Kind | Severity | Observation | Disposition |
 | -- | ---- | --------- | ---- | -------- | ----------- | ----------- |
 ```
+
+**Decisions are dated sections, not table rows** — one dated section per decision, newest first. Decisions are append-only prose history: single-row cells grew past 2,000 characters, unreadable in a terminal, unreviewable in a diff, and hostile to the hand-editing this file explicitly invites. The four remaining tables are machine-read with short cells and stay tables. The **Why:** and **Rejected alternatives:** paragraphs are the load-bearing columns carried over — a decision recorded without them re-opens at the next session.
 
 **Writers:** `/forge-spec` appends open questions raised during intake. `clarify` tasks move resolved questions to Decisions (dated, with rationale). `/forge-next` appends a Blockers row when marking a task `blocked`, and records observations via `obs.js add`. `/forge-plan` advances an accepted observation to `planned:TASK-XXX` when it generates the task. The human edits freely. Every write to the Observations table goes through `obs.js`; the other four tables are written directly. **Readers:** `/forge-status` surfaces open questions, blockers, and the observation backlog; `checkpoint` review packets embed the file. A status file nothing reads goes stale — these integrations are mandatory, not optional.
 
@@ -344,7 +351,7 @@ Valid transitions: `open→accepted`, `open→declined`, `open→duplicate:`, `a
 **Who may move a row.** Every transition out of `open` is a judgment, and the default owner is the human. Two exceptions, both narrow and both `normal`-severity only:
 
 1. **`planned:TASK-XXX → closed` is deterministic and automatic.** When the named task reaches `done`, the observation is resolved by definition. `obs.js sweep` performs this with no judgment and no human. This is what stops `accepted` from being a dead letter — the state advances on its own once work lands.
-2. **An agent may set `duplicate:` or `planned:` on a `normal` row** where the duplicate target or the covering task already exists, recording a dated Decisions row with its reasoning for review at the next checkpoint (Rules/Unattended Execution).
+2. **An agent may set `duplicate:` or `planned:` on a `normal` row** where the duplicate target or the covering task already exists, recording a dated Decisions entry with its reasoning for review at the next checkpoint (Rules/Unattended Execution).
 
 **A `foundation` row is never auto-dispositioned.** That severity asserts the approach itself is suspect; an agent that can clear its own foundation rows can retire the one signal designed to interrupt its momentum. This is the same reasoning that makes the `foundation` hard stop mechanical rather than advisory.
 
@@ -775,7 +782,7 @@ WORKPLAN.md invariants are enforced deterministically by `.forge/scripts/check-w
 
 ### Status Lint
 
-STATUS.md invariants are enforced deterministically by `.forge/scripts/check-status.js`. WORKPLAN.md has had a lint since v0.2; STATUS.md has had none, while carrying a table that a hard stop reads every session. The script validates:
+STATUS.md invariants are enforced deterministically by `.forge/scripts/check-status.js`. WORKPLAN.md has had a lint since v0.2; STATUS.md has had none, while carrying a table that a hard stop reads every session. The script validates the four tables, and additionally that every heading under `## Decisions` matches the dated-section shape (`### YYYY-MM-DD — Title`). The table invariants:
 
 1. Every table present in the file has the columns its Data Model skeleton declares, in order.
 2. Every row parses to exactly that column count — a row that does not is an **error**, never a skipped row (Data Model/Markdown Table Parsing). This is the invariant that matters most: a dropped row is indistinguishable from an absent one, and at `foundation` severity it disables the hard stop while every report shows a clear queue.
@@ -830,7 +837,7 @@ The `foundation`-observation stop in rule 4 is likewise mechanical, not advisory
 **Autonomous triage during an unattended span.** Rule 4's halt is unchanged, but not every row needs to reach it. Two passes run without human input:
 
 1. **`obs.js sweep`, every session.** Purely deterministic — closes `planned:` rows whose task is `done`, reports unlinked `accepted` rows and duplicate text. No judgment, so no risk.
-2. **Agent disposition of `normal` rows only.** Where the duplicate target or the covering task demonstrably already exists, the agent may set `duplicate:` or `planned:` and record a dated Decisions row stating which row or task and why. The checkpoint reviews those Decisions rows; a disposition applied without one is a checkpoint finding.
+2. **Agent disposition of `normal` rows only.** Where the duplicate target or the covering task demonstrably already exists, the agent may set `duplicate:` or `planned:` and record a dated Decisions entry stating which row or task and why. The checkpoint reviews those Decisions entries; a disposition applied without one is a checkpoint finding.
 
 Novel `normal` rows stay `open` and wait for the checkpoint — they do not halt the span. **`foundation` rows are never auto-dispositioned under any circumstance**, per State Machines/Observation Lifecycle. When a span halts on one and no human is present, the loop writes the triage packet to disk and stops, so the operator finds a decision waiting rather than an error to reconstruct.
 
