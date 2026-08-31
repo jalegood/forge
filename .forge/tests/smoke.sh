@@ -349,6 +349,14 @@ echo "Checking check-status.js..."
 bash .forge/tests/test-check-status.sh > /dev/null
 echo "  check-status.js: OK"
 
+# --- Observations have exactly one writer ---
+# obs.js mints IDs, stamps dates, escapes cells, and validates before the write
+# stands; hand-written rows are how a literal pipe silently removes a row from
+# every reader (TASK-083, CONTRACT#interfaces/observation-script).
+echo "Checking obs.js..."
+bash .forge/tests/test-obs.sh > /dev/null
+echo "  obs.js: OK"
+
 # --- settings.json is valid JSON with hook config ---
 echo "Checking settings.json..."
 

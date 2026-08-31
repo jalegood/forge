@@ -943,12 +943,12 @@
 
 ## [TASK-083] Build obs.js as the sole Observations writer
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-082
 - **Context:** CONTRACT#interfaces/observation-script, CONTRACT#state-machines/observation-lifecycle, CONTRACT#rules/status-lint, CONTRACT#interfaces/script-exit-codes, CONTRACT#data-model/status.md-data-model
 - **Gate:** `bash .forge/tests/test-obs.sh && grep -q "test-obs" .forge/tests/smoke.sh && bash .forge/tests/smoke.sh && node .forge/scripts/obs.js list > /dev/null && echo "observations have one writer"`
-- **Notes:** Implements `CONTRACT#interfaces/observation-script` exactly: `add` (mints ID at write time, stamps date, escapes pipes, Disposition `open`), `set` (targeted field write refusing invalid lifecycle transitions), `list` (projection with computed age in days, `--json`, disposition/severity filters), `sweep` (closes `planned:` rows whose task is `done`, reports unlinked `accepted` rows and exact-duplicate text — no judgment, no input). Every write follows write-validate-revert through check-status.js, the pattern wp.js established. Fixture discipline per TASK-056: a fixture that passes with the feature reverted proves nothing — the transition-refusal fixture must attempt a genuinely invalid transition, and sweep's close fixture must include a `planned:` row whose task is *not* done and assert it survives. First live `sweep` will close several rows this planning pass left at `planned:` with their tasks already done — run it and record the result in this task's notes.
+- **Notes:** obs.js live: add/set/list/sweep with write-lint-revert; sweep reports by default, writes under --apply. First live sweep closed 8 rows; OBS-008 and OBS-017 remain open. Record: .forge/notes/TASK-083.md
 
 ## [TASK-095] Checkpoint: observation machinery core
 
