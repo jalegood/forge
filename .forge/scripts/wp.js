@@ -77,6 +77,29 @@ function die(message, code) {
   process.exit(code === undefined ? 1 : code);
 }
 
+// Locate the bash that gates actually run under (OBS-019, TASK-098). On win32
+// a bare spawnSync('bash') resolves through CreateProcess, which searches
+// System32 ahead of PATH-shell order and finds WSL's relay from any non-bash
+// parent — the relay exits 1, and the probe would silently read every gate as
+// "fails pre-work", never refusing. FORGE_BASH overrides; the Git-for-Windows
+// install locations come next; PATH `bash` is the non-win32 answer and the
+// last resort. A wrong-but-loud result stays loud via the existing
+// probe.error path.
+function resolveBash() {
+  if (process.env.FORGE_BASH) return process.env.FORGE_BASH;
+  if (process.platform === 'win32') {
+    const candidates = [
+      'C:\\Program Files\\Git\\usr\\bin\\bash.exe',
+      'C:\\Program Files\\Git\\bin\\bash.exe',
+      'C:\\Program Files (x86)\\Git\\usr\\bin\\bash.exe',
+    ];
+    for (const c of candidates) {
+      if (fs.existsSync(c)) return c;
+    }
+  }
+  return 'bash';
+}
+
 function loadWorkplan() {
   const wp = readWorkplan(ROOT);
   if (!wp) die('.forge/WORKPLAN.md not found. Run /forge-plan to generate one.');
@@ -331,7 +354,7 @@ function cmdSet(args) {
       // the gate instead, via `set TASK-XXX gate '<discriminating gate>'` on
       // the still-pending task.
       if (task.status === 'pending' && !force && !/^manual:/.test(task.gate || '')) {
-        const probe = spawnSync('bash', ['-c', task.gate], {
+        const probe = spawnSync(resolveBash(), ['-c', task.gate], {
           cwd: ROOT,
           encoding: 'utf8',
           timeout: 300000,

@@ -903,12 +903,14 @@
 
 ## [TASK-098] Make the gate probe resolve bash explicitly on Windows
 
-- **Status:** pending
+- **Status:** done
 - **Type:** fix
 - **Depends:** none
 - **Context:** CONTRACT#rules/gate-discrimination, CONTRACT#interfaces/script-exit-codes, CONTRACT#rules/embedded-payload-synchronization
 - **Gate:** `bash .forge/tests/test-wp.sh && grep -q "resolveBash" .forge/scripts/wp.js && bash .forge/tests/test-init-scripts.sh && bash .forge/tests/smoke.sh && echo "probe finds the right bash"`
 - **Notes:** Closes OBS-019. `spawnSync('bash', ...)` on win32 resolves through CreateProcess, which searches System32 ahead of the PATH order a shell would use — from a PowerShell or cmd parent it finds WSL's `bash.exe` relay, which exits 1 with a stderr the probe reads as "gate fails pre-work". The probe then never refuses anything: silently degraded to always-allow for exactly the invocations no bash session is watching. Repro from PowerShell: `node -e "console.log(require('child_process').spawnSync('bash',['-c','echo ok']).status)"` prints 1 with a WSL relay error. Fix in wp.js: a `resolveBash()` that honors a `FORGE_BASH` env override, then probes the known Git-for-Windows locations (Program Files `Git/usr/bin/bash.exe` and `Git/bin/bash.exe`), then falls back to PATH `bash` (always, on non-win32) — and keeps the existing loud `probe.error` death when nothing usable exists. Re-copy the wp.js forge-init payload whole. Test: assert `resolveBash` exists and the probe fixtures still discriminate; a full cross-parent spawn fixture is win32-session-specific and not portably assertable from the bash suite — the repro line above is the manual check.
+  resolveBash(): FORGE_BASH override, Git-for-Windows locations on win32, PATH bash otherwise; verified from a live PowerShell parent (was WSL relay exit 1, now Git bash exit 0). Payload re-copied. OBS-019 closes via sweep once obs.js lands.
+  Files: .forge/scripts/wp.js, .claude/commands/forge-init.md
 
 ## [TASK-093] Convert STATUS.md Decisions from a table to dated sections
 
