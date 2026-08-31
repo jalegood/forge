@@ -133,6 +133,60 @@ check('heading-like lines inside a fence are not headings', () => {
   assert.ok(!decoy.ok, 'a fenced example heading must not be addressable');
 });
 
+check('parseTable keys rows by column name and honors escapes', () => {
+  // CONTRACT#data-model/markdown-table-parsing (TASK-081): `\|` is a literal
+  // pipe, a pipe inside a backtick span is content, and readers parse by
+  // column name so a row survives a column being added elsewhere.
+  const doc = [
+    '| ID | Text | State |',
+    '| -- | ---- | ----- |',
+    '| A1 | an escaped \\| pipe | open |',
+    '| A2 | code `a | b` span | closed |',
+  ].join('\n');
+  const t = md.parseTable(doc);
+  assert.ok(t.ok, JSON.stringify(t.errors));
+  assert.strictEqual(t.rows.length, 2);
+  assert.strictEqual(t.rows[0].cells['Text'], 'an escaped | pipe');
+  assert.strictEqual(t.rows[0].cells['State'], 'open');
+  assert.strictEqual(t.rows[1].cells['Text'], 'code `a | b` span');
+  assert.strictEqual(t.rows[1].cells['State'], 'closed');
+});
+
+check('parseTable reports a malformed row as an error, never a dropped row', () => {
+  const doc = [
+    '| ID | Text | State |',
+    '| -- | ---- | ----- |',
+    '| A1 | an unescaped | pipe | open |',
+    '| A2 | fine | open |',
+  ].join('\n');
+  const t = md.parseTable(doc);
+  assert.ok(!t.ok, 'a malformed row must fail the parse');
+  assert.strictEqual(t.errors.length, 1, 'exactly one malformed row');
+  assert.strictEqual(t.errors[0].lineNumber, 3);
+  assert.ok(/escape/.test(t.errors[0].reason), 'the error must say how to fix it');
+  // the well-formed row still parses — the error does not hide the rest
+  assert.strictEqual(t.rows.length, 1);
+  assert.strictEqual(t.rows[0].cells['ID'], 'A2');
+});
+
+check('parseTable ignores heading-like tables inside fences', () => {
+  const doc = [
+    '```markdown',
+    '| Bogus | Header |',
+    '| ----- | ------ |',
+    '| x | y |',
+    '```',
+    '',
+    '| Real | Col |',
+    '| ---- | --- |',
+    '| 1 | 2 |',
+  ].join('\n');
+  const t = md.parseTable(doc);
+  assert.ok(t.ok, JSON.stringify(t.errors));
+  assert.deepStrictEqual(t.columns, ['Real', 'Col']);
+  assert.strictEqual(t.rows.length, 1);
+});
+
 check('punctuation-mismatched references match by alphanumeric compaction', () => {
   // Normative rule in CONTRACT#data-model/context-manifest (TASK-079): both
   // heading text and reference segment reduce to lowercase alphanumerics

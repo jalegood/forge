@@ -923,12 +923,14 @@
 
 ## [TASK-081] Teach lib/markdown.js to parse tables by column name
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-046
 - **Context:** CONTRACT#data-model/markdown-table-parsing, CONTRACT#data-model/status.md-data-model, CONTRACT#rules/test-first-convention
 - **Gate:** `bash .forge/tests/test-markdown.sh && grep -q "parseTable" .forge/tests/test-markdown.sh && bash .forge/tests/smoke.sh && echo "one table parser"`
 - **Notes:** The foundation for check-status.js and obs.js, per `CONTRACT#data-model/markdown-table-parsing`: the shared parser lives in `lib/markdown.js`, and no caller re-implements table splitting. Export a `parseTable` that returns header-keyed rows (parse by column name, never position), honors `\|` escapes and pipes inside backtick spans, and reports a row with the wrong cell count as a structured error — never a silently dropped row. Test-first in `test-markdown.sh`: fixtures must include an escaped pipe in a cell, a pipe inside a backtick span, and a malformed row, and the malformed-row fixture must fail if the parser skips instead of erroring. Scope boundary: migrating check-ux-spec.js's States-table reading onto the new parser is out of scope — log an observation if the duplication matters.
+  parseTable + splitTableRow exported from lib/markdown.js: header-keyed rows, backslash-pipe escapes, backtick-span pipes, fence-skipping, malformed row = structured error with line number and fix hint while well-formed rows still parse. Three fixture groups added; payload re-copied. check-ux-spec.js migration deliberately not done (scope boundary).
+  Files: .forge/scripts/lib/markdown.js, .forge/tests/test-markdown.sh, .claude/commands/forge-init.md
 
 ## [TASK-082] Build check-status.js and bring the live STATUS.md under it
 

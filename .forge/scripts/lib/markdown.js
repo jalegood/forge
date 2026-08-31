@@ -173,6 +173,77 @@ function resolveRef(ref, loadFile, opts = {}) {
   return Object.assign({ file: prefix }, result);
 }
 
+// --- Table parsing (CONTRACT#data-model/markdown-table-parsing) ---
+// The one table parser: header-keyed, escape-aware, and loud about malformed
+// rows. No caller re-implements table splitting — a format with two parsers
+// has two behaviors, and a positional reader on a row with the wrong cell
+// count silently reads a value out of the middle of some other cell.
+
+// Split one table row into cells. A bare `|` terminates a cell; `\|` is a
+// literal pipe; a pipe inside a backtick span is content, not a separator.
+function splitTableRow(line) {
+  const trimmed = line.trim();
+  const cells = [];
+  let cur = '';
+  let inBacktick = false;
+  // strip exactly one leading pipe; the trailing one falls out naturally
+  let i = trimmed.startsWith('|') ? 1 : 0;
+  for (; i < trimmed.length; i++) {
+    const c = trimmed[i];
+    if (c === '\\' && trimmed[i + 1] === '|') { cur += '|'; i++; continue; }
+    if (c === '`') { inBacktick = !inBacktick; cur += c; continue; }
+    if (c === '|' && !inBacktick) { cells.push(cur.trim()); cur = ''; continue; }
+    cur += c;
+  }
+  // content after the last pipe (normally empty for a well-formed row)
+  if (cur.trim() !== '') cells.push(cur.trim());
+  return cells;
+}
+
+function isSeparatorRow(cells) {
+  return cells.length > 0 && cells.every(c => /^:?-{2,}:?$/.test(c.replace(/\s/g, '')));
+}
+
+// Parse the first markdown table found in `text`. Returns:
+//   { ok, columns, rows: [{ lineNumber, cells: {colName: value} }], errors: [{ lineNumber, line, reason }] }
+// A row whose cell count differs from the header's is an ERROR, never a
+// skipped row — a dropped row is indistinguishable from an absent one, and at
+// foundation severity that silently disables the pipeline's one hard stop.
+function parseTable(text) {
+  const lines = text.split('\n');
+  let columns = null;
+  const rows = [];
+  const errors = [];
+  let inFence = false;
+  for (let n = 0; n < lines.length; n++) {
+    const line = lines[n];
+    if (/^\s*(```|~~~)/.test(line)) { inFence = !inFence; continue; }
+    if (inFence) continue;
+    if (!line.trim().startsWith('|')) {
+      if (columns && line.trim() === '') break; // table ended
+      continue;
+    }
+    const cells = splitTableRow(line);
+    if (!columns) { columns = cells; continue; }
+    if (isSeparatorRow(cells)) continue;
+    if (cells.length !== columns.length) {
+      errors.push({
+        lineNumber: n + 1,
+        line,
+        reason: `row has ${cells.length} cells, header has ${columns.length} — an unescaped | inside a cell? (escape it as \\|)`,
+      });
+      continue;
+    }
+    const rec = {};
+    columns.forEach((col, idx) => { rec[col] = cells[idx]; });
+    rows.push({ lineNumber: n + 1, cells: rec });
+  }
+  if (!columns) {
+    return { ok: false, columns: [], rows: [], errors: [{ lineNumber: 0, line: '', reason: 'no table found' }] };
+  }
+  return { ok: errors.length === 0, columns, rows, errors };
+}
+
 // Locate the project root: the nearest ancestor of startDir (default: the
 // shell's working directory) that contains a .forge directory — the same
 // walk-up git performs for .git. Falls back to the installation root (three
@@ -201,4 +272,6 @@ module.exports = {
   createLoader,
   resolveRef,
   findRoot,
+  splitTableRow,
+  parseTable,
 };
