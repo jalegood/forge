@@ -711,7 +711,7 @@
 
 ## [TASK-073] Add the gate discrimination requirement to /forge-plan's gate authoring
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** none
 - **Context:** CONTRACT#rules/gate-discrimination, CONTRACT#interfaces/command-forge-plan, CONTRACT#rules/gate-patterns, CONTRACT#rules/test-first-convention, CONTRACT#rules/workplan-lint
@@ -727,6 +727,8 @@
   The self-check at the end of step 6 ("does this gate command invoke a test suite?") is the right place to hang the second question ("could this gate fail right now?"), rather than adding a parallel structure.
 
   This task's own gate follows the rule it installs: `vacuous` and `pre-work` appear nowhere in `forge-plan.md` today — verified at planning time — so the gate fails before the work and cannot pass on a pre-existing mention.
+  Added the discrimination block to step 6: both vacuous shapes (topic on-arrival, count decay) with substitutions, the manual: precedence note, the test-first interaction, and the pre-work-failure question hung on the existing self-check with a pointer to the wp.js probe.
+  Files: .claude/commands/forge-plan.md
 
 ## [TASK-074] Make the gate-discrimination probe mechanical in wp.js
 

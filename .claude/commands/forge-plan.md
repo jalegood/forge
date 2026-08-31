@@ -213,6 +213,17 @@ Each gate validates the deliverable structurally:
 
 Prefer automated gates. Use `manual:` only when no structural check is possible.
 
+**Gate discrimination — every gate must be able to fail (CONTRACT#rules/gate-discrimination):**
+
+A gate that already passes against the repository before the task's work begins certifies nothing — the task ships unverified while reading as verified. Every gate must fail on the pre-work state and pass on the post-work state. Assert the **change** the task makes, never the **topic** the task is about. Two shapes go vacuous, and they fail differently:
+
+- **The topic shape is vacuous on arrival.** `grep -qi "<topic>" <file>` is satisfied by any prior mention of the word — and the file usually mentions its own topic. Substitute `node .forge/scripts/prose.js <file> "<phrase this task adds>"`, naming a phrase that appears nowhere in the file today. `prose.js` ignores fenced payloads, so an embedded script cannot satisfy a prose assertion.
+- **The count shape decays into vacuity.** `test $(grep -c "<pattern>" <file>) -gt N` against an append-only artifact (STATUS.md's dated rows, a growing table) may discriminate the day it is authored — then every later row raises the count past the fixed threshold and the gate becomes unfailable. A count against a growing file asserts only that *someone wrote something*. Substitute an assertion naming this task's own content — `grep -q "<phrase this task's row contains>" .forge/STATUS.md` — which no other task's write can satisfy. A count threshold is admissible only where the quantity moves in the direction the task drives it and the gate would fail if the task did nothing (e.g. a marker-removal task asserting the count *dropped*).
+
+Where a deliverable has no phrase stable enough to assert, gate through the test suite covering it — naming the new assertion, per the interaction below — or use `manual:`. An automated gate that certifies nothing is worse than a `manual:` one, because it reads as verification.
+
+**Interaction with test-first:** a bare suite invocation (`bash .forge/tests/smoke.sh`, `npm test`) passes before the work by construction — the assertions that would fail have not been written yet. The test-first rule below requires the gate to *include* a test command; discrimination requires it not to *stop* there. A `feature` or `fix` gate names the new assertion alongside the suite — the fixture file the task creates, the new test script, the phrase the task adds — so the suite invocation never carries discrimination on its own.
+
 **Test-first enforcement for `feature` and `fix` tasks:**
 
 Gates for `feature` and `fix` tasks **must** include a test command. This is non-negotiable — it enforces the test-first convention at the gate level.
@@ -221,7 +232,7 @@ Gates for `feature` and `fix` tasks **must** include a test command. This is non
 - If no test runner is detected yet, use a placeholder that will fail until tests are added: `test -f package.json && npm test`
 - **Never generate a `feature` or `fix` gate that contains only structural checks** (grep, file existence, line counts) — those are for `scaffold` tasks.
 
-When generating a gate for a `feature` or `fix` task, verify: does this gate command invoke a test suite? If not, revise it before writing to WORKPLAN.md.
+When generating a gate for a `feature` or `fix` task, verify two things: does this gate command invoke a test suite? And **could this gate fail right now, against the pre-work tree?** If it invokes no suite, or nothing in it would fail today, revise it before writing to WORKPLAN.md — check each phrase assertion against the target file the way you would run the gate itself. (`wp.js` re-runs this check mechanically at the `pending → active` transition and refuses a task whose gate already passes; a refusal at execution time means this step missed.)
 
 ### 7. Write WORKPLAN.md
 
