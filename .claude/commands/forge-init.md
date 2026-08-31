@@ -1646,7 +1646,9 @@ If `.forge/scripts/wp.js` does **not** exist, create it with:
 // allowed to stand — a mutation that fails the lint is reverted, not left on
 // disk.
 //
-// Exit codes: 0 success · 1 usage/validation error · 2 nothing to select.
+// Exit codes (CONTRACT#interfaces/script-exit-codes): 0 success · 1 usage or
+// validation error · 2 nothing to select · 3 foundation-observation halt · 4
+// gate-discrimination probe refusal.
 
 'use strict';
 
@@ -1678,13 +1680,21 @@ const USAGE = `usage: node .forge/scripts/wp.js <command>
 
   next [TASK-XXX] [--force] [--json]
                                select the task to execute and emit its fields;
-                               halts (exit 2) while an open foundation-severity
+                               exits 2 when there is nothing to select, and
+                               halts (exit 3) while an open foundation-severity
                                observation exists, unless --force
   get TASK-XXX [--json]        emit one task's fields
   status [--json]              counts, next unblocked task, clarify tasks, open observations
   set TASK-XXX <field> <value> [--force]
-                               set Status, Type, Depends, Context, Gate, or Notes
-  append-notes TASK-XXX <text> append a line to a task's Notes field`;
+                               set Status, Type, Depends, Context, Gate, or Notes;
+                               pending -> active runs the task's gate first and
+                               refuses (exit 4) a gate that already passes
+                               pre-work (CONTRACT#rules/gate-discrimination)
+  append-notes TASK-XXX <text> append a line to a task's Notes field
+
+Exit codes follow CONTRACT#interfaces/script-exit-codes: 0 success, 1 usage or
+validation error, 2 nothing to select, 3 foundation-observation halt, 4
+gate-discrimination probe refusal.`;
 
 function die(message, code) {
   console.error(`wp.js: ${message}`);
@@ -1799,9 +1809,9 @@ function cmdNext(args, json) {
         'or re-runs with --force to continue anyway.';
       if (json) {
         console.log(JSON.stringify({ ok: false, error: message, halted: 'foundation-observation', observations: blocking }, null, 2));
-        process.exit(2);
+        process.exit(3);
       }
-      die(message, 2);
+      die(message, 3);
     }
   }
 
@@ -1930,6 +1940,43 @@ function cmdSet(args) {
       const other = wp.tasks.find(t => t.status === 'active' && t.id !== id);
       if (other && !force) {
         die(`${other.id} is currently active. Only one task can be active at a time. Complete or block it first, or use --force.`);
+      }
+
+      // Gate-discrimination probe (CONTRACT#rules/gate-discrimination,
+      // obligation 2): a gate that already passes against the pre-work tree
+      // certifies nothing, so the task must not proceed on it. Probing at the
+      // pending -> active transition rather than in /forge-next's prose is the
+      // point — a step an agent is merely told to run is a step it may skip,
+      // which is how all recorded vacuous-gate instances shipped.
+      //
+      // manual: gates are exempt (no command to run). Resuming an already-
+      // active task performs no transition and never reaches this branch.
+      // --force is the human's override, same as `next --force`; agents repair
+      // the gate instead, via `set TASK-XXX gate '<discriminating gate>'` on
+      // the still-pending task.
+      if (task.status === 'pending' && !force && !/^manual:/.test(task.gate || '')) {
+        const probe = spawnSync('bash', ['-c', task.gate], {
+          cwd: ROOT,
+          encoding: 'utf8',
+          timeout: 300000,
+        });
+        if (probe.error) {
+          die(`gate-discrimination probe could not run the gate (${probe.error.message}). ` +
+              `Fix the environment or the gate before activating ${id}.`);
+        }
+        if (probe.status === 0) {
+          const output = `${probe.stdout || ''}${probe.stderr || ''}`.trim();
+          die(
+            `refused: ${id}'s gate already passes against the pre-work tree, so it cannot ` +
+            `verify this task's work (CONTRACT#rules/gate-discrimination).\n` +
+            `  Gate: ${task.gate}\n` +
+            (output ? `  Output:\n${output.split('\n').map(l => `    ${l}`).join('\n')}\n` : '') +
+            `Repair the gate to assert this task's change (wp.js set ${id} gate '<discriminating gate>') and retry. ` +
+            `If the gate is right and the work already exists, a prior task absorbed this task's scope — ` +
+            `report that to the human instead of proceeding. --force is the human's override.`,
+            4
+          );
+        }
       }
     }
   }

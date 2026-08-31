@@ -258,7 +258,7 @@ write_foundation_status
 
 # --- selecting new work is refused while a foundation row is open ---
 run next
-assert_rc 2 "an open foundation observation halts selection"
+assert_rc 3 "an open foundation observation halts selection (exit 3, CONTRACT#interfaces/script-exit-codes)"
 assert_has "OBS-9" "the offending row is printed, not just referenced"
 assert_has "foundation" "the severity is named"
 assert_lacks "Second task" "a refused selection must not leak the task it would have picked"
@@ -266,7 +266,7 @@ echo "  next -> halted by foundation observation: OK"
 
 # --- naming a task explicitly does not evade the stop ---
 run next TASK-004
-assert_rc 2 "an explicit ID does not bypass the hard stop"
+assert_rc 3 "an explicit ID does not bypass the hard stop"
 assert_has "OBS-9" "the offending row is still reported"
 echo "  next TASK-XXX -> halted: OK"
 
@@ -405,6 +405,44 @@ grep -q '^- \*\*Status:\*\* active$' "$TMPDIR/.forge/WORKPLAN.md" || fail "statu
 DIFFLINES=$(diff "$TMPDIR/before.md" "$TMPDIR/.forge/WORKPLAN.md" | grep -c '^[<>]' || true)
 [ "$DIFFLINES" = "2" ] || fail "set must change exactly one line (changed $DIFFLINES diff lines)"
 echo "  set status: OK"
+
+# --- gate-discrimination probe at pending -> active (CONTRACT#rules/gate-discrimination) ---
+# TASK-002's activation above doubles as the fails-pre-work case: its gate
+# (`bash tests/test-two.sh`) cannot pass in the fixture dir, so the probe let
+# the transition proceed. A gate that *passes* pre-work is vacuous — it
+# certifies nothing about this task's work — and activation must be refused
+# with exit 4, distinct from lint rejections (1) so /forge-next can tell a
+# vacuous gate from an invalid transition.
+
+base_workplan | write_workplan
+run set TASK-004 status active
+assert_rc 4 "a vacuous gate (passes pre-work) refuses activation with exit 4"
+assert_has "already passes" "the refusal explains the vacuous gate"
+assert_has "echo ok" "the refusal prints the gate"
+if grep -q '^- \*\*Status:\*\* active$' "$TMPDIR/.forge/WORKPLAN.md"; then
+  fail "a probe-refused task must stay pending"
+fi
+echo "  set status active with vacuous gate -> refused (exit 4): OK"
+
+# manual: gates are exempt — there is no command to run, and shelling out to a
+# prose description would fail for the wrong reason.
+base_workplan | write_workplan
+run set TASK-003 status active
+assert_rc 0 "a manual: gate activates without probing"
+echo "  manual: gate exempt from the probe: OK"
+
+# --force is the human's override, matching next --force; agents repair the
+# gate instead.
+base_workplan | write_workplan
+run set TASK-004 status active --force
+assert_rc 0 "--force overrides the probe refusal"
+echo "  --force overrides the probe: OK"
+
+# Restore the state the sections below assume: fresh fixture, TASK-002 active
+# (its gate fails pre-work, so the probe lets it through).
+base_workplan | write_workplan
+run set TASK-002 status active
+assert_rc 0 "re-activating TASK-002 for the sections below"
 
 # --- one active task at a time is enforced on write, not just on read ---
 run set TASK-004 status active

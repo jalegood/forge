@@ -732,27 +732,12 @@
 
 ## [TASK-074] Make the gate-discrimination probe mechanical in wp.js
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** none
 - **Context:** CONTRACT#rules/gate-discrimination, CONTRACT#rules/workplan-access-discipline, CONTRACT#state-machines/task-lifecycle, CONTRACT#rules/gate-patterns, notes/TASK-063#decisions
 - **Gate:** `bash .forge/tests/test-wp.sh && bash .forge/tests/smoke.sh && bash .forge/tests/test-init-scripts.sh && grep -q "vacuous" .forge/tests/test-wp.sh && echo "gate probe mechanical"`
-- **Notes:** The mechanism half of OBS-013. TASK-073 changes what gates get authored; this changes what happens when authoring misses, which is the half Vision pillar 2 actually requires — all four recorded instances were caught by an agent noticing after the fact, and one of them (TASK-034) was noticed and worked around without the rule ever changing.
-
-  `wp.js set TASK-XXX status active` runs the task's gate before performing the transition. Gate fails → transition proceeds normally (the expected case). Gate passes → refuse, print the gate and its output, exit with a code distinct from the existing failure paths so `/forge-next` can tell this refusal from a lint rejection or an invalid transition.
-
-  The insertion point already exists and is narrow: `cmdSet`'s `key === 'status'` branch has a `value === 'active'` block enforcing the one-active-task constraint, with `--force` and `die(message, code)` both in place, and `spawnSync` is already imported for the `check-workplan.js` call in `writeAndLint`. Follow `notes/TASK-063#decisions` for the established shape — that task made the foundation-observation halt mechanical in `wp.js next` with the same force/exit-code pattern, and its triage-not-override reasoning applies here unchanged.
-
-  Three behaviours to get right:
-  - **`manual:` gates are exempt.** There is no command to run; skip the probe rather than shelling out to a prose description.
-  - **Only `pending → active`.** Resuming an already-`active` task performs no transition and must not re-probe — the same exemption `wp.js next` makes for `resume-active`.
-  - **`--force` is the human's.** Agents repair the gate instead, via `wp.js set TASK-XXX gate '<discriminating gate>'` on the still-`pending` task, then retry. There is no deadlock: editing a pending task's Gate field requires no active transition.
-
-  Fixtures in `test-wp.sh` (the gate greps for `vacuous` there, so the fixture names are load-bearing): a task whose gate fails pre-work transitions cleanly; a task whose gate passes pre-work is refused with the distinguishing exit code; a `manual:` gate transitions without probing; `--force` overrides the refusal. Check each passing fixture for discrimination the way TASK-056 did — a fixture that would pass with the feature reverted proves nothing.
-
-  `wp.js` is embedded verbatim in `/forge-init` behind a `<!-- forge-init:embed -->` marker and content-diffed by `test-init-scripts.sh`, so the block must be re-copied whole (CONTRACT#rules/embedded-payload-synchronization). TASK-072 also rewrites `wp.js` and re-copies the same block; whichever lands second re-copies over the other's change rather than reverting it.
-
-  **Scope added 2026-08-30 (Observations-overhaul amendment):** the refusal's exit code is **4** per `CONTRACT#interfaces/script-exit-codes`, and the same table renumbers the existing foundation-observation halt in `wp.js next` from exit 2 to exit **3** — land both in this diff, since both are the Script Exit Codes table reaching `wp.js`, and update the usage text (which currently documents the halt as exit 2). Exit 2 stays "nothing to select". `/forge-next`'s prose catches up in TASK-084.
+- **Notes:** Probe live at pending→active (exit 4), foundation halt renumbered to exit 3, bash -c runner with loud spawn failure; fixtures discriminate. Record: .forge/notes/TASK-074.md
 
 ## [TASK-075] Update /forge-next to handle a refused gate-discrimination probe
 
