@@ -1023,12 +1023,14 @@
 
 ## [TASK-089] Give /forge-init its missing VERSION step
 
-- **Status:** pending
+- **Status:** done
 - **Type:** fix
 - **Depends:** TASK-096
 - **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#interfaces/command-forge-sync, CONTRACT#data-model/artifacts
 - **Gate:** `grep -q "forge/VERSION" .claude/commands/forge-init.md && grep -q "VERSION" .forge/tests/test-init-scripts.sh && bash .forge/tests/test-init-scripts.sh && bash .forge/tests/smoke.sh && echo "init stamps the engine version"`
 - **Notes:** Closes OBS-014. `CONTRACT#interfaces/command-forge-init` requires creating `.forge/VERSION` if absent (line 1: engine version stamp; line 2: canonical repo URL — read the live file for the exact format), but forge-init.md contains no VERSION step at all, so a newly scaffolded project has no stamp and `/forge-sync` stops at step 1. Add the step, the created-files list entry, and a `test-init-scripts.sh` assertion. Gate discrimination verified at planning: `forge/VERSION` appears nowhere in forge-init.md and `VERSION` nowhere in test-init-scripts.sh.
+  Closes OBS-014. New step 12 creates .forge/VERSION (two positional lines: stamp, canonical repo URL) with the no-overwrite rule; created-files list updated; report step renumbered to 13. test-init-scripts.sh asserts the step exists and that the live file holds exactly two lines with a URL on line 2.
+  Files: .claude/commands/forge-init.md, .forge/tests/test-init-scripts.sh
 
 ## [TASK-090] Widen forge-sync.md's managed globs to the Contract's set
 

@@ -3446,7 +3446,20 @@ exit 0
 
 If it exists, skip — do not overwrite.
 
-### 12. Report completion
+### 12. Create `.forge/VERSION` if absent
+
+Check if `.forge/VERSION` exists. If it does **not** exist, create it with exactly two lines — the engine version stamp, then the canonical repository URL:
+
+```text
+0.3.0
+https://github.com/jalegood/forge
+```
+
+`/forge-sync` reads line 1 to know which engine version this project was scaffolded from and line 2 to know where to fetch canonical files from; without the file it stops at step 1 and the project can never sync. Do not add a trailing comment or a third line — the format is positional.
+
+If it exists, skip — do not overwrite. A project that has already synced carries its own version here.
+
+### 13. Report completion
 
 After creating all files, tell the user which files were created (existing files were not overwritten), listing only from this set — and only the ones actually created or modified, not skipped:
 
@@ -3478,6 +3491,7 @@ After creating all files, tell the user which files were created (existing files
 - `.forge/scripts/guard-push.sh`
 - `.forge/scripts/guard-branch.sh`
 - `.forge/scripts/guard-secrets.sh`
+- `.forge/VERSION`
 - `.claude/settings.json`
 - `CLAUDE.md` (integration block)
 

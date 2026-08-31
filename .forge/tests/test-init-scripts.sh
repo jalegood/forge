@@ -86,4 +86,24 @@ fi
 # lib/ subdirectory that markdown.js lives in.
 grep -q "lib" "$INIT" || { echo "FAIL: $INIT never mentions the lib/ subdirectory"; exit 1; }
 
+# CONTRACT#interfaces/command-forge-init requires creating .forge/VERSION, and
+# /forge-sync stops at step 1 without it — the file is the engine stamp and the
+# canonical-repo pointer. forge-init.md carried no VERSION step at all until
+# TASK-089 (OBS-014), so a scaffolded project could never sync.
+grep -q "forge/VERSION" "$INIT" || {
+  echo "FAIL: $INIT has no step creating .forge/VERSION"
+  exit 1
+}
+# The two-line format is positional; a stamp with no repo pointer is as useless
+# to /forge-sync as no stamp at all.
+test -s .forge/VERSION || { echo "FAIL: .forge/VERSION does not exist in this project"; exit 1; }
+[ "$(grep -c . .forge/VERSION)" = "2" ] || {
+  echo "FAIL: .forge/VERSION must be exactly two lines (version, then repo URL)"
+  exit 1
+}
+grep -q "^https\?://" .forge/VERSION || {
+  echo "FAIL: .forge/VERSION line 2 must be the canonical repository URL"
+  exit 1
+}
+
 echo "  embedded payloads match the live scripts."
