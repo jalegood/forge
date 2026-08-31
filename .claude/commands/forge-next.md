@@ -8,15 +8,23 @@ If `$ARGUMENTS` is present (e.g., the user typed `/forge-next TASK-012`), treat 
 
 ## Steps
 
-### 1. Report open foundation observations, then project the workplan
+### 1. Sweep observations, report open foundation rows, then project the workplan
 
-**Before selecting a task**, check for open `foundation`-severity rows in STATUS.md Observations and report every one of them to the user (CONTRACT#interfaces/command-forge-next, Observations). Do this regardless of what selection turns out to be — including a resume:
+**Before selecting a task**, run the deterministic triage pass:
 
 ```bash
-node .forge/scripts/wp.js status --json
+node .forge/scripts/obs.js sweep
 ```
 
-Filter the `observations` array to entries with `severity: "foundation"`. If any exist, relay each verbatim (id, raised by, observation text) before continuing to task selection. This report is independent of the mechanical halt below: `wp.js next` itself refuses to select *new* work while an open foundation row exists, but that refusal is exempted on `resume-active` (CONTRACT#rules/unattended-execution, hard stop 4) — so a resume would otherwise surface nothing. This step closes that gap by reporting unconditionally, before the selection call, whether or not that call ends up halting.
+`sweep` makes no judgment call and takes no input. It reports `planned:` rows whose task is now `done` (re-run with `--apply` to close them — the one transition that is resolved by definition), `accepted` rows carrying no task link, and exact-duplicate observation text. Anything requiring judgment is reported, never applied. This is what stops `accepted` from being a dead letter: the state advances on its own once the work lands.
+
+Then report every open `foundation`-severity row to the user (CONTRACT#interfaces/command-forge-next, Observations). Do this regardless of what selection turns out to be — including a resume:
+
+```bash
+node .forge/scripts/obs.js list --json --severity foundation --disposition open
+```
+
+If any exist, relay each verbatim (id, raised by, age in days, observation text) before continuing to task selection. This report is independent of the mechanical halt below: `wp.js next` itself refuses to select *new* work while an open foundation row exists, but that refusal is exempted on `resume-active` (CONTRACT#rules/unattended-execution, hard stop 4) — so a resume would otherwise surface nothing. This step closes that gap by reporting unconditionally, before the selection call, whether or not that call ends up halting.
 
 Do **not** open `.forge/WORKPLAN.md`. Task selection is entirely deterministic — unblocked-ness, dependency satisfaction, active-task resume, explicit-ID override — so it runs in a script, and the script returns only the selected task (CONTRACT#rules/workplan-access-discipline). The workplan grows without bound; the per-session cost of this command must not grow with it.
 
@@ -64,11 +72,26 @@ The script has already applied every selection rule; your job is to react to wha
 - Unmet dependencies (`TASK-XXX has unmet dependencies: ...`) — relay it and ask for confirmation before proceeding.
 - Already `done`, or currently `blocked` — relay it and ask for confirmation before proceeding.
 
-**Exit code 2 — nothing to select.** Report the script's message and stop. Three cases produce it:
+**Exit code 2 — nothing to select.** Report the script's message and stop. Two cases produce it:
 
 - A _different_ task is currently `active`. Only one task can be active at a time — the human must complete or block it before starting a new one.
 - No unblocked pending task exists. Point the user at `/forge-status` to see what is blocked.
-- **An open `foundation`-severity observation exists in STATUS.md.** This is hard stop 4 from CONTRACT#rules/unattended-execution: the spec, contract, or approach is suspect, and continuing to build compounds debt. The script prints the offending rows — relay every one of them verbatim. Clearing the stop is a human judgment: they triage the row's Disposition to `accepted` or `declined`, or they re-run with `--force`. **Do not pass `--force` yourself, and do not edit the row's Disposition to clear your own path.** A halt an agent can lift is not a halt, and this is the one stop that exists to interrupt your momentum rather than support it.
+
+**Exit code 3 — halted by an open `foundation`-severity observation.** Hard stop 4 from CONTRACT#rules/unattended-execution: the spec, contract, or approach is suspect, and continuing to build compounds debt. The script prints the offending rows — relay every one verbatim.
+
+**A halt is not the end of the session; it is the start of a triage one.** Do not merely report the refusal and stop — that leaves the human a wall of text to reconstruct. Enter the guided triage flow instead:
+
+1. **Present each open row in plain language** — what was observed, which task raised it, how many days it has been open, and what continuing to build on it would cost.
+2. **Recommend a disposition for each, with your reasoning.** `accepted` (the work is worth doing), `declined` (it is not), or `duplicate:OBS-YYY` (another row already covers it). A recommendation is not a decision — say why, and say what you are unsure of.
+3. **Apply the human's answers through the script**, never by editing the row by hand:
+   ```bash
+   node .forge/scripts/obs.js set OBS-XXX disposition accepted
+   ```
+4. **Retry selection.** Once no open `foundation` row remains, `wp.js next` proceeds normally.
+
+**Do not pass `--force`, and do not disposition a `foundation` row yourself.** A halt an agent can lift is not a halt, and this is the one stop that exists to interrupt your momentum rather than support it. During an unattended span with no human present, write the triage packet — the rows, your recommendations, and your reasoning — to `.forge/notes/triage-YYYY-MM-DD.md` and stop, so the operator finds a decision waiting rather than an error to reconstruct.
+
+**Exit code 4 — the gate-discrimination probe refused a transition.** See step 4; this code reaches you only from `wp.js set`, not from selection.
 
 **Exit code 1 — usage or lookup error.** The named task ID does not exist, or `.forge/WORKPLAN.md` is missing or has no tasks. Report the message verbatim; for a missing workplan, tell the user to run `/forge-plan`.
 
@@ -246,13 +269,22 @@ When you believe the task is complete, run the gate from the task's Gate field.
 - **More than three from this task collapse into one.** If execution surfaced more than three separate candidates, don't append four-plus rows — write a single `foundation`-severity row instead. Volume of small complaints is itself the signal that the foundation is wrong, and recording it as volume buries that signal.
 - **`foundation` severity** means the spec, contract, or approach is suspect and continuing to build compounds debt (this is also what feeds CONTRACT#rules/unattended-execution hard stop 4 for the *next* session). Everything else is `normal`.
 - **Determine the next ID** — `OBS-XXX` where `XXX` is `max(existing OBS ids in .forge/STATUS.md) + 1`.
-- **Append directly to `.forge/STATUS.md`'s Observations table.** STATUS.md is hand-edited markdown, not projected through `wp.js` — that access discipline is specific to WORKPLAN.md (CONTRACT#rules/workplan-access-discipline) and does not extend here:
+- **Record it through `obs.js`, never by hand** (CONTRACT#interfaces/observation-script):
 
-  ```markdown
-  | OBS-XXX | TASK-XXX | design/bug/scope/... | normal or foundation | One-line observation. | open |
+  ```bash
+  node .forge/scripts/obs.js add --kind design --severity normal --task TASK-XXX "One-line observation."
   ```
 
+  The script mints the ID against the file at write time, stamps the date, escapes the text, sets the disposition to `open`, and re-validates through `check-status.js` before the write stands. Do not compute the next ID yourself and do not write the row layout: a hand-written row is how a literal `|` reaches a cell and silently removes the row from every reader — including the foundation hard stop, which then reports a clear queue while the row that should have halted the loop is invisible.
+
 If execution produced nothing worth logging, skip this — most tasks generate no observations, and that is the expected case, not a gap to fill.
+
+**Autonomous disposition during an unattended span** (CONTRACT#rules/unattended-execution). Two passes run without human input, and only two:
+
+- `obs.js sweep`, from step 1 — purely deterministic, no judgment, no risk.
+- **`normal` rows only**, where the duplicate target or the covering task **demonstrably already exists**: set `duplicate:OBS-YYY` or `planned:TASK-XXX` via `obs.js set`, and record a dated Decisions entry naming which row or task and why. The checkpoint reviews those entries; a disposition applied without one is a checkpoint finding.
+
+Novel `normal` rows stay `open` and wait for the checkpoint — they do not halt the span. **A `foundation` row is never auto-dispositioned under any circumstance:** an agent that can clear its own foundation rows can retire the one signal designed to interrupt its momentum.
 
 **Gate passes:**
 

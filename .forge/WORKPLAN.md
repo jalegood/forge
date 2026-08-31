@@ -961,12 +961,14 @@
 
 ## [TASK-084] Integrate obs.js into /forge-next
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-095
 - **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#rules/unattended-execution, CONTRACT#interfaces/observation-script, CONTRACT#interfaces/script-exit-codes
 - **Gate:** `node .forge/scripts/prose.js .claude/commands/forge-next.md "obs.js sweep" "guided triage" && bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && echo "the loop closes at forge-next"`
 - **Notes:** The command-side half of the Observations overhaul, per the amended `CONTRACT#interfaces/command-forge-next`: run `obs.js sweep` before selection; on the exit-**3** halt enter the guided triage flow (present each open row in plain language with a recommended disposition and reasoning, apply answers via `obs.js set`, retry selection — never a separate command); during unattended spans, apply only the two permitted auto-dispositions and otherwise write the triage packet to disk and stop; record completion-time observations via `obs.js add`, replacing any hand-written row-format instruction (the format belongs to the script — `CONTRACT#interfaces/prompt-template-interface` reasoning applies to command prose too); never promote an observation to a task. Update the wp.js output-shape block for the exit-code split TASK-074 landed. This also delivers ideas/ux-nearterm.md item 5's substance — the alert surface at session start, where attention already is.
+  Step 1 now runs obs.js sweep then obs.js list for the foundation report; step 2 splits exits 2/3/4 and carries the guided triage flow (present, recommend, apply via obs.js set, retry; write a triage packet to disk and stop when unattended); step 8 records via obs.js add instead of a hand-written row, plus the two permitted auto-dispositions and the never-foundation rule.
+  Files: .claude/commands/forge-next.md
 
 ## [TASK-085] Project the observation backlog through /forge-status
 
