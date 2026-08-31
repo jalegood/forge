@@ -1751,7 +1751,7 @@ const {
   setField,
   appendNotes,
 } = require('./lib/workplan');
-const { createLoader, resolveRef, findRoot } = require('./lib/markdown');
+const { createLoader, resolveRef, findRoot, parseTable } = require('./lib/markdown');
 
 // Nearest ancestor of the working directory holding .forge/, falling back to
 // the installed location — works from a subdirectory and by absolute path
@@ -1853,16 +1853,34 @@ function readObservations() {
   const result = resolveRef('STATUS#observations', loadFile);
   if (!result.ok) return [];
 
+  // Header-keyed, never positional (CONTRACT#data-model/markdown-table-parsing):
+  // the Date column landed after this reader existed, and a positional read
+  // would have silently shifted every cell — reading Kind as Severity and
+  // never matching 'open', which disarms the foundation halt while every
+  // report shows a clear queue. Keying by column name also keeps the six-column
+  // fixtures in test-wp.sh valid: they simply have no Date cell.
+  const t = parseTable(result.section);
+  if (!t.ok) {
+    // Fail closed. A malformed row may BE the open foundation row; proceeding
+    // as if the queue were clear is the exact failure the lint exists to stop.
+    const detail = t.errors.map(e => `  ${e.reason}`).join('\n');
+    die(`STATUS.md Observations table is malformed — a dropped row could hide a foundation halt.\n${detail}\nFix the table (node .forge/scripts/check-status.js shows every problem) and retry.`);
+  }
+
   const rows = [];
-  for (const line of result.section.split('\n')) {
-    if (!line.trim().startsWith('|')) continue;
-    const cells = line.split('|').slice(1, -1).map(c => c.trim());
-    if (cells.length < 6) continue;
-    if (/^-+$/.test(cells[0].replace(/\s/g, ''))) continue; // separator row
-    if (cells[0].toLowerCase() === 'id') continue;          // header row
-    const [id, raisedBy, kind, severity, observation, disposition] = cells;
+  for (const r of t.rows) {
+    const c = r.cells;
+    const disposition = (c['Disposition'] || '');
     if (disposition.toLowerCase() !== 'open') continue;
-    rows.push({ id, raisedBy, kind, severity: severity.toLowerCase(), observation, disposition });
+    rows.push({
+      id: c['ID'] || '',
+      date: c['Date'] || '',
+      raisedBy: c['Raised by'] || '',
+      kind: c['Kind'] || '',
+      severity: (c['Severity'] || '').toLowerCase(),
+      observation: c['Observation'] || '',
+      disposition,
+    });
   }
 
   // foundation first — the severity that means "stop and reconsider" must not

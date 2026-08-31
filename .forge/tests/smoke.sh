@@ -341,6 +341,14 @@ echo "Checking task-type enum sites..."
 bash .forge/tests/test-task-types.sh > /dev/null
 echo "  task-type enum: OK"
 
+# --- STATUS.md holds its invariants ---
+# The status lint guards the one table a mechanical hard stop reads every
+# session; a malformed row there is an invisible disarm (TASK-082,
+# CONTRACT#rules/status-lint).
+echo "Checking check-status.js..."
+bash .forge/tests/test-check-status.sh > /dev/null
+echo "  check-status.js: OK"
+
 # --- settings.json is valid JSON with hook config ---
 echo "Checking settings.json..."
 

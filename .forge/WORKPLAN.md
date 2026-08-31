@@ -934,12 +934,12 @@
 
 ## [TASK-082] Build check-status.js and bring the live STATUS.md under it
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-081, TASK-093
 - **Context:** CONTRACT#rules/status-lint, CONTRACT#data-model/status.md-data-model, CONTRACT#state-machines/observation-lifecycle, CONTRACT#interfaces/script-exit-codes, CONTRACT#data-model/markdown-table-parsing
 - **Gate:** `bash .forge/tests/test-check-status.sh && node .forge/scripts/check-status.js && grep -q "test-check-status" .forge/tests/smoke.sh && bash .forge/tests/smoke.sh && echo "status lint live"`
-- **Notes:** Implements `CONTRACT#rules/status-lint` on the post-TASK-093 shape: every table present has the columns its Data Model skeleton declares in order; every row parses to exactly that column count (error, never a skipped row); Observation IDs unique and monotonic; Kind/Severity/Disposition enumerated; `planned:TASK-XXX` names an existing task and `duplicate:OBS-YYY` names an existing non-duplicate row; `accepted` rows older than one checkpoint span without a task link warn; Decisions headings match `### YYYY-MM-DD — `. Errors exit 1 and block, warnings print. **Migration lands in the same diff:** the live Observations table gains its mandated Date column (dates recovered from the git history of each row's introduction), because the moment check-status.js exists the headless-run pre-commit breaker arms it — the file and the lint must go green together. The PostToolUse hook wiring is TASK-088's scope, not here.
+- **Notes:** Status lint live with 11 fixtures incl. the live file; Date column migrated with git-recovered dates; wp.js readObservations converted to header-keyed parseTable and fail-closed (positional reading would have silently disarmed the foundation halt). Record: .forge/notes/TASK-082.md
 
 ## [TASK-083] Build obs.js as the sole Observations writer
 
