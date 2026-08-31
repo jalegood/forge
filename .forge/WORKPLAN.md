@@ -772,7 +772,7 @@
 
 ## [TASK-077] Reconcile four Contract passages that misdescribe their own commands
 
-- **Status:** pending
+- **Status:** done
 - **Type:** clarify
 - **Depends:** none
 - **Context:** CONTRACT#interfaces/command-forge-next, CONTRACT#interfaces/command-forge-plan, CONTRACT#interfaces/command-forge-status, CONTRACT#rules/traceability, CONTRACT#data-model/task-record-data-model, CONTRACT#rules/contract-amendment-protocol
@@ -790,6 +790,8 @@
   **Why item 4 is here rather than in its own task:** it is the same file, the same section type (Interfaces bullets narrower than reality), and the same Decisions row as items 1-3, so a separate session would re-read the same context to write one line. This follows the lumping precedent the human set on TASK-024 → TASK-043/044.
 
   **The Decisions-row assertion is phrase-based, not count-based, and that is deliberate.** This gate originally read `test $(grep -c "^| 2026-" .forge/STATUS.md) -gt 26`; the OBS-009 reopening row landed the same day and satisfied it pre-work within the hour — a live demonstration of the rot that has already made TASK-067/068's `-gt 24` vacuous. A row count asserts that *someone wrote something*, which any unrelated row satisfies. `grep -q "no side effects" .forge/STATUS.md` asserts that *this* decision was recorded, and it cannot be satisfied by another task's row. Item 3's Decisions row must therefore contain the phrase `no side effects` verbatim. When writing gates for the other count-based clauses in this workplan, prefer this shape.
+  All four reconciled per the planned target wordings; one dated Decisions entry containing the load-bearing phrase. The forge-plan constraint now names its three licensed writes instead of denying two of them.
+  Files: .forge/CONTRACT.md, .claude/commands/forge-plan.md, .claude/commands/forge-status.md, .forge/STATUS.md
 
 ## [TASK-078] Bring check-ux-spec.js's forge-init payload under the drift test
 

@@ -397,12 +397,12 @@ Valid transitions: `open→accepted`, `open→declined`, `open→duplicate:`, `a
 - **Output task format:** Each task in WORKPLAN.md uses this structure: `## [TASK-XXX] Description` followed by fields — Status (`pending` for new tasks), Type (`scaffold|feature|clarify|refactor|fix|investigate|ux-spec|checkpoint`), Depends (`none` or comma-separated task IDs), Context (manifest references like `CONTRACT#section-name` or `UX#flows/flow-name/screen-name`), Gate (shell command or `manual:` prefix), Notes (empty for new tasks). Task IDs are unique and assigned from a monotonic counter: the next ID is `max(existing) + 1`, computed at write time against the current file — never inferred from the last ID read earlier in the session. Gaps are normal (deleted or abandoned tasks). An ID's ordinal carries no ordering meaning; see Rules/Task Ordering.
 - **Task sizing:** One task per concern. If a description uses "and" connecting two distinct pieces of work, split it. Each task should complete in a single clean session.
 - **Manifest generation:** Each task's Context field must list all Contract sections needed to execute independently (see Manifest Completeness rule). Context manifests for `ux-spec` tasks reference `UX#flows/flow-name` (the stub to complete). Context manifests for `feature` tasks implementing a screen reference `UX#flows/flow-name/screen-name` plus any `CONTRACT#` sections for data shapes the screen consumes.
-- **Outputs:** Updated `.forge/WORKPLAN.md`
+- **Outputs:** Updated `.forge/WORKPLAN.md`; may also write `<!-- ASSUMED -->` annotations and readiness resolutions into `.forge/CONTRACT.md` (validation step) and append Open Questions rows plus `planned:` observation advancements to `.forge/STATUS.md` — all three licensed by the Does bullets above, so a "no side effects beyond WORKPLAN.md" reading is wrong
 - **Human action required:** Review and edit the workplan before proceeding
 
 ### Command: `/forge-next`
 
-- **Reads:** `.forge/WORKPLAN.md` **via `.forge/scripts/wp.js` projection — never in full** (see Rules/Workplan Access Discipline), `.forge/notes/TASK-XXX.md` (only when referenced in a context manifest), `.forge/CONTRACT.md` (referenced sections only), `.forge/SPEC.md` and `.forge/specs/*.md` (when referenced in context manifests), `.forge/UX.md` (when referenced in context manifests), `.forge/DESIGN.md` (when referenced in context manifests), `.forge/STATUS.md` (checkpoint tasks only), `.forge/templates/`
+- **Reads:** `.forge/WORKPLAN.md` **via `.forge/scripts/wp.js` projection — never in full** (see Rules/Workplan Access Discipline), `.forge/notes/TASK-XXX.md` (only when referenced in a context manifest), `.forge/CONTRACT.md` (referenced sections only), `.forge/SPEC.md` and `.forge/specs/*.md` (when referenced in context manifests), `.forge/UX.md` (when referenced in context manifests), `.forge/DESIGN.md` (when referenced in context manifests), `.forge/STATUS.md` (observations every session — the sweep-and-report before selection — plus the full file for checkpoint packets), `.forge/templates/`
 - **Task format:** Parses WORKPLAN.md entries: `## [TASK-XXX] Description` followed by Status, Type, Depends, Context, Gate, Notes fields.
 - **Task selection:** If a task is already `active`, resumes it (the `Notes` field provides continuity from the previous session). Otherwise, finds the next unblocked `pending` task, or accepts a specific task ID (e.g., `/forge-next TASK-012`). A task is **unblocked** when its `Depends` field is `none` or all listed task IDs have status `done`. If a specified task has unmet dependencies, warns the human and asks for confirmation.
 - **Does:**
@@ -413,7 +413,7 @@ Valid transitions: `open→accepted`, `open→declined`, `open→duplicate:`, `a
   5. Injects resolved context into the template at `{{context}}`, plus task details into `{{task_id}}`, `{{task_description}}`, `{{gate}}`
   6. Executes the task following the template instructions
   7. Runs the gate command. If the gate starts with `manual:`, presents the description to the human and asks for pass/fail confirmation instead of running a shell command.
-  8. On pass: marks `done`, runs `git diff --name-only HEAD` (or staged files if not yet committed) to collect touched files, appends `Files: <comma-separated list>` to the task's Notes field, suggests commit message ending with `(TASK-XXX)`
+  8. On pass: marks `done`, runs `git diff --name-only HEAD` (or staged files if not yet committed) to collect touched files, records the file list where Rules/Traceability directs — inline `Files:` line or the record's `## Files` section, per the externalization threshold — and suggests a commit message ending with `(TASK-XXX)`
   9. On fail: keeps `active`, writes diagnostic to `Notes`
 - **Checkpoint tasks:** When the selected task's Type is `checkpoint`, execution means assembling the review packet (see Rules/Checkpoint Cadence): tasks completed since the last checkpoint (from WORKPLAN Notes/Files and `git log`), gate results, manual test steps if any exist, and the current STATUS.md open questions and risks. The gate is always `manual:` — present the packet and wait for human pass/fail. On block: appends a row to STATUS.md Blockers.
 - **Record externalization:** On marking a task `done`, writes the task's narrative to `.forge/notes/TASK-XXX.md` when it would exceed 3 lines, and leaves a one-line summary plus the path in the workplan `Notes` field (see Data Model/Task Record Data Model). Short notes stay inline.
@@ -427,13 +427,13 @@ Valid transitions: `open→accepted`, `open→declined`, `open→duplicate:`, `a
 - **Reads:** `.forge/WORKPLAN.md` **via `.forge/scripts/wp.js` projection — never in full**, `.forge/STATUS.md` (when present)
 - **Task format:** Parses task entries: `## [TASK-XXX] Description` followed by Status, Type, Depends, Context, Gate, Notes fields.
 - **Does:**
-  - Counts tasks by status: `pending`, `active`, `done`, `blocked`
+  - Counts tasks by status: `pending`, `active`, `done`, `blocked`, and lists the blocked tasks themselves — a task sitting `blocked` with no Blockers row must still be visible in the report, and `wp.js status` already derives the list
   - Obtains all counts, the next unblocked task, and clarify/observation listings from `.forge/scripts/wp.js` rather than reading and parsing WORKPLAN.md in context
   - Identifies next unblocked task: first `pending` task whose `Depends` are all `done` or `none`
   - Lists any `clarify`-type tasks that are `pending` or `active` (these need human decisions)
   - Surfaces STATUS.md Observations: `open` rows with `foundation` severity listed first, each with the description of the task that raised it and its age in days; the `accepted` queue awaiting planning; and backlog counts by disposition. A bare ID is not a report — the reader must be able to act without opening another file or running another command.
   - Surfaces STATUS.md items when present: open questions (flagging any marked Blocking), and blockers
-- **Outputs:** Progress summary to the user — task counts by status, next unblocked task ID and description, clarify tasks awaiting input (if any), open questions and blockers from STATUS.md (if any). Read-only — no file modifications, no side effects.
+- **Outputs:** Progress summary to the user — task counts by status, next unblocked task ID and description, clarify tasks awaiting input (if any), blocked tasks (if any), open questions and blockers from STATUS.md (if any). Read-only — no file modifications, no side effects.
 
 ### Command: `/forge-spec`
 

@@ -43,6 +43,10 @@ Workplan data comes from `.forge/scripts/wp.js`, never from reading `.forge/WORK
   - TASK-XXX — Description
   (or "None")
 
+**Blocked tasks:**
+  - TASK-XXX — Description
+  (or omit when none)
+
 **Open observations:**
   - [foundation] OBS-X (TASK-YYY) — Observation
   (or omit when none)
