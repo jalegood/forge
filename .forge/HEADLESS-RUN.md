@@ -87,3 +87,31 @@ after the fact:
   (it arms the guards for every future session in this project until removed).
 - The git hooks stay installed but disarm without the flag; note them in the
   final report so the human can delete them at merge.
+
+## Run outcome (2026-08-31)
+
+The run stopped on an empty queue: 98/98 tasks done, 0 pending, 0 active,
+0 blocked, well under the 100-task-commit ceiling. No breaker fired against
+a real defect, and none was bypassed — `--no-verify` was never passed, and
+neither was `wp.js --force` or `next --force`.
+
+Two breakers proved their keep:
+
+- **Breaker 6 (test suite)** caught its first failure within a minute of being
+  armed: `test-guard-hooks.sh` inherited `FORGE_UNATTENDED=1` from the session
+  and read a correct block as a failure. That became TASK-094 — a guard test
+  that could not survive the unattended context the guards exist for.
+- **Breaker 2 (Vision lock)** was exercised deliberately at install time and
+  refused a staged VISION.md edit. It never fired again, because Vision was
+  never touched.
+
+The behavioral breakers were never triggered: no gate failed twice on the
+same task, and no `foundation` row was raised during the run. The one
+foundation-adjacent decision — OBS-019, found by the TASK-046 checkpoint's own
+gate re-run — was `normal` severity and went to a task rather than a halt.
+
+**Teardown for the human at merge:** delete `.git/hooks/pre-commit` and
+`.git/hooks/pre-push`, and delete this file along with
+`.forge/scripts/guard-headless-run.sh`. All four are experiment-scoped. The
+engine's own guards (`guard-push.sh`, `guard-branch.sh`, `guard-secrets.sh`,
+`hook-status-lint.sh`) are permanent and stay.
