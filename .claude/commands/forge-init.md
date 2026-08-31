@@ -1833,6 +1833,8 @@ const USAGE = `usage: node .forge/scripts/wp.js <command>
                                observation exists, unless --force
   get TASK-XXX [--json]        emit one task's fields
   status [--json]              counts, next unblocked task, clarify tasks, open observations
+  graph [--json] [--mermaid]   the DAG as nodes and edges, with each task's
+                               depth, startable-now flag, and fan-in/out
   set TASK-XXX <field> <value> [--force]
                                set Status, Type, Depends, Context, Gate, or Notes;
                                pending -> active runs the task's gate first and
@@ -2027,6 +2029,100 @@ function cmdGet(args, json) {
   else printTask(task, null, []);
 }
 
+// --- Graph projection ---
+// The DAG's data model, emitted once and consumed by every later layer
+// (graph-aware /forge-status today, a rendered view later). Projection only:
+// no state, no mutation, no opinion about what the reader should do with it.
+//
+// Depth is the longest path to a node, not the shortest: a task is reachable
+// only after its slowest dependency chain completes, so the shortest path
+// would report work as startable earlier than it is.
+function buildGraph(wp) {
+  const { tasks, taskById } = wp;
+  const nodes = tasks.map(t => ({
+    id: t.id,
+    description: t.description,
+    status: t.status,
+    type: t.type,
+    depends: dependsList(t),
+  }));
+  const edges = [];
+  for (const n of nodes) {
+    for (const d of n.depends) edges.push({ from: d, to: n.id });
+  }
+
+  const depthCache = new Map();
+  function depth(id, seen) {
+    if (depthCache.has(id)) return depthCache.get(id);
+    const t = taskById.get(id);
+    if (!t) return 0;
+    const deps = dependsList(t);
+    // A cycle is a lint error (check-workplan.js invariant 3); guard anyway so
+    // a broken workplan produces a report rather than a stack overflow.
+    if (seen.has(id)) return 0;
+    seen.add(id);
+    const d = deps.length ? 1 + Math.max(...deps.map(x => depth(x, seen))) : 1;
+    seen.delete(id);
+    depthCache.set(id, d);
+    return d;
+  }
+
+  const done = new Set(tasks.filter(t => t.status === 'done').map(t => t.id));
+  for (const n of nodes) {
+    n.depth = depth(n.id, new Set());
+    // Startable = the same unblocked-ness rule selection applies, so the graph
+    // and `next` can never disagree about what is available.
+    n.startable = n.status === 'pending' && n.depends.every(d => done.has(d));
+    n.fanIn = n.depends.length;
+    n.fanOut = nodes.filter(m => m.depends.includes(n.id)).length;
+  }
+  return { nodes, edges };
+}
+
+function cmdGraph(args, json) {
+  const mermaid = args.includes('--mermaid');
+  const wp = loadWorkplan();
+  const { nodes, edges } = buildGraph(wp);
+
+  if (mermaid) {
+    // Mermaid renders in GitHub, in terminal-adjacent tooling, and unchanged
+    // inside an HTML page — a picture for zero rendering code.
+    const shape = n =>
+      n.status === 'done' ? `${n.id}["${n.id} ✓"]`
+      : n.status === 'active' ? `${n.id}(("${n.id} ▶"))`
+      : n.status === 'blocked' ? `${n.id}{{"${n.id} ✗"}}`
+      : `${n.id}["${n.id}"]`;
+    const lines = ['flowchart TD'];
+    const pending = nodes.filter(n => n.status !== 'done');
+    // Done tasks are frozen history and would swamp the picture; include them
+    // only where a pending task still depends on one.
+    const keep = new Set(pending.map(n => n.id));
+    for (const n of pending) for (const d of n.depends) keep.add(d);
+    for (const n of nodes.filter(x => keep.has(x.id))) lines.push(`  ${shape(n)}`);
+    for (const e of edges) if (keep.has(e.from) && keep.has(e.to)) lines.push(`  ${e.from} --> ${e.to}`);
+    for (const n of pending.filter(x => x.startable)) lines.push(`  style ${n.id} stroke-width:3px`);
+    console.log(lines.join('\n'));
+    return;
+  }
+
+  if (json) {
+    console.log(JSON.stringify({ ok: true, nodes, edges }, null, 2));
+    return;
+  }
+
+  const pending = nodes.filter(n => n.status !== 'done');
+  const maxDepth = pending.reduce((m, n) => Math.max(m, n.depth), 0);
+  console.log(`Graph: ${nodes.length} tasks, ${edges.length} edges, ${pending.length} not done`);
+  for (let d = 1; d <= maxDepth; d++) {
+    const layer = pending.filter(n => n.depth === d);
+    if (!layer.length) continue;
+    console.log(`  depth ${d} (${layer.length}): ${layer.map(n => n.id + (n.startable ? '*' : '')).join(' ')}`);
+  }
+  const chokes = pending.filter(n => n.fanIn >= 5).map(n => `${n.id} (fan-in ${n.fanIn})`);
+  if (chokes.length) console.log(`  choke points: ${chokes.join(', ')}`);
+  console.log('  * = startable now');
+}
+
 function cmdStatus(args, json) {
   const wp = loadWorkplan();
   const { tasks, taskById } = wp;
@@ -2208,6 +2304,7 @@ function main(argv) {
     case 'next': return cmdNext(rest, json);
     case 'get': return cmdGet(rest, json);
     case 'status': return cmdStatus(rest, json);
+    case 'graph': return cmdGraph(rest, json);
     case 'set': return cmdSet(rest);
     case 'append-notes': return cmdAppendNotes(rest);
     case undefined: return die(USAGE);

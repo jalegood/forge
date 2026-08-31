@@ -1045,12 +1045,14 @@
 
 ## [TASK-091] Emit the workplan graph from wp.js
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-096
 - **Context:** CONTRACT#rules/workplan-access-discipline, CONTRACT#rules/task-ordering, CONTRACT#data-model/artifacts, CONTRACT#rules/embedded-payload-synchronization
 - **Gate:** `bash .forge/tests/test-wp.sh && grep -q "graph --mermaid" .forge/tests/test-wp.sh && node .forge/scripts/wp.js graph --mermaid | grep -q "flowchart" && bash .forge/tests/smoke.sh && echo "the DAG is visible"`
 - **Notes:** ideas/ux-nearterm.md item 1 — the highest-leverage item on its list. `wp.js graph --json` emits nodes (id, description, status, type) and edges (depends); `--mermaid` renders the same structure as a flowchart, which displays in GitHub and terminal-adjacent tooling for zero rendering code. This is the DAG's data model; every later rendering layer consumes it, and TASK-092 is its first consumer. Projection only — no new state, no workplan mutation. Re-copy the wp.js forge-init payload whole (the marker diff enforces).
+  wp.js graph emits nodes+edges with longest-path depth, startable (same unblocked rule as selection, so graph and next cannot disagree), and fan-in/out; --json, --mermaid (pending subgraph, done ancestors kept, startable stroked), and a human depth-layer view. Projection only. Fixtures pin startable/depth/edge direction.
+  Files: .forge/scripts/wp.js, .forge/tests/test-wp.sh, .claude/commands/forge-init.md
 
 ## [TASK-092] Make /forge-status graph-aware
 

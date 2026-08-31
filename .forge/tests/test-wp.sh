@@ -557,6 +557,46 @@ OUT=$(cd "$TMPDIR/.forge" && node "$WP" status 2>&1) || RC=$?
 [ "$RC" = "0" ] || fail "wp.js status must work from a subdirectory of a fixture project (got exit $RC)"
 echo "  nearest .forge/ ancestor wins: OK"
 
+echo "Checking wp.js graph..."
+
+base_workplan | write_workplan
+rm -f "$TMPDIR/.forge/STATUS.md"
+
+run graph --json
+assert_rc 0 "graph --json succeeds"
+node -e '
+  const d = JSON.parse(process.argv[1]);
+  if (!d.ok) throw new Error("ok");
+  if (d.nodes.length !== 4) throw new Error("expected 4 nodes, got " + d.nodes.length);
+  const byId = Object.fromEntries(d.nodes.map(n => [n.id, n]));
+  // TASK-002 depends on the done TASK-001, so it is startable; TASK-003
+  // depends on the pending TASK-002, so it is not. This is the same
+  // unblocked-ness rule selection applies — the graph and next must never
+  // disagree about what is available.
+  if (!byId["TASK-002"].startable) throw new Error("TASK-002 must be startable");
+  if (byId["TASK-003"].startable) throw new Error("TASK-003 must NOT be startable — its dependency is pending");
+  // Depth is the longest path: TASK-003 sits behind TASK-002 behind TASK-001.
+  if (byId["TASK-001"].depth !== 1) throw new Error("root depth must be 1");
+  if (byId["TASK-003"].depth !== 3) throw new Error("TASK-003 depth must be 3, got " + byId["TASK-003"].depth);
+  if (byId["TASK-002"].fanOut !== 1) throw new Error("TASK-002 fanOut must be 1");
+  const edge = d.edges.find(e => e.from === "TASK-001" && e.to === "TASK-002");
+  if (!edge) throw new Error("edges must run dependency -> dependent");
+' "$OUT" || fail "graph --json shape"
+echo "  graph --json: OK"
+
+run graph --mermaid
+assert_rc 0 "graph --mermaid succeeds"
+assert_has "flowchart" "mermaid output declares a flowchart"
+assert_has "TASK-002" "a pending task appears in the diagram"
+assert_has -- "-->" "dependency edges are drawn"
+echo "  graph --mermaid: OK"
+
+run graph
+assert_rc 0 "graph (human) succeeds"
+assert_has "depth" "the human view reports depth layers"
+assert_has "startable" "the human view marks what is startable now"
+echo "  graph (human): OK"
+
 echo "Checking usage errors..."
 
 run
