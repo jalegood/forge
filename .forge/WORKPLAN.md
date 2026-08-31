@@ -1076,12 +1076,12 @@
 
 ## [TASK-039] End-to-end validation of v0.3 pipeline
 
-- **Status:** pending
+- **Status:** done
 - **Type:** investigate
 - **Depends:** TASK-097
 - **Context:** CONTRACT#interfaces/command-forge-spec, CONTRACT#rules/workplan-lint, CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#rules/spec-precedence
 - **Gate:** `manual: In a scratch project: (1) forge-init creates SPEC.md, STATUS.md, checkpoint.md, both check scripts, and VERSION without overwriting; (2) forge-spec runs an intake interview and produces a spec that passes check-spec.js with open questions logged to STATUS.md; (3) forge-plan emits SPEC# manifests and a checkpoint task, and check-workplan.js passes; (4) forge-next resolves SPEC# refs and executes a checkpoint with a complete review packet; (5) forge-status surfaces STATUS.md items; (6) simulate a 2-3 task unattended span on a work branch honoring the hard stops`
-- **Notes:**
+- **Notes:** All six criteria PASS, validated against a scratch project built from forge-init payloads alone (22 extracted, all executable). Four hard stops exercised live incl. probe exit 4 and foundation exit 3. Found OBS-020 (test.sh unrecognized by invariant 6). Record: .forge/notes/TASK-039.md
 
 ## [TASK-049] Retire forge-spec-v0.2.md as a separate source of truth
 
