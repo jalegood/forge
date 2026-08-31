@@ -1056,12 +1056,14 @@
 
 ## [TASK-092] Make /forge-status graph-aware
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-091
 - **Context:** CONTRACT#interfaces/command-forge-status, CONTRACT#rules/workplan-access-discipline
 - **Gate:** `node .forge/scripts/prose.js .claude/commands/forge-status.md "startable" "choke point" && bash .forge/tests/smoke.sh && echo "position not just counts"`
 - **Notes:** ideas/ux-nearterm.md item 2: replace "18 pending, next: TASK-XXX" with the shape of remaining work — depth, width, the full startable set, and choke points (high fan-in nodes such as checkpoints) — derived from two traversals over `wp.js graph --json`. The current report shows a queue of one while ten tasks are equally startable; correct for an unattended span, a real loss for a human deciding where to spend a session. Verify at execution that "startable" and "choke point" are absent from forge-status.md pre-work.
+  forge-status step 1 now also runs wp.js graph and reports depth/width, the full startable set (not just the first — a queue of one hides ten equally-startable tasks from a human choosing), choke points by fan-in, and blocked-by; output format gained a Shape block. ideas/ux-nearterm.md item 2 delivered.
+  Files: .claude/commands/forge-status.md
 
 ## [TASK-097] Checkpoint: v0.3+ projection and repairs
 

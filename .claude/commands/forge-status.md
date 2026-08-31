@@ -16,6 +16,21 @@ Workplan data comes from `.forge/scripts/wp.js`, never from reading `.forge/WORK
 
    Do not open `.forge/WORKPLAN.md` to verify or supplement this output. The script is the source of truth for workplan state — it applies the same unblocked-ness rule the contract specifies (a task is unblocked when its `Depends` field is `none` or every listed TASK-ID has status `done`).
 
+   Then project the **shape** of the remaining work:
+
+   ```bash
+   node .forge/scripts/wp.js graph
+   ```
+
+   Counts say how much is left; the graph says where the reader stands in it. Report four things from it:
+
+   - **Depth and width** — how many layers of remaining work there are, and how wide the current layer is.
+   - **The full startable set**, not just the first one. A queue of one is correct for an unattended span, where selection is deterministic and there is no choice to make. It is a real loss for a human deciding where to spend a session: ten equally startable tasks look like one.
+   - **Choke points** — high fan-in tasks, typically checkpoints, where the graph narrows to a single node every downstream task waits behind.
+   - **Blocked-by** for anything blocked: which unfinished dependency is holding it.
+
+   This is two traversals over the same structure the script already returns — no second source of truth, and nothing here re-derives what `wp.js status` reported.
+
    If the script exits nonzero, report its error verbatim. Exit code 1 means the workplan is missing or empty — tell the user to run `/forge-plan`.
 
 2. **Project the observation backlog.** Run:
@@ -49,6 +64,11 @@ Workplan data comes from `.forge/scripts/wp.js`, never from reading `.forge/WORK
 
 **Next unblocked task:** TASK-XXX — Description
   (or "All pending tasks are blocked" / "All tasks complete")
+
+**Shape:** N layers deep, M startable now
+  - Startable: TASK-XXX, TASK-YYY, TASK-ZZZ
+  - Choke point: TASK-XXX (N tasks wait behind it)
+  (omit the choke-point line when there is none)
 
 **Clarify tasks awaiting input:**
   - TASK-XXX — Description
