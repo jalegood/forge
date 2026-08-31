@@ -1067,12 +1067,12 @@
 
 ## [TASK-097] Checkpoint: v0.3+ projection and repairs
 
-- **Status:** pending
+- **Status:** done
 - **Type:** checkpoint
 - **Depends:** TASK-089, TASK-090, TASK-091, TASK-092
 - **Context:** CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#data-model/status.md-data-model
 - **Gate:** `manual: Review the projection-and-repairs span. Packet must contain: each task in the span with description and Files, fresh re-runs of every automated gate in the span with regressions flagged, check-workplan.js and check-status.js output, current STATUS.md Open Questions and Risks, and the span's starting commit for rollback.`
-- **Notes:** Third checkpoint of the headless planning pass, closing the graph-projection and observation-repair span before end-to-end validation and docs. Same review-and-record protocol as TASK-095.
+- **Notes:** PASSED: 4/4 gates fresh, zero regressions. Closed OBS-014 and OBS-015 (both permanent-by-construction defects in scaffold and sync); shipped the graph projection and graph-aware status. Packet: .forge/notes/TASK-097.md
 
 ## [TASK-039] End-to-end validation of v0.3 pipeline
 
