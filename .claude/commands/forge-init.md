@@ -105,8 +105,16 @@ Check if `.forge/STATUS.md` exists. If it does **not** exist, create it with thi
 
 ## Decisions
 
-| Date | Decision | Why | Alternatives rejected |
-| ---- | -------- | --- | --------------------- |
+<!-- One dated section per decision, newest first:
+
+### YYYY-MM-DD — Short title
+
+The decision, as prose.
+
+**Why:** the reasoning.
+
+**Rejected alternatives:** what was turned down, and why.
+-->
 
 ## Risks
 
@@ -120,11 +128,11 @@ Check if `.forge/STATUS.md` exists. If it does **not** exist, create it with thi
 
 ## Observations
 
-| ID | Raised by | Kind | Severity | Observation | Disposition |
-| -- | --------- | ---- | -------- | ----------- | ----------- |
+| ID | Date | Raised by | Kind | Severity | Observation | Disposition |
+| -- | ---- | --------- | ---- | -------- | ----------- | ----------- |
 ```
 
-All five tables are mandatory. `check-workplan.js` resolves `STATUS#observations` and `/forge-next` halts on open `foundation` rows, so a stub missing the Observations table silently disables that hard stop. Emit the header rows even though every table starts empty — writers append rows, they do not create tables.
+All five sections are mandatory — four tables plus Decisions, which is dated sections rather than a table (decisions are append-only prose history, and single-cell rows grew past 2,000 characters). `check-workplan.js` resolves `STATUS#observations` and `/forge-next` halts on open `foundation` rows, so a stub missing the Observations table silently disables that hard stop. **The columns must match CONTRACT#data-model/status.md-data-model exactly, in order** — a stub whose columns disagree with the skeleton makes every row `obs.js` writes malformed on arrival, and `check-status.js` will reject the file on the first write. Emit the header rows even though every table starts empty — writers append rows, they do not create tables.
 
 If it exists, skip — do not overwrite.
 
@@ -822,6 +830,16 @@ Check if `.claude/settings.json` exists. If it does **not** exist, create `.clau
             "type": "command",
             "command": "echo 'File saved.'",
             "description": "Placeholder lint hook — replace with project linter (e.g., eslint --fix, ruff format)"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .forge/scripts/hook-status-lint.sh",
+            "description": "Status lint — validates .forge/STATUS.md after any edit touching it. Exits 2 to block, per CONTRACT#interfaces/script-exit-codes."
           }
         ]
       }
@@ -2647,6 +2665,591 @@ main(process.argv.slice(2));
 
 If it exists, skip — do not overwrite.
 
+If `.forge/scripts/check-status.js` does **not** exist, create it with:
+
+<!-- forge-init:embed .forge/scripts/check-status.js -->
+
+```javascript
+#!/usr/bin/env node
+// check-status.js — validate .forge/STATUS.md invariants (CONTRACT#rules/status-lint)
+// Usage: node .forge/scripts/check-status.js [path]
+//
+// STATUS.md is the one artifact the Contract explicitly invites the human to
+// hand-edit, and the only one whose malformed rows are read by a mechanical
+// hard stop — a dropped Observations row is indistinguishable from an absent
+// one, and at foundation severity it disables the pipeline's one hard stop
+// while every report shows a clear queue. So: every table's columns must match
+// the Data Model skeleton, every row must parse to exactly that column count
+// (an error, never a skipped row), and the Observations enums and lifecycle
+// links must hold.
+//
+// Exit codes (CONTRACT#interfaces/script-exit-codes): 0 success (warnings may
+// print), 1 validation failure or usage error.
+
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const { parseTable, findRoot } = require('./lib/markdown');
+const { readWorkplan } = require('./lib/workplan');
+
+const ROOT = findRoot();
+const statusPath = process.argv[2] || path.join(ROOT, '.forge', 'STATUS.md');
+
+// The Data Model skeleton's columns, in order (CONTRACT#data-model/status.md-data-model).
+const SCHEMAS = {
+  'Open Questions': ['ID', 'Question', 'Blocking?', 'Raised'],
+  'Risks': ['Risk', 'Impact', 'Mitigation'],
+  'Blockers': ['Blocker', 'Blocking tasks', 'Needs'],
+  'Observations': ['ID', 'Date', 'Raised by', 'Kind', 'Severity', 'Observation', 'Disposition'],
+};
+const KINDS = new Set(['design', 'bug', 'scope', 'friction']);
+const SEVERITIES = new Set(['normal', 'foundation']);
+const TERMINAL_DISPOSITIONS = new Set(['open', 'accepted', 'declined', 'closed']);
+
+// An accepted row with no task link is a triage backlog, not a malformed
+// artifact — warn, don't block. "Older than one checkpoint span" is
+// operationalized as 7 days: the cadence is 5 tasks and a task is a session,
+// so a week-old accepted row has outlived any plausible span.
+const ACCEPTED_AGE_WARN_DAYS = 7;
+
+const errors = [];
+const warnings = [];
+
+if (!fs.existsSync(statusPath)) {
+  console.error(`check-status.js: ${statusPath} not found.`);
+  process.exit(1);
+}
+const text = fs.readFileSync(statusPath, 'utf8').replace(/\r\n/g, '\n');
+
+// Split into top-level sections, fence-aware.
+function sections(md) {
+  const out = {};
+  let name = null;
+  let buf = [];
+  let inFence = false;
+  for (const line of md.split('\n')) {
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
+    const h = !inFence && /^## (.+)$/.exec(line);
+    if (h) {
+      if (name) out[name] = buf.join('\n');
+      name = h[1].trim();
+      buf = [];
+      continue;
+    }
+    buf.push(line);
+  }
+  if (name) out[name] = buf.join('\n');
+  return out;
+}
+
+const secs = sections(text);
+
+// 1 + 2: every table present has the skeleton's columns in order, and every
+// row parses to exactly that count.
+for (const [secName, columns] of Object.entries(SCHEMAS)) {
+  if (!(secName in secs)) continue; // a missing section is not this lint's call
+  const body = secs[secName];
+  if (!/^\s*\|/m.test(body)) continue; // empty section, no table yet
+  const t = parseTable(body);
+  for (const e of t.errors) {
+    errors.push(`${secName}: line ${e.lineNumber} of section — ${e.reason}\n    ${e.line.trim().slice(0, 120)}`);
+  }
+  if (t.columns.length && t.columns.join(' ') !== columns.join(' ')) {
+    errors.push(`${secName}: columns are [${t.columns.join(' | ')}], the Data Model requires [${columns.join(' | ')}] in that order`);
+  }
+  secs['__' + secName] = t; // stash the parse for the checks below
+}
+
+// Decisions: dated sections, not a table (since TASK-093).
+if ('Decisions' in secs) {
+  if (/^\s*\|/m.test(secs['Decisions'])) {
+    errors.push('Decisions: contains table rows — decisions are dated sections (### YYYY-MM-DD — Title) since TASK-093');
+  }
+  let inFence = false;
+  for (const line of secs['Decisions'].split('\n')) {
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
+    if (inFence) continue;
+    if (/^### /.test(line) && !/^### \d{4}-\d{2}-\d{2} — .+$/.test(line)) {
+      errors.push(`Decisions: heading does not match "### YYYY-MM-DD — Title": ${line.trim().slice(0, 90)}`);
+    }
+  }
+}
+
+// 3 + 4 + 5: Observations enums, ID discipline, link integrity, accepted age.
+const obs = secs['__Observations'];
+if (obs && obs.rows.length) {
+  const ids = obs.rows.map(r => r.cells['ID']);
+  const idSet = new Set();
+  let prevNum = 0;
+  const wpTasks = (() => {
+    const wp = readWorkplan(ROOT);
+    return wp ? new Set(wp.tasks.map(t => t.id)) : new Set();
+  })();
+  const byId = new Map(obs.rows.map(r => [r.cells['ID'], r.cells]));
+
+  for (const r of obs.rows) {
+    const c = r.cells;
+    const id = c['ID'];
+    if (!/^OBS-\d+$/.test(id)) errors.push(`Observations ${id}: ID does not match OBS-XXX`);
+    if (idSet.has(id)) errors.push(`Observations ${id}: duplicate ID`);
+    idSet.add(id);
+    const num = Number(id.replace('OBS-', ''));
+    if (num <= prevNum) errors.push(`Observations ${id}: IDs must be monotonic (follows OBS-${String(prevNum).padStart(3, '0')})`);
+    prevNum = num;
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(c['Date'])) errors.push(`Observations ${id}: Date "${c['Date']}" is not an ISO date`);
+    if (!KINDS.has(c['Kind'])) errors.push(`Observations ${id}: Kind "${c['Kind']}" is not one of ${[...KINDS].join('/')}`);
+    if (!SEVERITIES.has(c['Severity'])) errors.push(`Observations ${id}: Severity "${c['Severity']}" is not normal|foundation`);
+
+    const d = c['Disposition'];
+    const planned = /^planned:(TASK-\d+)$/.exec(d);
+    const dup = /^duplicate:(OBS-\d+)$/.exec(d);
+    if (!TERMINAL_DISPOSITIONS.has(d) && !planned && !dup) {
+      errors.push(`Observations ${id}: Disposition "${d}" is not a lifecycle value`);
+    }
+    if (planned && !wpTasks.has(planned[1])) {
+      errors.push(`Observations ${id}: planned:${planned[1]} names a task that does not exist in WORKPLAN.md`);
+    }
+    if (dup) {
+      const target = byId.get(dup[1]);
+      if (!target) errors.push(`Observations ${id}: duplicate:${dup[1]} names a row that does not exist`);
+      else if (/^duplicate:/.test(target['Disposition'])) {
+        errors.push(`Observations ${id}: duplicate:${dup[1]} points at a row that is itself a duplicate:`);
+      }
+    }
+    if (d === 'accepted' && /^\d{4}-\d{2}-\d{2}$/.test(c['Date'])) {
+      const age = Math.floor((Date.now() - new Date(c['Date'] + 'T00:00:00Z')) / 86400000);
+      if (age > ACCEPTED_AGE_WARN_DAYS) {
+        warnings.push(`Observations ${id}: accepted for ${age} days with no task link — awaiting planning`);
+      }
+    }
+  }
+}
+
+for (const w of warnings) console.log(`warning: ${w}`);
+if (errors.length) {
+  for (const e of errors) console.error(`error: ${e}`);
+  console.error(`\ncheck-status.js: ${errors.length} error(s) in ${statusPath}.`);
+  process.exit(1);
+}
+console.log(`STATUS.md validation passed (${warnings.length} warning(s)).`);
+process.exit(0);
+```
+
+If it exists, skip — do not overwrite.
+
+If `.forge/scripts/obs.js` does **not** exist, create it with:
+
+<!-- forge-init:embed .forge/scripts/obs.js -->
+
+```javascript
+#!/usr/bin/env node
+// obs.js — deterministic STATUS.md Observations query and mutation
+// (CONTRACT#interfaces/observation-script)
+//
+// Usage:
+//   node .forge/scripts/obs.js add --kind K --severity S --task TASK-XXX "<text>"
+//   node .forge/scripts/obs.js set OBS-XXX <field> <value>
+//   node .forge/scripts/obs.js list [--json] [--disposition D] [--severity S]
+//   node .forge/scripts/obs.js sweep [--apply]
+//
+// Why this exists: the row format was restated in ~18 places and hand-written
+// every time. A hand-written row is how a literal `|` reaches a cell and
+// silently removes the row from every reader — including the foundation hard
+// stop, which then reports a clear queue while the row that should have halted
+// the loop is invisible. This script is the only supported writer: it mints
+// the ID against the file at write time, stamps the date, escapes the text,
+// and re-validates through check-status.js before the write is allowed to
+// stand.
+//
+// Write discipline (the pattern wp.js established): write the file, run the
+// lint, restore the original and fail loudly if the lint rejects it. A
+// mutation that leaves the artifact invalid is worse than a refused one.
+//
+// Exit codes (CONTRACT#interfaces/script-exit-codes): 0 success · 1 usage or
+// validation error.
+
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const { parseTable, findRoot } = require('./lib/markdown');
+const { readWorkplan } = require('./lib/workplan');
+
+const ROOT = findRoot();
+const STATUS_PATH = path.join(ROOT, '.forge', 'STATUS.md');
+
+const COLUMNS = ['ID', 'Date', 'Raised by', 'Kind', 'Severity', 'Observation', 'Disposition'];
+const KINDS = ['design', 'bug', 'scope', 'friction'];
+const SEVERITIES = ['normal', 'foundation'];
+
+// CONTRACT#state-machines/observation-lifecycle. `planned:` and `duplicate:`
+// carry a target, so they are matched by prefix rather than listed.
+const TRANSITIONS = {
+  open: ['accepted', 'declined', 'duplicate:'],
+  accepted: ['planned:', 'declined'],
+  'planned:': ['closed', 'open'],
+  declined: [],
+  'duplicate:': [],
+  closed: [],
+};
+
+const USAGE = `usage: node .forge/scripts/obs.js <command>
+
+  add --kind K --severity S --task TASK-XXX "<text>"
+                               append a row: mints the ID at write time, stamps
+                               today's date, escapes pipes, disposition "open"
+  set OBS-XXX <field> <value>  targeted field write; refuses an invalid
+                               Disposition transition
+  list [--json] [--disposition D] [--severity S]
+                               projection with computed age in days
+  sweep [--apply]              deterministic triage: closes planned: rows whose
+                               task is done, reports unlinked accepted rows and
+                               duplicate text. Reports only unless --apply
+
+  Kinds:      ${KINDS.join(', ')}
+  Severities: ${SEVERITIES.join(', ')}`;
+
+function die(message, code) {
+  console.error(`obs.js: ${message}`);
+  process.exit(code === undefined ? 1 : code);
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function ageDays(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  return Math.floor((Date.now() - new Date(date + 'T00:00:00Z')) / 86400000);
+}
+
+function readStatus() {
+  if (!fs.existsSync(STATUS_PATH)) die(`${STATUS_PATH} not found.`);
+  return fs.readFileSync(STATUS_PATH, 'utf8');
+}
+
+// Locate the Observations section and its table lines within the file.
+function locateTable(text) {
+  const lines = text.split('\n');
+  let start = -1;
+  let inFence = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s*(```|~~~)/.test(lines[i])) { inFence = !inFence; continue; }
+    if (inFence) continue;
+    if (/^## Observations\s*$/.test(lines[i])) { start = i; break; }
+    if (start !== -1 && /^## /.test(lines[i])) break;
+  }
+  if (start === -1) die('STATUS.md has no "## Observations" section.');
+
+  let headerIdx = -1;
+  let lastRowIdx = -1;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^## /.test(lines[i])) break;
+    if (lines[i].trim().startsWith('|')) {
+      if (headerIdx === -1) headerIdx = i;
+      lastRowIdx = i;
+    }
+  }
+  if (headerIdx === -1) die('STATUS.md Observations section has no table.');
+  return { lines, headerIdx, lastRowIdx };
+}
+
+function parseRows(text) {
+  const { lines, headerIdx } = locateTable(text);
+  const body = lines.slice(headerIdx).join('\n');
+  const t = parseTable(body);
+  if (!t.ok) {
+    const detail = t.errors.map(e => `  ${e.reason}`).join('\n');
+    die(`STATUS.md Observations table is malformed — refusing to operate on it.\n${detail}\nRun node .forge/scripts/check-status.js for the full report.`);
+  }
+  if (t.columns.join(' ') !== COLUMNS.join(' ')) {
+    die(`STATUS.md Observations columns are [${t.columns.join(' | ')}], expected [${COLUMNS.join(' | ')}].`);
+  }
+  return t.rows.map(r => r.cells);
+}
+
+// Write, lint, revert on failure. check-status.js is the validator; a mutation
+// that leaves STATUS.md invalid never stands.
+function writeAndLint(newText, what) {
+  const original = fs.readFileSync(STATUS_PATH, 'utf8');
+  fs.writeFileSync(STATUS_PATH, newText);
+  const lint = spawnSync(process.execPath, [path.join(__dirname, 'check-status.js')], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  });
+  if (lint.status !== 0) {
+    fs.writeFileSync(STATUS_PATH, original);
+    const detail = `${lint.stdout || ''}${lint.stderr || ''}`.trim();
+    die(`${what} rejected — check-status.js failed, so STATUS.md was reverted:\n${detail}`);
+  }
+}
+
+// A bare `|` inside a cell terminates it and silently drops the row from every
+// reader (CONTRACT#data-model/markdown-table-parsing). Escaping is this
+// script's job precisely so no caller has to remember.
+function escapeCell(text) {
+  return text.replace(/\r?\n/g, ' ').replace(/\\\|/g, '|').replace(/\|/g, '\\|').trim();
+}
+
+function nextId(rows) {
+  // Minted against the file at write time, never from a stale read — the same
+  // discipline Rules/Task Ordering states for task IDs.
+  const max = rows.reduce((m, r) => {
+    const n = Number(String(r['ID']).replace('OBS-', ''));
+    return Number.isFinite(n) && n > m ? n : m;
+  }, 0);
+  return `OBS-${String(max + 1).padStart(3, '0')}`;
+}
+
+function flagValue(args, name) {
+  const i = args.indexOf(name);
+  if (i === -1) return null;
+  return args[i + 1];
+}
+
+// --- Commands ---
+
+function cmdAdd(args) {
+  const kind = flagValue(args, '--kind');
+  const severity = flagValue(args, '--severity');
+  const task = flagValue(args, '--task');
+  const text = args.filter((a, i) =>
+    !a.startsWith('--') &&
+    args[i - 1] !== '--kind' && args[i - 1] !== '--severity' && args[i - 1] !== '--task'
+  ).join(' ');
+
+  if (!kind || !severity || !task || !text) die(`add requires --kind, --severity, --task, and text.\n\n${USAGE}`);
+  if (!KINDS.includes(kind)) die(`invalid --kind "${kind}". Expected one of: ${KINDS.join(', ')}.`);
+  if (!SEVERITIES.includes(severity)) die(`invalid --severity "${severity}". Expected one of: ${SEVERITIES.join(', ')}.`);
+  if (!/^TASK-\d+$/i.test(task)) die(`invalid --task "${task}". Expected TASK-XXX.`);
+
+  const original = readStatus();
+  const rows = parseRows(original);
+  const id = nextId(rows);
+  const { lines, lastRowIdx } = locateTable(original);
+  const row = `| ${id} | ${today()} | ${task.toUpperCase()} | ${kind} | ${severity} | ${escapeCell(text)} | open |`;
+  const out = [...lines.slice(0, lastRowIdx + 1), row, ...lines.slice(lastRowIdx + 1)];
+  writeAndLint(out.join('\n'), `${id}`);
+  console.log(`${id} recorded (${severity}, ${kind}, raised by ${task.toUpperCase()}).`);
+}
+
+function transitionAllowed(from, to) {
+  const key = /^planned:/.test(from) ? 'planned:' : /^duplicate:/.test(from) ? 'duplicate:' : from;
+  const allowed = TRANSITIONS[key];
+  if (!allowed) return false;
+  return allowed.some(a => (a.endsWith(':') ? to.startsWith(a) : to === a));
+}
+
+function cmdSet(args) {
+  const [rawId, rawField, ...valueParts] = args;
+  if (!rawId || !rawField || valueParts.length === 0) die(`set requires an observation ID, a field, and a value.\n\n${USAGE}`);
+  const id = rawId.toUpperCase();
+  const field = COLUMNS.find(c => c.toLowerCase().replace(/[^a-z]/g, '') === rawField.toLowerCase().replace(/[^a-z]/g, ''));
+  if (!field) die(`unknown field "${rawField}". Expected one of: ${COLUMNS.join(', ')}.`);
+  const value = valueParts.join(' ');
+
+  const original = readStatus();
+  const rows = parseRows(original);
+  const row = rows.find(r => r['ID'] === id);
+  if (!row) die(`${id} not found in STATUS.md.`);
+
+  if (field === 'Disposition' && value !== row['Disposition']) {
+    if (!transitionAllowed(row['Disposition'], value)) {
+      die(`invalid transition ${row['Disposition']} → ${value} for ${id} (CONTRACT#state-machines/observation-lifecycle allows: ${(TRANSITIONS[/^planned:/.test(row['Disposition']) ? 'planned:' : /^duplicate:/.test(row['Disposition']) ? 'duplicate:' : row['Disposition']] || []).join(', ') || 'none'}).`);
+    }
+  }
+  if (field === 'Kind' && !KINDS.includes(value)) die(`invalid Kind "${value}". Expected one of: ${KINDS.join(', ')}.`);
+  if (field === 'Severity' && !SEVERITIES.includes(value)) die(`invalid Severity "${value}". Expected one of: ${SEVERITIES.join(', ')}.`);
+
+  const { lines } = locateTable(original);
+  const idx = lines.findIndex(l => l.trim().startsWith(`| ${id} `));
+  if (idx === -1) die(`${id}'s row could not be located for rewrite.`);
+  const updated = { ...row, [field]: field === 'Observation' ? escapeCell(value) : value };
+  lines[idx] = '| ' + COLUMNS.map(c => updated[c]).join(' | ') + ' |';
+  writeAndLint(lines.join('\n'), `${id} ${field}`);
+  console.log(`${id} ${field}: ${row[field]} → ${updated[field]}`);
+}
+
+function cmdList(args) {
+  const json = args.includes('--json');
+  const wantDisposition = flagValue(args, '--disposition');
+  const wantSeverity = flagValue(args, '--severity');
+
+  let rows = parseRows(readStatus()).map(r => ({
+    id: r['ID'],
+    date: r['Date'],
+    ageDays: ageDays(r['Date']),
+    raisedBy: r['Raised by'],
+    kind: r['Kind'],
+    severity: r['Severity'],
+    observation: r['Observation'],
+    disposition: r['Disposition'],
+  }));
+  if (wantDisposition) rows = rows.filter(r => r.disposition === wantDisposition || r.disposition.startsWith(wantDisposition));
+  if (wantSeverity) rows = rows.filter(r => r.severity === wantSeverity);
+
+  // foundation first: the severity that means "stop and reconsider" must not
+  // be buried under routine friction rows.
+  rows.sort((a, b) => (a.severity === 'foundation' ? 0 : 1) - (b.severity === 'foundation' ? 0 : 1));
+
+  if (json) { console.log(JSON.stringify({ ok: true, observations: rows }, null, 2)); return; }
+  if (!rows.length) { console.log('No observations match.'); return; }
+  for (const r of rows) {
+    console.log(`${r.id} [${r.severity}/${r.kind}] ${r.disposition} · ${r.ageDays}d · ${r.raisedBy}`);
+    console.log(`  ${r.observation}`);
+  }
+}
+
+function cmdSweep(args) {
+  const apply = args.includes('--apply');
+  const original = readStatus();
+  const rows = parseRows(original);
+  const wp = readWorkplan(ROOT);
+  const taskStatus = new Map((wp ? wp.tasks : []).map(t => [t.id, t.status]));
+
+  const toClose = [];
+  const unlinkedAccepted = [];
+  const duplicateText = new Map();
+
+  for (const r of rows) {
+    const planned = /^planned:(TASK-\d+)$/.exec(r['Disposition']);
+    if (planned && taskStatus.get(planned[1]) === 'done') {
+      toClose.push({ id: r['ID'], task: planned[1] });
+    }
+    if (r['Disposition'] === 'accepted') {
+      unlinkedAccepted.push({ id: r['ID'], age: ageDays(r['Date']) });
+    }
+    const key = r['Observation'].trim().toLowerCase();
+    if (!duplicateText.has(key)) duplicateText.set(key, []);
+    duplicateText.get(key).push(r['ID']);
+  }
+
+  // The only judgment-free transition in the lifecycle: when the named task is
+  // done, the observation is resolved by definition. Everything else is
+  // reported for a human — this pass makes no judgment call and takes no input.
+  if (toClose.length) {
+    console.log(`planned: rows whose task is done (${toClose.length}):`);
+    for (const c of toClose) console.log(`  ${c.id} — ${c.task} is done → closed`);
+  } else {
+    console.log('planned: rows whose task is done: none');
+  }
+
+  if (unlinkedAccepted.length) {
+    console.log(`accepted rows with no task link (${unlinkedAccepted.length}) — awaiting planning:`);
+    for (const a of unlinkedAccepted) console.log(`  ${a.id} — accepted ${a.age} days ago`);
+  } else {
+    console.log('accepted rows with no task link: none');
+  }
+
+  const dups = [...duplicateText.values()].filter(ids => ids.length > 1);
+  if (dups.length) {
+    console.log(`exact-duplicate observation text (${dups.length} group(s)):`);
+    for (const ids of dups) console.log(`  ${ids.join(', ')}`);
+  } else {
+    console.log('exact-duplicate observation text: none');
+  }
+
+  if (!apply) {
+    if (toClose.length) console.log('\nRe-run with --apply to close the rows above.');
+    return;
+  }
+  if (!toClose.length) return;
+
+  const { lines } = locateTable(original);
+  for (const c of toClose) {
+    const idx = lines.findIndex(l => l.trim().startsWith(`| ${c.id} `));
+    if (idx === -1) continue;
+    lines[idx] = lines[idx].replace(/\|\s*planned:TASK-\d+\s*\|\s*$/, '| closed |');
+  }
+  writeAndLint(lines.join('\n'), 'sweep');
+  console.log(`\nClosed ${toClose.length} row(s).`);
+}
+
+function main(argv) {
+  const [command, ...rest] = argv;
+  switch (command) {
+    case 'add': return cmdAdd(rest);
+    case 'set': return cmdSet(rest);
+    case 'list': return cmdList(rest);
+    case 'sweep': return cmdSweep(rest);
+    case undefined: return die(USAGE);
+    default: return die(`unknown command "${command}".\n\n${USAGE}`);
+  }
+}
+
+main(process.argv.slice(2));
+```
+
+If it exists, skip — do not overwrite.
+
+If `.forge/scripts/hook-status-lint.sh` does **not** exist, create it with:
+
+<!-- forge-init:embed .forge/scripts/hook-status-lint.sh -->
+
+```bash
+#!/usr/bin/env bash
+# hook-status-lint.sh — PostToolUse hook: validate .forge/STATUS.md after any
+# edit that touches it (CONTRACT#rules/status-lint,
+# CONTRACT#boundaries/hook-configuration).
+#
+# STATUS.md is the artifact this Contract most explicitly invites the human to
+# hand-edit, and the only one whose malformed rows are read by a mechanical
+# hard stop — so it is the artifact where an edit-time check pays for itself
+# most. Catching a bad edit at the moment it is made beats catching it at the
+# next command, when the session that made it is gone.
+#
+# This is a wrapper, not a second lint: check-status.js keeps its own exit
+# codes (CONTRACT#interfaces/script-exit-codes — 0 success, 1 validation
+# failure) and this translates. Claude Code's hook contract blocks on exit 2
+# and treats every other nonzero exit as a non-blocking error, so a wrapper
+# that passed the script's exit 1 straight through would report a malformed
+# table and prevent nothing.
+
+set -u
+
+payload=$(cat)
+
+# Only STATUS.md is this hook's business. The path is read from the PostToolUse
+# stdin contract; a payload we cannot parse is not an error worth blocking on,
+# because the tool call has already run and the next command's lint still
+# catches the file.
+file=$(printf '%s' "$payload" | node -e 'let s="";process.stdin.on("data",d=>{s+=d}).on("end",()=>{try{const j=JSON.parse(s);const p=(j&&j.tool_input&&(j.tool_input.file_path||j.tool_input.path))||"";process.stdout.write(String(p));}catch(e){}});' 2>/dev/null)
+
+case "$file" in
+  *STATUS.md) ;;
+  *) exit 0 ;;
+esac
+
+# check-status.js is resolved next to this script, not through the shell's cwd
+# (the TASK-072 lesson): a hook fires from whatever directory the tool call ran
+# in. The script then finds the project itself by walking up to the nearest
+# .forge, so it lints the STATUS.md that was actually edited.
+here=$(cd "$(dirname "$0")" && pwd)
+out=$(node "$here/check-status.js" 2>&1)
+rc=$?
+
+if [ "$rc" -ne 0 ]; then
+  cat >&2 <<MSG
+Blocked by hook-status-lint.sh: .forge/STATUS.md failed the status lint.
+
+$out
+
+CONTRACT#rules/status-lint. A malformed row is not a dropped row — at
+foundation severity it disables the pipeline's one mechanical hard stop while
+every report shows a clear queue. Fix the rows above, or write through
+.forge/scripts/obs.js, which validates before its write stands.
+MSG
+  exit 2
+fi
+
+exit 0
+```
+
+If it exists, skip — do not overwrite.
+
 If `.forge/scripts/guard-push.sh` does **not** exist, create it with Blocks `git push` unconditionally.
 
 <!-- forge-init:embed .forge/scripts/guard-push.sh -->
@@ -2869,6 +3472,9 @@ After creating all files, tell the user which files were created (existing files
 - `.forge/scripts/check-spec.js`
 - `.forge/scripts/prose.js`
 - `.forge/scripts/migrate-notes.js`
+- `.forge/scripts/check-status.js`
+- `.forge/scripts/obs.js`
+- `.forge/scripts/hook-status-lint.sh`
 - `.forge/scripts/guard-push.sh`
 - `.forge/scripts/guard-branch.sh`
 - `.forge/scripts/guard-secrets.sh`

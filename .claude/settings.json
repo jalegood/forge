@@ -6,7 +6,16 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'File written — add lint/format command here for your stack'"
+            "command": "echo 'File written \u2014 add lint/format command here for your stack'"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .forge/scripts/hook-status-lint.sh"
           }
         ]
       }

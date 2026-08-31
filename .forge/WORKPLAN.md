@@ -1005,12 +1005,12 @@
 
 ## [TASK-088] Ship the observation machinery in /forge-init
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-069, TASK-083, TASK-087
 - **Context:** CONTRACT#interfaces/command-forge-init, CONTRACT#rules/embedded-payload-synchronization, CONTRACT#boundaries/hook-configuration, CONTRACT#rules/status-lint
-- **Gate:** `grep -q "forge-init:embed .forge/scripts/obs.js" .claude/commands/forge-init.md && grep -q "forge-init:embed .forge/scripts/check-status.js" .claude/commands/forge-init.md && grep -q "check-status" .claude/settings.json && bash .forge/tests/test-init-scripts.sh && bash .forge/tests/smoke.sh && echo "scaffolds get the machinery"`
-- **Notes:** Three changes, one concern — a scaffolded project must receive the observation machinery whole: (1) embed `obs.js` and `check-status.js` payloads with `forge-init:embed` markers so the content diff covers them (the nine-script bullet in the amended Contract already mandates both); (2) the STATUS.md stub gains the Date column so its columns match the Data Model skeleton exactly — a stub whose columns disagree makes every row obs.js writes malformed on arrival; (3) the settings.json payload gains the PostToolUse STATUS.md hook invoking check-status.js through a wrapper that exits **2** on lint failure per `CONTRACT#interfaces/script-exit-codes`'s hook-contract paragraph, and this repo's own `.claude/settings.json` gets the same hook (dogfood; hook config snapshots at session start, so it arms from the next session).
+- **Gate:** grep -q "forge-init:embed .forge/scripts/obs.js" .claude/commands/forge-init.md && grep -q "forge-init:embed .forge/scripts/check-status.js" .claude/commands/forge-init.md && grep -q "hook-status-lint" .claude/settings.json && grep -q "hook-status-lint" .claude/commands/forge-init.md && bash .forge/tests/test-init-scripts.sh && bash .forge/tests/smoke.sh && echo "scaffolds get the machinery"
+- **Notes:** Scaffolds now ship check-status.js, obs.js, and the new hook-status-lint.sh wrapper; STATUS stub columns match the Data Model; hook wired in both payload and this repo. Gate repaired mid-task to assert the wrapper the Contract mandates. Record: .forge/notes/TASK-088.md
 
 ## [TASK-096] Checkpoint: observation machinery integrated
 

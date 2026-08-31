@@ -167,5 +167,29 @@ OUT=$(node "$SCRIPT" 2>&1) || RC=$?
 expect_pass "live STATUS.md"
 echo "  OK"
 
+echo "Fixture 12: the PostToolUse hook wrapper translates exit 1 into a blocking exit 2..."
+# CONTRACT#interfaces/script-exit-codes: hook scripts follow Claude Code's
+# contract, where only exit 2 blocks and every other nonzero exit reports a
+# problem while letting the tool run anyway. A wrapper that passed the
+# script's exit 1 straight through would prevent nothing.
+HOOK="$(pwd)/.forge/scripts/hook-status-lint.sh"
+hook_payload() { printf '{"tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$1"; }
+
+# Fixture 10 left a deliberately-broken file behind; start from a valid one.
+valid_status | write_status
+
+RC=0; OUT=$(cd "$TMPDIR" && hook_payload ".forge/STATUS.md" | bash "$HOOK" 2>&1) || RC=$?
+[ "$RC" = "0" ] || fail "a clean STATUS.md must pass the hook (got $RC)"
+
+RC=0; OUT=$(cd "$TMPDIR" && hook_payload "README.md" | bash "$HOOK" 2>&1) || RC=$?
+[ "$RC" = "0" ] || fail "an edit to an unrelated file must not run the lint (got $RC)"
+
+printf '%s
+' "| OBS-004 | 2026-08-04 | TASK-001 | bug | normal | An unescaped | pipe. | open |" >> "$TMPDIR/.forge/STATUS.md"
+RC=0; OUT=$(cd "$TMPDIR" && hook_payload ".forge/STATUS.md" | bash "$HOOK" 2>&1) || RC=$?
+[ "$RC" = "2" ] || fail "a malformed STATUS.md must block with exit 2, not merely report (got $RC)"
+echo "$OUT" | grep -qi "status lint" || fail "the block must explain itself on stderr"
+echo "  OK"
+
 echo ""
 echo "All check-status.js fixtures passed."
