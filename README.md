@@ -222,7 +222,7 @@ If your Contract exceeds ~500 lines, plan in passes instead of all at once:
 2. Plan each system independently: System A → feature tasks, System B → feature tasks
 3. Cross-system dependencies wire up automatically through the unified workplan DAG
 
-See the spec's "Planning at Scale" section for the full pattern.
+See `CONTRACT#rules/planning-at-scale` in `.forge/CONTRACT.md` for the full pattern.
 
 ## Gate Patterns
 

@@ -552,6 +552,60 @@ Exactly 3 lines in the project's CLAUDE.md:
 - If a single Contract section exceeds ~200 lines, it must be broken into subsections.
 - The full Contract never enters the context window during execution — only manifested sections.
 
+### Planning at Scale
+
+For small projects, `/forge-plan` reads the full Contract in one pass and generates the entire Workplan. For large projects — especially those with multiple overlapping systems — the Contract itself can exceed what fits comfortably in a planning session. A 3000-line Contract consumes ~15% of the context window before Claude writes a single task, and quality degrades for systems planned later in the pass ("lost in the middle").
+
+#### Scoped Planning Passes
+
+Instead of one monolithic planning pass, plan one system at a time. Each pass loads only the relevant Contract sections plus shared context.
+
+**The pattern:**
+
+```
+Pass 1: Data Model + Boundaries                → scaffold tasks
+Pass 2: Combat (Rules + State Machines + Interfaces for combat)  → feature tasks
+Pass 3: Inventory (same sections, scoped to inventory)           → feature tasks
+Pass 4: Crafting (depends on Inventory tasks from Pass 3)        → feature tasks
+```
+
+**How to scope a pass:**
+
+Use `/forge-plan` with a scope indicator. The simplest convention is a `<!-- PLANNING SCOPE -->` comment at the top of CONTRACT.md that you update before each pass:
+
+```markdown
+<!-- PLANNING SCOPE: data-model, boundaries -->
+```
+
+Or, for contracts large enough to warrant it, split into multiple files:
+
+```
+.forge/
+├── CONTRACT.md              # shared: Data Model, Boundaries
+├── contracts/
+│   ├── combat.md            # Rules, State Machines, Interfaces for combat
+│   ├── inventory.md         # same structure, scoped to inventory
+│   └── crafting.md          # same structure, scoped to crafting
+```
+
+When using multiple files, the Context manifest syntax extends naturally: `CONTRACT#data-model`, `combat#rules/damage-calc`, `inventory#interfaces/container-api`.
+
+#### Cross-System Dependencies
+
+Systems rarely exist in isolation. When planning Pass 3 (Inventory), the planner needs to know what Pass 2 (Combat) already produced — not to re-read the Combat contract, but to reference the existing tasks as dependencies.
+
+This works automatically: `/forge-plan` preserves `done` and `active` tasks and can see their IDs. When generating new tasks, it wires `Depends` fields to existing task IDs. The Workplan is the integration layer — even if the Contract is split by system, the Workplan is always a single file with a unified DAG.
+
+#### When to Split
+
+Not every project needs scoped planning. Rules of thumb:
+
+- **Contract under ~500 lines:** Single pass is fine.
+- **Contract 500-1500 lines:** Consider two passes (foundations + features), but a single pass may still work.
+- **Contract over 1500 lines:** Scoped passes are strongly recommended. Plan the shared foundations first (Data Model, Boundaries), then each system independently.
+
+The cost of splitting is minimal (an extra `/clear` and `/forge-plan` invocation). The cost of not splitting is degraded task quality for later systems and missed cross-system dependencies.
+
 ### Workplan Access Discipline
 
 WORKPLAN.md is the DAG, not the archive. Two invariants:

@@ -12,6 +12,14 @@
 
 ## Decisions
 
+### 2026-08-31 — forge-spec-v0.2.md retired; Planning at Scale becomes a Contract rule (TASK-049)
+
+The root narrative spec is archived to `archive/forge-spec-v0.2.md`, beside the v0.1 already there. Its one load-bearing section — Planning at Scale (scoped planning passes, the split thresholds, cross-system dependency wiring) — is lifted verbatim into `CONTRACT#rules/planning-at-scale`, placed beside Context Budget since it is the same concern at a larger grain. README's dangling "see the spec's ..." pointer now names the Contract rule. `prompts/forge-plan-bootstrap.md` is archived alongside: it read the retired file as its blueprint and is a spent bootstrap artifact.
+
+**Why:** A narrative spec doc alongside CONTRACT.md and README.md is a third source of truth about one system, and it is the one that already drifted two versions — it still described 3 commands, no UX/DESIGN, no SPEC/STATUS/checkpoint/sync. Maintaining it by hand reproduces, inside this repo, the drift problem v0.3 exists to solve. Lifting the one section that had no other home makes it manifest-addressable, which is the difference between a rule tasks can cite and prose nobody resolves.
+
+**Rejected alternatives:** Rewriting it as forge-spec-v0.3.md (three documents to hand-sync forever, and the same drift arrives on schedule); leaving it in place (README keeps pointing at a system that no longer exists); deleting it outright rather than archiving (the v0.1 precedent is archival, and the pre-revision notes are project history).
+
 ### 2026-08-30 — OBS-019 recorded and planned as TASK-098 in the same checkpoint session (TASK-046)
 
 **OBS-019 recorded and planned as TASK-098 in the same checkpoint session (TASK-046).** wp.js's probe (TASK-074) resolves `bash` through CreateProcess on win32, which searches System32 first and finds WSL's relay when the parent is not Git Bash — the relay exits 1, the probe reads the gate as failing pre-work, and the refusal path never fires. In-session probes were correct (Git Bash parents resolve their own bash first); the defect reaches exactly the invocations nobody watches

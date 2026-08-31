@@ -1085,7 +1085,7 @@
 
 ## [TASK-049] Retire forge-spec-v0.2.md as a separate source of truth
 
-- **Status:** pending
+- **Status:** done
 - **Type:** refactor
 - **Depends:** TASK-046, TASK-066
 - **Context:** CONTRACT#rules/contract-amendment-protocol, CONTRACT#rules/context-budget, CONTRACT#data-model/artifacts
@@ -1098,6 +1098,8 @@
   3. **Archive.** Move `forge-spec-v0.2.md` to `archive/` beside `archive/forge-spec.md` (the v0.1), matching the established precedent. Also archive `prompts/forge-plan-bootstrap.md`, which reads the retired file as its blueprint and is a spent bootstrap artifact.
 
   Sequenced after TASK-046 deliberately: the CONTRACT amendment in step 1 would otherwise land mid-span and invalidate manifests the checkpoint is meant to review. Contract-First anchor for this task is Data Model#artifacts — the amendment is itself the deliverable.
+  Planning at Scale lifted verbatim into CONTRACT#rules/planning-at-scale (headings demoted one level) beside Context Budget; README pointer repointed; forge-spec-v0.2.md and prompts/forge-plan-bootstrap.md archived. Dated Decisions entry logged.
+  Files: .forge/CONTRACT.md, README.md, archive/forge-spec-v0.2.md, archive/forge-plan-bootstrap.md, .forge/STATUS.md
 
 ## [TASK-040] Update README and CLAUDE.md for v0.3
 
