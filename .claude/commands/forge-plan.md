@@ -24,7 +24,15 @@ If VISION.md is still a template stub (contains `<!-- Describe what this project
 
 **Observation intake.** STATUS.md's Observations table is planning input, but only in part. Select the rows whose Disposition is `accepted` — a human triaged those and decided the work is worth doing. Each accepted row joins the set of deliverables this run plans over: it goes through the step 2 coverage check like any other deliverable, and yields a candidate task in step 4 like any other deliverable. Being an observation exempts nothing. If a row names work that no CONTRACT section specifies, that is a coverage gap and step 2 resolves it the same way it resolves every other one.
 
-Rows marked `open` or `declined` are never planned. `open` means nobody has triaged the row yet; `declined` means somebody did and said no. Planning either would let an agent's own observation become work no human agreed to, which is precisely what CONTRACT#data-model/status.md-data-model rules out when it says no observation auto-spawns a task. Leave those rows where they are — `open` and `declined` rows are never edited by this command.
+Rows in any other disposition are never planned. `open` means nobody has triaged the row yet; `declined` and `closed` mean somebody did and it is settled; `planned:` already has a task. Planning an untriaged row would let an agent's own observation become work no human agreed to, which is precisely what CONTRACT#data-model/status.md-data-model rules out when it says no observation auto-spawns a task. Leave those rows where they are.
+
+**When you generate a task for an accepted row, advance it** — the one STATUS.md write this command makes:
+
+```bash
+node .forge/scripts/obs.js set OBS-XXX disposition planned:TASK-XXX
+```
+
+Use `obs.js set`, never a hand edit: it validates the transition against CONTRACT#state-machines/observation-lifecycle and re-lints the file before the write stands. This closes the loop that previously let an `accepted` row sit unplanned and unseen — `accepted` is not terminal, and a row that reaches a task without being marked is one `/forge-status` keeps reporting as awaiting planning forever.
 
 This intake is the **secondary** loop closure, not the primary one. `/forge-plan` runs occasionally; `/forge-next` runs every session and reports open `foundation` rows there. An observation must not depend on a planning run happening in order to be seen.
 
@@ -264,5 +272,5 @@ Then say:
 ## Constraints
 
 - **Never modify** `done` or `active` tasks on re-run — preserve them exactly.
-- **Writes exactly three artifacts, no more:** WORKPLAN.md (the plan), CONTRACT.md (only `<!-- ASSUMED -->` annotations and readiness resolutions in step 2), and STATUS.md (only Open Questions rows from the spec-conflict check). Nothing else is touched.
+- **Writes exactly three artifacts, no more:** WORKPLAN.md (the plan), CONTRACT.md (only `<!-- ASSUMED -->` annotations and readiness resolutions in step 2), and STATUS.md (only Open Questions rows from the spec-conflict check, and `planned:` advancements through `obs.js set` for accepted rows this run planned). Nothing else is touched.
 - **Human reviews before execution** — this command does not run any tasks.

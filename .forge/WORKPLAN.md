@@ -983,12 +983,14 @@
 
 ## [TASK-086] Close the accepted-observation loop in /forge-plan
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-095
 - **Context:** CONTRACT#interfaces/command-forge-plan, CONTRACT#interfaces/observation-script, CONTRACT#state-machines/observation-lifecycle
 - **Gate:** `node .forge/scripts/prose.js .claude/commands/forge-plan.md "obs.js set" && bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && echo "accepted rows reach planned"`
 - **Notes:** Per the amended `CONTRACT#interfaces/command-forge-plan`: observation intake consumes `accepted` rows as planning input, and when planning generates a task for one, it advances the row to `planned:TASK-XXX` via `obs.js set` — the one STATUS.md write this command makes, closing the loop that previously let an accepted row sit unplanned and unseen. Rows in any other disposition are not planned. Update forge-plan.md's intake step accordingly; keep the change scoped to command prose.
+  Intake step now advances an accepted row to planned:TASK-XXX via obs.js set when it generates the task, with the never-hand-edit rationale; the disposition list corrected to name closed and planned: alongside open/declined; the three-writes constraint line updated to include the advancement.
+  Files: .claude/commands/forge-plan.md
 
 ## [TASK-087] Delegate observation recording in the templates to obs.js
 
