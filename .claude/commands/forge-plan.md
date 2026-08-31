@@ -20,7 +20,7 @@ Read the following files in full:
 - **`.forge/STATUS.md`** (if it exists) — blocking open questions, and the Observations table (see below)
 - **`.forge/WORKPLAN.md`** (if it exists) — to identify tasks to preserve
 
-If VISION.md is still a template stub (contains `<!-- What this project builds`), stop and tell the user to fill in VISION.md and CONTRACT.md before running `/forge-plan`.
+If VISION.md is still a template stub (contains `<!-- Describe what this project builds`), stop and tell the user to fill in VISION.md and CONTRACT.md before running `/forge-plan`.
 
 **Observation intake.** STATUS.md's Observations table is planning input, but only in part. Select the rows whose Disposition is `accepted` — a human triaged those and decided the work is worth doing. Each accepted row joins the set of deliverables this run plans over: it goes through the step 2 coverage check like any other deliverable, and yields a candidate task in step 4 like any other deliverable. Being an observation exempts nothing. If a row names work that no CONTRACT section specifies, that is a coverage gap and step 2 resolves it the same way it resolves every other one.
 
@@ -109,7 +109,7 @@ Every screen referenced in a planned flow must have a `ux-spec` task with status
 
 UX task DAG shape:
 
-1. **If UX.md has flows but no screens yet** (no `#### Screen:` headings): generate one flow-mapping `ux-spec` task per flow. Its job is to enumerate all screens in UX.md. Gate: `grep -c "^#### Screen:" .forge/UX.md | awk '$1 >= N'` where N is the expected screen count. All per-screen `ux-spec` tasks depend on this mapping task.
+1. **If UX.md has flows but no screens yet** (no `#### Screen:` headings): generate one flow-mapping `ux-spec` task per flow. Its job is to enumerate all screens in UX.md. Gate: `test $(grep -c "^#### Screen:" .forge/UX.md) -ge N` where N is the expected screen count (the awk form's exit code never reflected the comparison — TASK-076). All per-screen `ux-spec` tasks depend on this mapping task.
 
 2. **If UX.md has flows with screens already defined**: generate one `ux-spec` task per screen (independent — no cross-screen dependencies), then one `feature` task per screen that depends only on its paired `ux-spec` task.
 
@@ -207,7 +207,7 @@ Each gate validates the deliverable structurally:
 | Config/JSON       | Parse + key check             | `node -e "JSON.parse(require('fs').readFileSync('f.json','utf8'))"` |
 | Markdown artifact | Required content + line count | `grep -q '{{context}}' file.md && test $(wc -l < file.md) -gt 10`      |
 | UX spec screen    | check-ux-spec.js              | `node .forge/scripts/check-ux-spec.js "Screen Name"`                   |
-| UX screen mapping | Screen count check            | `grep -c "^#### Screen:" .forge/UX.md \| awk '$1 >= N'`                |
+| UX screen mapping | Screen count check            | `test $(grep -c "^#### Screen:" .forge/UX.md) -ge N`                  |
 | Checkpoint span   | `manual:` prefix (enforced)   | `manual: Review TASK-004..TASK-008 — gates re-run fresh, span approved` |
 | Human judgment    | `manual:` prefix              | `manual: Verify the workflow completes 2-3 full cycles`                |
 

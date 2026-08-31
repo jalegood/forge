@@ -763,20 +763,12 @@
 
 ## [TASK-076] Repair three gates that cannot fail
 
-- **Status:** pending
+- **Status:** done
 - **Type:** fix
 - **Depends:** none
 - **Context:** CONTRACT#rules/gate-discrimination, CONTRACT#rules/gate-patterns, CONTRACT#interfaces/command-forge-plan, CONTRACT#data-model/spec-data-model, CONTRACT#rules/test-first-convention
 - **Gate:** `bash .forge/tests/test-check-spec.sh && bash .forge/tests/smoke.sh && node .forge/scripts/prose.js .claude/commands/forge-plan.md "Describe what this project builds" && ! grep -q "awk '\$1 >=" .claude/commands/forge-plan.md .forge/CONTRACT.md && grep -q "Fixture 5c" .forge/tests/test-check-spec.sh && echo "vacuous gates repaired"`
-- **Notes:** Three independent instances of the OBS-013 failure mode, found by the 2026-08-17 workflow audit. Grouped because they are one defect class, not because they share code — each is a check that structurally cannot fail. Sequenced alongside TASK-073..075: those change what gates get *authored*, these repair gates already shipped.
-
-  1. **The VISION stub check never matches.** [forge-plan.md:23](.claude/commands/forge-plan.md:23) stops planning if VISION.md "contains `<!-- What this project builds`" — but the stub `/forge-init` actually writes reads `<!-- Describe what this project builds. One paragraph. -->` ([forge-init.md:16](.claude/commands/forge-init.md:16)). The literal never matches, so `/forge-plan` will happily plan against an untouched VISION.md. Verified: `grep -c "Describe what this project builds" .claude/commands/forge-plan.md` returns 0. Fix the literal in forge-plan.md to match what forge-init writes. Note the irony before changing anything else: CONTRACT#interfaces/command-forge-plan's UX stub-detection bullet and TASK-024's notes both cite this check as the *model* for stub detection, so the pattern was propagated from a broken original.
-
-  2. **The screen-mapping gate always exits 0.** `grep -c "^#### Screen:" .forge/UX.md | awk '$1 >= N'` is prescribed in three places — [CONTRACT.md:339](.forge/CONTRACT.md:339), [forge-plan.md:112](.claude/commands/forge-plan.md:112), and forge-plan.md's step 6 gate table. awk's exit code does not reflect whether the condition matched, and the pipeline's exit is awk's, so a mapping task with 1 of 5 screens written passes. Verified live: `printf '#### Screen: A\n' | grep -c "^#### Screen:" | awk '$1 >= 5'` exits 0. Replace all three with `test $(grep -c "^#### Screen:" .forge/UX.md) -ge N`. This is a CONTRACT edit — follow Rules/Contract Amendment Protocol, and note that no *existing* task carries this gate form, so no `fix` task is owed downstream.
-
-  3. **`check-spec.js --max-unresolved` disables itself on a malformed value.** [check-spec.js:13](.forge/scripts/check-spec.js:13) does `Number(args[idx + 1])`; a missing or non-numeric value yields `NaN`, and `count > NaN` is always false — so the unresolved-marker check is skipped entirely rather than applied strictly. Verified: `node .forge/scripts/check-spec.js .forge/SPEC.md --max-unresolved` (no value) exits 0 without complaint. Guard with `Number.isFinite` and reject a malformed value as a usage error rather than defaulting silently in either direction.
-
-  Gate discrimination check, since this task is about exactly that: assertion 1 fails now (`Describe what this project builds` appears nowhere in forge-plan.md); assertion 2 fails now (the awk form is present 2× in forge-plan.md, 1× in CONTRACT.md); assertion 3 fails now (`test-check-spec.sh` covers `--max-unresolved 1` at fixture 5b but has no 5c — the malformed-value case is the new fixture, and `Fixture 5c` is the name to use). `test-check-spec.sh` carries the test-first obligation for item 3 per Rules/Test-First Convention.
+- **Notes:** Three unfailable checks repaired: VISION stub literal now matches what forge-init writes; awk screen-count form replaced with test -ge at all three sites (incl. the CONTRACT amendment); check-spec.js rejects malformed --max-unresolved as a usage error, with fixture 5c pinning it. Record: .forge/notes/TASK-076.md
 
 ## [TASK-077] Reconcile four Contract passages that misdescribe their own commands
 

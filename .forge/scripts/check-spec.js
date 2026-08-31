@@ -10,7 +10,18 @@ const { parseHeadings, findHeading, sectionRange, normalizeSlug } = require('./l
 const args = process.argv.slice(2);
 const fileArg = args.find(a => !a.startsWith('--'));
 const maxUnresolvedFlagIdx = args.indexOf('--max-unresolved');
-const maxUnresolved = maxUnresolvedFlagIdx !== -1 ? Number(args[maxUnresolvedFlagIdx + 1]) : 0;
+// A malformed value must be a usage error, never a silent default in either
+// direction: Number(undefined) is NaN and `count > NaN` is always false, which
+// would skip the unresolved-marker check entirely while reading as strictness
+// (TASK-076).
+let maxUnresolved = 0;
+if (maxUnresolvedFlagIdx !== -1) {
+  maxUnresolved = Number(args[maxUnresolvedFlagIdx + 1]);
+  if (!Number.isFinite(maxUnresolved) || maxUnresolved < 0) {
+    console.error('check-spec.js: --max-unresolved requires a non-negative number.');
+    process.exit(1);
+  }
+}
 
 if (!fileArg) {
   console.error('Usage: node .forge/scripts/check-spec.js <file> [--max-unresolved N]');

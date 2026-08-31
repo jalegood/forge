@@ -164,6 +164,21 @@ echo "Fixture 5b: same file passes with --max-unresolved 1..."
 ( cd "$TMPDIR" && node "$SCRIPT" .forge/spec-unresolved.md --max-unresolved 1 )
 echo "  OK"
 
+# A missing or non-numeric threshold value must be a usage error, not a silent
+# skip: Number(undefined) is NaN, and `count > NaN` is always false, so before
+# TASK-076 the flag with no value disabled the unresolved-marker check entirely
+# while reading as strictness.
+echo "Fixture 5c: --max-unresolved with a missing or malformed value is a usage error..."
+if ( cd "$TMPDIR" && node "$SCRIPT" .forge/spec-unresolved.md --max-unresolved ) 2>/dev/null; then
+  echo "FAIL: --max-unresolved with no value must exit nonzero, not silently disable the check"
+  exit 1
+fi
+if ( cd "$TMPDIR" && node "$SCRIPT" .forge/spec-unresolved.md --max-unresolved lots ) 2>/dev/null; then
+  echo "FAIL: --max-unresolved with a non-numeric value must exit nonzero"
+  exit 1
+fi
+echo "  OK"
+
 # --- Fixture 6: fenced block containing heading-like lines — must PASS ---
 # Section scoping must ignore `#` lines inside ``` fences (mirrors TASK-050's
 # fix to check-ux-spec.js) — a quoted spec skeleton must not truncate the
