@@ -1034,12 +1034,14 @@
 
 ## [TASK-090] Widen forge-sync.md's managed globs to the Contract's set
 
-- **Status:** pending
+- **Status:** done
 - **Type:** fix
 - **Depends:** TASK-096
 - **Context:** CONTRACT#interfaces/command-forge-sync, CONTRACT#data-model/artifacts
 - **Gate:** `grep -q "scripts/lib" .claude/commands/forge-sync.md && grep -q "guard-" .claude/commands/forge-sync.md && bash .forge/tests/smoke.sh && node .forge/scripts/check-workplan.js && echo "sync sees every managed script"`
 - **Notes:** Closes OBS-015. The 2026-08-29 Contract amendment already widened `CONTRACT#interfaces/command-forge-sync`'s globs to `.forge/scripts/*.js`, `.forge/scripts/lib/*.js`, and `.forge/scripts/guard-*.sh`; forge-sync.md still says `check-*.js` only, at three sites (the managed-globs list near line 13, the example diff listing near line 81, and the "Only the three managed globs are writable" constraint near line 108). Reconcile all three to the Contract's set. Gate discrimination verified at planning: `scripts/lib` and `guard-` appear nowhere in forge-sync.md.
+  Closes OBS-015. All three sites widened to the Contract set (scripts/*.js, scripts/lib/*.js, scripts/*.sh with the four hook scripts named); the stale example diff line repointed from check-workplan.js to wp.js so the illustration shows a file the old glob could not sync.
+  Files: .claude/commands/forge-sync.md
 
 ## [TASK-091] Emit the workplan graph from wp.js
 

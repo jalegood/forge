@@ -10,7 +10,9 @@ Forge ships as files copied into a project, so a project installed months ago ru
 
 - `.claude/commands/forge-*.md` — the slash command definitions
 - `.forge/templates/*.md` — the prompt templates
-- `.forge/scripts/check-*.js` — the deterministic gate scripts
+- `.forge/scripts/*.js` — every engine script (the gate scripts, `wp.js`, `obs.js`, `prose.js`, `migrate-notes.js`)
+- `.forge/scripts/lib/*.js` — the shared modules those scripts require
+- `.forge/scripts/*.sh` — the hook scripts (`guard-push.sh`, `guard-branch.sh`, `guard-secrets.sh`, `hook-status-lint.sh`)
 
 **Project-owned — never touched by this command, under any circumstance:**
 
@@ -78,7 +80,7 @@ Local-only customization (1):
   - .forge/templates/feature.md          — kept, upstream has not changed it
 
 Conflicting (1):
-  - .forge/scripts/check-workplan.js     — local edits + upstream changes
+  - .forge/scripts/wp.js                 — local edits + upstream changes
 
 New upstream (1):
   - .forge/templates/investigate.md      — not present locally
@@ -105,7 +107,7 @@ Report what changed, what was skipped, and whether the stamp advanced.
 
 - **Project-owned artifacts are untouchable.** `VISION.md`, `CONTRACT.md`, `SPEC.md`, `specs/`, `WORKPLAN.md`, `STATUS.md`, `UX.md`, `DESIGN.md`, `notes/` — this command never modifies them, and no approval unlocks that. Sync updates the engine, not the project.
 - **Nothing is written without per-file approval.** Local customizations are never silently overwritten. Neither is anything else.
-- **Only the three managed globs are writable:** `.claude/commands/forge-*.md`, `.forge/templates/*.md`, `.forge/scripts/check-*.js`, plus `.forge/VERSION` itself.
+- **Only the managed globs are writable:** `.claude/commands/forge-*.md`, `.forge/templates/*.md`, `.forge/scripts/*.js`, `.forge/scripts/lib/*.js`, `.forge/scripts/*.sh`, plus `.forge/VERSION` itself. The globs track what the Artifacts table marks Forge-managed rather than a narrower hand-maintained list: a script marked Forge-managed but excluded from sync drifts permanently in every installed project, which is what a `check-*.js`-only glob did to `wp.js`, `prose.js`, `lib/`, and the guards (OBS-015).
 - **The clone goes to a scratch directory,** never into the project tree, and is cleaned up when the command finishes.
 - **No auto-commit.** Sync leaves the changes in the working tree for the human to review and commit.
 - **A failed fetch is a stop, not a fallback.** Do not reconstruct upstream files from memory or write a "best guess" version of any managed file.
