@@ -1123,16 +1123,10 @@
 
 ## [TASK-052] Investigate node-schema model for Forge's own machinery
 
-- **Status:** pending
+- **Status:** done
 - **Type:** investigate
 - **Depends:** TASK-040
 - **Context:** CONTRACT#interfaces/task-types, CONTRACT#data-model/context-manifest, CONTRACT#rules/checkpoint-cadence
 - **Gate:** `manual: Findings documented in Notes — (1) the item/type catalog and whether Forge's real artifacts fit it without escape hatches; (2) node schema fields, specifically power source (deterministic script / AI / human) and mutates (writes back to shared state); (3) the result of re-expressing Forge's 8 task types, 6 commands, and 3 scripts in that schema, naming every place it did not fit; (4) a go/no-go recommendation for v0.4 with the cost of the next step`
-- **Notes:** Runs the cheap test proposed at the end of forge-factory-brainstorm.md: write the schema, re-express Forge's existing machinery in it, and see whether the abstraction holds. The deliverable is one throwaway YAML file plus findings — no runtime, no generic runner, no changes to any command. If describing Forge requires escape hatches, that is the answer and it cost a day.
-
-  Deliberately scoped as investigation, not construction. Building a node schema, plant graph, item catalog, or generic runner before this test is abstraction bloat against an unvalidated model — the failure mode named in claude-code-workflow-pitfalls.md and conceded by the brainstorm itself.
-
-  Two constraints to carry in, both from the brainstorm's own "where the metaphor will bite you" section: rework is a cycle, not forward flow, so any graph over task *instances* grows at runtime and is really an append-only event log; and throughput is the wrong objective function — see VISION pillar 6, which now names the correct one explicitly.
-
-  Sibling to TASK-041 (plugin packaging). Both are v0.4 scope-decision gates and both should land before any v0.4 planning pass.
+- **Notes:** NO-GO. Schema written and Forge re-expressed: deterministic tier and task types fit; 5 escape hatches needed, incl. the gate probe and the foundation halt — the two mechanisms that make unattended execution safe. Two ideas survive free (mutates as documentation discipline; resolve as a primitive). Record: .forge/notes/TASK-052.md
 
