@@ -741,7 +741,7 @@
 
 ## [TASK-075] Update /forge-next to handle a refused gate-discrimination probe
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-074
 - **Context:** CONTRACT#rules/gate-discrimination, CONTRACT#interfaces/command-forge-next, CONTRACT#data-model/status.md-data-model, CONTRACT#rules/workplan-access-discipline
@@ -758,6 +758,8 @@
   Assertions go in `smoke.sh` via `prose.js`, following TASK-036/TASK-037's precedent — both found their declared workplan gates too weak to carry the real check and put the load-bearing assertions in the suite. Here the declared gate is already phrase-specific, so the suite assertions are reinforcement rather than rescue.
 
   Scope boundary: this task does not add an Observations row for the OBS-008 condition automatically. `/forge-next` already appends observation rows at completion (TASK-053) and the existing channel covers it; a second, probe-specific writer would be a parallel path to the same table.
+  Exit-4 handling added to forge-next.md step 4: the two routes (repair the gate in this diff; report absorbed scope, the OBS-008 condition), never --force. Reinforcement assertions added to smoke.sh via prose.js.
+  Files: .claude/commands/forge-next.md, .forge/tests/smoke.sh
 
 ## [TASK-076] Repair three gates that cannot fail
 

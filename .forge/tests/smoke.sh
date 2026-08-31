@@ -18,6 +18,11 @@ test -s .claude/commands/forge-next.md
 grep -q "WORKPLAN" .claude/commands/forge-next.md
 grep -q "template" .claude/commands/forge-next.md
 grep -q "gate" .claude/commands/forge-next.md
+# The probe-refusal handling (TASK-075): exit 4 is documented with both routes
+# out — repair the gate in this task's diff, or report absorbed scope — and
+# --force stays the human's. prose.js so a fenced example cannot satisfy it.
+node .forge/scripts/prose.js .claude/commands/forge-next.md \
+  "gate-discrimination probe" "vacuous" "scope finding|absorbed" "Never pass \`--force\`"
 echo "  forge-next.md: OK"
 
 test -s .claude/commands/forge-spec.md

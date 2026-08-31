@@ -169,6 +169,13 @@ node .forge/scripts/wp.js set TASK-XXX status active
 
 `wp.js set` rewrites exactly the one field line, leaves the rest of the file byte-identical, enforces the lifecycle transitions from CONTRACT#state-machines/task-lifecycle and the one-active-task constraint, re-runs `check-workplan.js`, and reverts the write if the lint fails. A nonzero exit means the mutation did not stand: diagnose what it reported and fix that before continuing to step 5.
 
+**Exit 4 — the gate-discrimination probe refused the transition.** `wp.js` ran the task's gate against the pre-work tree and it already passed, so the gate cannot verify this task's work (CONTRACT#rules/gate-discrimination). This refusal is distinct from a lint rejection or an invalid transition (both exit 1), and it has exactly two legitimate routes out — distinguishing them is your job, because they look identical from the exit code:
+
+1. **The gate is wrong.** It asserts a topic the file already mentions, or a count an append-only artifact has outgrown. Repair it while the task is still `pending` — `node .forge/scripts/wp.js set TASK-XXX gate '<discriminating gate>'`, naming the change this task makes (a `prose.js` phrase, the new fixture, the new test) — then retry the activation. The repaired gate lands in this task's diff, which is what makes the repair reviewable at the checkpoint rather than invisible.
+2. **The gate is right and the work already exists.** A prior task absorbed this task's scope — the OBS-008 condition. This is a scope finding, not a gate defect: report it to the human and stop. Do not silently mark the task `done` (that is what happened to TASK-033), and do not invent a stricter gate just to have something to pass.
+
+**Never pass `--force`** — it is the human's override (CONTRACT#rules/gate-discrimination, obligation 2). A vacuous gate you force past ships this task unverified while reading as verified, which is the exact failure the probe exists to stop.
+
 Do this **before** beginning execution — if the session is interrupted, the task should already be marked active.
 ### 5. Load and fill the prompt template
 
