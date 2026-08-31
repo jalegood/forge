@@ -852,7 +852,7 @@
 
 ## [TASK-080] Add a drift test over the task-type enum's five restatements
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** none
 - **Context:** CONTRACT#interfaces/task-types, CONTRACT#rules/embedded-payload-synchronization, CONTRACT#rules/workplan-lint, CONTRACT#rules/gate-patterns, CONTRACT#rules/test-first-convention
@@ -880,6 +880,8 @@
   Gate discrimination: `.forge/tests/test-task-types.sh` does not exist and `smoke.sh` does not reference it, both verified at authoring time — the gate cannot pass before the work.
 
   **Scope boundary:** this is a check over the existing enum, not a change to it. Adding, removing, or renaming a task type is out of scope; if the test surfaces a genuine disagreement about what the enum *should* contain, log it and stop rather than picking a side.
+  Built test-task-types.sh: enum derived from lib/workplan.js, four prose sites checked both directions, wired into smoke.sh. Seeded-drift verified (dropped checkpoint from the forge-plan table, watched it fail, restored). No enum disagreement surfaced.
+  Files: .forge/tests/test-task-types.sh, .forge/tests/smoke.sh
 
 ## [TASK-072] Anchor forge script roots to the script location, not the shell cwd
 

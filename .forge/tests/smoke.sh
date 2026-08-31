@@ -332,6 +332,15 @@ echo "Checking prompt templates..."
 bash .forge/tests/test-templates.sh > /dev/null
 echo "  templates: OK"
 
+# --- The task-type enum's prose restatements agree with VALID_TYPES ---
+# Five sites restate the enum on purpose (template, tables, documented script
+# output); test-task-types.sh derives the truth from lib/workplan.js and checks
+# both directions, so a type dropped from a table or invented in prose fails
+# here (TASK-080, closes OBS-012).
+echo "Checking task-type enum sites..."
+bash .forge/tests/test-task-types.sh > /dev/null
+echo "  task-type enum: OK"
+
 # --- settings.json is valid JSON with hook config ---
 echo "Checking settings.json..."
 
