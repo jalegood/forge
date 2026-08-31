@@ -1014,12 +1014,12 @@
 
 ## [TASK-096] Checkpoint: observation machinery integrated
 
-- **Status:** pending
+- **Status:** done
 - **Type:** checkpoint
 - **Depends:** TASK-084, TASK-085, TASK-086, TASK-087, TASK-088
 - **Context:** CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#data-model/status.md-data-model
 - **Gate:** `manual: Review the observation-integration span. Packet must contain: each task in the span with description and Files, fresh re-runs of every automated gate in the span with regressions flagged, check-workplan.js and check-status.js output, current STATUS.md Open Questions and Risks, and the span's starting commit for rollback.`
-- **Notes:** Second checkpoint of the headless planning pass, closing the five command/template integration tasks. Same review-and-record protocol as TASK-095.
+- **Notes:** PASSED: 5/5 gates fresh, zero regressions. Span made every Observations consumer go through obs.js and shipped the subsystem to new projects. Flagged: hook-status-lint.sh was unplanned machinery (Contract-mandated, tested, now in Artifacts). Packet: .forge/notes/TASK-096.md
 
 ## [TASK-089] Give /forge-init its missing VERSION step
 
