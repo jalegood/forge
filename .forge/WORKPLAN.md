@@ -1103,12 +1103,14 @@
 
 ## [TASK-040] Update README and CLAUDE.md for v0.3
 
-- **Status:** pending
+- **Status:** done
 - **Type:** scaffold
 - **Depends:** TASK-039, TASK-049
 - **Context:** CONTRACT#interfaces/claudemd-integration-block, CONTRACT#boundaries/platform-constraints, CONTRACT#rules/unattended-execution
 - **Gate:** `grep -q "forge-spec" README.md && grep -q "forge-sync" README.md && grep -qi "checkpoint" README.md && grep -q "SPEC.md" CLAUDE.md && echo "docs updated"`
 - **Notes:** README: new commands, checkpoint/unattended workflow section, SPEC and STATUS in file structure, template count 7→8. CLAUDE.md: update Pipeline line per amended integration block.
+  README: forge-init bullets now match reality (10 scripts, 8 templates, VERSION, the UI question), added /forge-spec and /forge-sync sections, a Checkpoints-and-unattended-runs section naming the five rules and the hook-enforced three, an Observations section, and checkpoint in the task-types table. CLAUDE.md Pipeline line now names SPEC.md and STATUS.md (still 3 lines).
+  Files: README.md, CLAUDE.md
 
 ## [TASK-041] Investigate plugin packaging for Forge distribution
 
