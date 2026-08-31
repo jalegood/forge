@@ -1114,12 +1114,12 @@
 
 ## [TASK-041] Investigate plugin packaging for Forge distribution
 
-- **Status:** pending
+- **Status:** done
 - **Type:** investigate
 - **Depends:** TASK-040
 - **Context:** CONTRACT#boundaries/platform-constraints, CONTRACT#interfaces/command-forge-sync
 - **Gate:** `manual: Findings documented in Notes — plugin structure (commands/skills/hooks bundling), marketplace hosting options, migration path from copied commands, template override resolution order (project .forge/templates/ over plugin defaults), and whether /forge-sync is subsumed or retained`
-- **Notes:** Tracked as STATUS.md Q-001. Decision gate for v0.4 scope.
+- **Notes:** GO for v0.4 as a hybrid: plugin ships commands/hooks/scripts as real files, forge-init still installs scripts to .forge/scripts/ because 44 workplan gates hardcode that path and checkpoints re-run gates fresh. /forge-sync retained and narrowed. Resolves Q-001. Record: .forge/notes/TASK-041.md
 
 ## [TASK-052] Investigate node-schema model for Forge's own machinery
 
