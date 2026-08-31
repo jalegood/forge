@@ -35,9 +35,15 @@ check_body() {
   local body="$2"
   local phrase
   local -a required=(
-    # the destination, named concretely enough to append to
-    "Observations"
-    ".forge/STATUS.md"
+    # the destination, named concretely enough to invoke (TASK-087: the script
+    # owns the format, so the template names the command rather than the row —
+    # a template restating the row layout reintroduces the duplication obs.js
+    # exists to remove, per CONTRACT#interfaces/prompt-template-interface)
+    "obs.js add"
+    "--kind"
+    "--severity"
+    "--task"
+    # and must NOT hand-write the row: see the negative assertion below
     # the in-scope fix test — the whole point of the step
     "belongs in this task's diff"
     # what the channel is for, stated positively
@@ -63,6 +69,16 @@ check_body() {
   # never act".
   if printf '%s' "$body" | grep -qiF -- "record, never act"; then
     echo "FAIL: $label frames the step as a prohibition on acting"
+    exit 1
+  fi
+
+  # The row layout must not reappear. obs.js owns the format precisely so that
+  # eighteen copies of it cannot drift; a template that prints the pipe-
+  # delimited row is teaching agents to hand-write rows again, and a
+  # hand-written row is how a literal | silently drops an observation from
+  # every reader (TASK-087).
+  if printf '%s' "$body" | grep -qE '\|\s*OBS-XXX\s*\|'; then
+    echo "FAIL: $label restates the Observations row layout — obs.js owns the format"
     exit 1
   fi
 }

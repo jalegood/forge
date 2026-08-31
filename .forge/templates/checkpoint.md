@@ -27,8 +27,14 @@ The span is exactly the task IDs in this checkpoint's `Depends` field. Read each
    - Any Decisions entry (dated section) inside the span that records a mid-span course correction — a redirect the human made mid-flight is the thing least likely to be remembered and most likely to need review.
 4. **Name the rollback.** Give the span's starting commit and the one command that undoes the span. Resolve the commit with `git log --format='%H %s' | grep -F '(TASK-FIRST)'` for the span's first task, then take its parent (`<sha>^`); if the span's tasks were not committed individually, use the merge-base with the branch the span started from. State plainly that the command discards the span's work — the human runs it, you never do.
 5. **The packet must stand on its own.** The human passes or fails this span by reading what you present and nothing else. Any sentence that sends them to a file to find out what happened is a defect in the packet, not a reference.
-6. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise append one row to the Observations table in `.forge/STATUS.md` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
-   - Row format: `| OBS-XXX | {{task_id}} | design/bug/scope/... | normal or foundation | One-line observation. | open |`, where `OBS-XXX` is the highest existing OBS id plus one.
+6. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise record one row through `.forge/scripts/obs.js` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
+   - Record it by invoking the script — never by writing the row yourself:
+
+     ```bash
+     node .forge/scripts/obs.js add --kind design|bug|scope|friction --severity normal|foundation --task {{task_id}} "One-line observation."
+     ```
+
+     `obs.js` mints the ID against the file at write time, stamps the date, escapes the text, and re-validates before the write stands. A hand-written row is how a literal `|` reaches a cell and silently removes the row from every reader — including the hard stop that reads it.
    - One line per observation — a pointer, not a report.
    - No observation spawns a task on its own. Only a human promotes one, later.
    - More than three from this task collapse into a single `foundation` row: volume of small complaints is itself the signal that the foundation is wrong, and recording it as volume buries that signal.

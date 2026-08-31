@@ -994,12 +994,14 @@
 
 ## [TASK-087] Delegate observation recording in the templates to obs.js
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-095, TASK-070
 - **Context:** CONTRACT#interfaces/prompt-template-interface, CONTRACT#interfaces/observation-script, CONTRACT#rules/embedded-payload-synchronization
 - **Gate:** `grep -rq "obs.js add" .forge/templates && bash .forge/tests/test-templates.sh && bash .forge/tests/test-init-scripts.sh && bash .forge/tests/smoke.sh && echo "templates carry judgment not format"`
 - **Notes:** Per `CONTRACT#interfaces/prompt-template-interface`: every template instructs recording out-of-scope findings by invoking `obs.js add`, applying the in-scope fix test rather than logging reflexively — the template carries the *judgment*, the script owns the *format*. Remove any restatement of the row layout from the templates (reintroducing it is the duplication obs.js exists to remove). Re-copy every changed template's forge-init.md payload whole; the TASK-070 marker diff enforces this mechanically.
+  All 8 templates now instruct obs.js add and no longer print the row layout; test-templates.sh pins the command flags positively and adds a negative assertion rejecting any reappearance of the pipe-delimited OBS-XXX row. Payloads re-copied (the TASK-070 diff enforces).
+  Files: .forge/templates/*.md, .forge/tests/test-templates.sh, .claude/commands/forge-init.md
 
 ## [TASK-088] Ship the observation machinery in /forge-init
 
