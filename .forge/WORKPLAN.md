@@ -952,12 +952,12 @@
 
 ## [TASK-095] Checkpoint: observation machinery core
 
-- **Status:** pending
+- **Status:** done
 - **Type:** checkpoint
 - **Depends:** TASK-093, TASK-081, TASK-082, TASK-083
 - **Context:** CONTRACT#rules/checkpoint-cadence, CONTRACT#rules/unattended-execution, CONTRACT#data-model/status.md-data-model
 - **Gate:** `manual: Review the observation-machinery core span. Packet must contain: each task in the span with description and Files, fresh re-runs of every automated gate in the span with regressions flagged, check-workplan.js and check-status.js output on the current artifacts, current STATUS.md Open Questions and Risks, and the span's starting commit for rollback.`
-- **Notes:** First checkpoint inserted by the 2026-08-30 headless planning pass, at the Contract's cadence of 5 (4 tasks + this). Under HEADLESS-RUN.md authority the run itself reviews the packet and records pass/fail; the packet is written to `.forge/notes/TASK-095.md` so the human can re-review the span at merge.
+- **Notes:** PASSED: 4/4 gates fresh, zero regressions. Span delivered the Observations subsystem in code — and closed a live disarm of the foundation hard stop (wp.js read the table positionally). Packet: .forge/notes/TASK-095.md
 
 ## [TASK-084] Integrate obs.js into /forge-next
 
