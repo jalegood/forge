@@ -148,8 +148,11 @@ node .forge/scripts/prose.js .claude/commands/forge-status.md "flag[a-z]*[^.]*Bl
 # cannot hand to a clarify task
 node .forge/scripts/prose.js .claude/commands/forge-status.md "by its ID|by ID"
 grep -q 'Q-XXX' .claude/commands/forge-status.md
-# Observations arrive from the projection; re-reading the table would double-report
-node .forge/scripts/prose.js .claude/commands/forge-status.md "not re-read|do not re-read"
+# Observations arrive from the obs.js projection, never from reading the table
+# (TASK-085 replaced the weaker "do not re-read" phrasing, which admitted a
+# first read, with an outright prohibition plus the named command)
+node .forge/scripts/prose.js .claude/commands/forge-status.md "Never read the .## Observations. table|not re-read|do not re-read"
+node .forge/scripts/prose.js .claude/commands/forge-status.md "obs.js list"
 # surfacing STATUS.md must not turn a read-only command into a writer
 node .forge/scripts/prose.js .claude/commands/forge-status.md \
   "Read-only|read-only" "no file modifications|No side effects|never writes"

@@ -972,12 +972,14 @@
 
 ## [TASK-085] Project the observation backlog through /forge-status
 
-- **Status:** pending
+- **Status:** done
 - **Type:** feature
 - **Depends:** TASK-095
 - **Context:** CONTRACT#interfaces/command-forge-status, CONTRACT#interfaces/observation-script, CONTRACT#data-model/status.md-data-model
 - **Gate:** `node .forge/scripts/prose.js .claude/commands/forge-status.md "obs.js list" "backlog counts by disposition" && bash .forge/tests/smoke.sh && echo "status reads the queue"`
 - **Notes:** Per the amended `CONTRACT#interfaces/command-forge-status`: open `foundation` rows first, each with the raising task's description and age in days; the `accepted` awaiting-planning queue; backlog counts by disposition — all obtained through `obs.js list --json`, never by reading STATUS.md in full. A bare ID is not a report: the reader must be able to act without opening another file. Verify at execution that the gate's phrases are genuinely absent from forge-status.md pre-work; tighten them if not.
+  forge-status projects the backlog through obs.js list --json as its own step: foundation rows first with the raising task description and age, the accepted awaiting-planning queue, backlog counts by disposition; three output slots added. smoke.ss TASK-055 assertion updated to the stronger never-read wording it now carries.
+  Files: .claude/commands/forge-status.md, .forge/tests/smoke.sh
 
 ## [TASK-086] Close the accepted-observation loop in /forge-plan
 
