@@ -71,6 +71,14 @@ check ".forge/scripts/guard-push.sh"
 check ".forge/scripts/guard-branch.sh"
 check ".forge/scripts/guard-secrets.sh"
 
+# check-ux-spec.js is conditional on the init-time interface question, so the
+# check is gated on the live file rather than hardcoded into the list above —
+# a project that answered "no" has neither the file nor the payload, and that
+# is not drift (TASK-078).
+if [ -s ".forge/scripts/check-ux-spec.js" ]; then
+  check ".forge/scripts/check-ux-spec.js"
+fi
+
 # The provisioning steps must also be reachable: unconditional, and creating the
 # lib/ subdirectory that markdown.js lives in.
 grep -q "lib" "$INIT" || { echo "FAIL: $INIT never mentions the lib/ subdirectory"; exit 1; }

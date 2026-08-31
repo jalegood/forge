@@ -795,7 +795,7 @@
 
 ## [TASK-078] Bring check-ux-spec.js's forge-init payload under the drift test
 
-- **Status:** pending
+- **Status:** done
 - **Type:** fix
 - **Depends:** TASK-069
 - **Context:** CONTRACT#rules/embedded-payload-synchronization, CONTRACT#interfaces/command-forge-init, CONTRACT#rules/gate-patterns, notes/TASK-062#decisions
@@ -814,6 +814,8 @@
   3. Extend `test-init-scripts.sh` to cover it. `check-ux-spec.js` is conditional on the step 6 interface question, unlike the four unconditional scripts the test covers today — the diff must key on marker presence rather than a hardcoded list, so a project answering "no" is not a test failure.
 
   **Sequenced after TASK-069** deliberately: that task extends `test-init-scripts.sh` to three more script payloads, and both tasks edit the same test. Landing this second means extending an already-extended test rather than colliding with it. TASK-069's scope explicitly excludes restructuring how forge-init distributes scripts; this task inherits that boundary — re-copy and cover, do not redesign. If TASK-041's plugin-packaging investigation lands first and changes distribution, revisit rather than executing this as written.
+  Stale pre-TASK-050 payload replaced with the live fence-aware script (which also carries the TASK-072 findRoot change), marker added, drift test covers it conditionally on the live file existing. Live file was authoritative; the embed carried no unreceived fix.
+  Files: .claude/commands/forge-init.md, .forge/tests/test-init-scripts.sh
 
 ## [TASK-079] Make the manifest slug-matching rule normative in the Contract
 
