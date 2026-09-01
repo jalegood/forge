@@ -1145,7 +1145,7 @@
 
 ## [TASK-100] Remove the NUL bytes that make check-status.js a binary blob
 
-- **Status:** pending
+- **Status:** done
 - **Type:** fix
 - **Depends:** none
 - **Context:** CONTRACT#rules/status-lint, CONTRACT#data-model/artifacts, CONTRACT#boundaries/what-forge-does-not-do
@@ -1153,6 +1153,8 @@
 - **Notes:** Review finding 2. `check-status.js` carries two literal NUL bytes at offsets 3376 and 3398, used as join separators in the column-order check. Git classifies the file as binary — `git show --numstat` reports `-` for both counts, so there is no diff, no blame, and no review on the project's own status linter. There is no `.gitattributes` compensating. "No hidden state — everything is readable markdown files" is a Boundaries claim, and an unreviewable script is the same defect one layer down.
 
   Replace the literal bytes with the escape sequence, which keeps the file ASCII text while preserving the property the separator was chosen for: a NUL cannot occur inside a column name, so joining on it cannot make a two-column header collide with a one-column header containing a space. Re-copy the forge-init payload.
+  Both literal NUL bytes replaced by a named SEP constant holding the 6-char escape, so the file is ASCII text while the separator still evaluates to NUL (verified: charCode 0, column-order detection still fires). smoke.sh gained a repo-wide guard rejecting a NUL byte in any engine .js/.sh, so no script can silently go binary again. Payload re-copied.
+  Files: .forge/scripts/check-status.js, .forge/tests/smoke.sh, .claude/commands/forge-init.md
 
 ## [TASK-101] Emit a valid mermaid diagram when no tasks remain
 

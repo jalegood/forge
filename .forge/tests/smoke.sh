@@ -360,6 +360,33 @@ echo "Checking obs.js..."
 bash .forge/tests/test-obs.sh > /dev/null
 echo "  obs.js: OK"
 
+# --- every engine script stays reviewable text ---
+# A single NUL byte makes git classify a file as binary: no diff, no blame, no
+# review. That is invisible until someone tries to review a change to it, and
+# it silently exempts the one file from the scrutiny every other file gets.
+# Control characters belong in source as escapes (TASK-100).
+echo "Checking engine scripts are text, not binary..."
+node -e '
+const fs = require("fs");
+const path = require("path");
+const roots = [".forge/scripts", ".forge/scripts/lib"];
+let bad = [];
+for (const dir of roots) {
+  for (const f of fs.readdirSync(dir)) {
+    const p = path.join(dir, f);
+    if (!fs.statSync(p).isFile()) continue;
+    if (!/\.(js|sh)$/.test(f)) continue;
+    if (fs.readFileSync(p).includes(0)) bad.push(p);
+  }
+}
+if (bad.length) {
+  console.error("FAIL: NUL byte(s) make these files binary to git: " + bad.join(", "));
+  console.error("      Write control characters as escapes (\\u0000), not literal bytes.");
+  process.exit(1);
+}
+'
+echo "  engine scripts: OK"
+
 # --- settings.json is valid JSON with hook config ---
 echo "Checking settings.json..."
 

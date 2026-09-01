@@ -2800,6 +2800,13 @@ const SCHEMAS = {
   'Blockers': ['Blocker', 'Blocking tasks', 'Needs'],
   'Observations': ['ID', 'Date', 'Raised by', 'Kind', 'Severity', 'Observation', 'Disposition'],
 };
+// Column-list separator for the order comparison below. It is a NUL because no
+// column name can contain one, so joining on it cannot make ['a b'] and
+// ['a','b'] compare equal the way a space would. Written as an ESCAPE, never as
+// a literal byte: a literal NUL makes git classify this file as binary, which
+// costs the project's own linter its diff, its blame, and its review.
+const SEP = '\u0000';
+
 const KINDS = new Set(['design', 'bug', 'scope', 'friction']);
 const SEVERITIES = new Set(['normal', 'foundation']);
 const TERMINAL_DISPOSITIONS = new Set(['open', 'accepted', 'declined', 'closed']);
@@ -2852,7 +2859,7 @@ for (const [secName, columns] of Object.entries(SCHEMAS)) {
   for (const e of t.errors) {
     errors.push(`${secName}: line ${e.lineNumber} of section — ${e.reason}\n    ${e.line.trim().slice(0, 120)}`);
   }
-  if (t.columns.length && t.columns.join(' ') !== columns.join(' ')) {
+  if (t.columns.length && t.columns.join(SEP) !== columns.join(SEP)) {
     errors.push(`${secName}: columns are [${t.columns.join(' | ')}], the Data Model requires [${columns.join(' | ')}] in that order`);
   }
   secs['__' + secName] = t; // stash the parse for the checks below
