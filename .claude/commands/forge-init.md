@@ -2098,6 +2098,13 @@ function cmdGraph(args, json) {
     // only where a pending task still depends on one.
     const keep = new Set(pending.map(n => n.id));
     for (const n of pending) for (const d of n.depends) keep.add(d);
+    // A flowchart with no nodes is a mermaid *parse error*, not an empty
+    // diagram — so an all-done workplan would render as a broken image rather
+    // than as finished work. Say so with a node instead.
+    if (keep.size === 0) {
+      console.log(`flowchart TD\n  complete["All ${nodes.length} tasks complete"]`);
+      return;
+    }
     for (const n of nodes.filter(x => keep.has(x.id))) lines.push(`  ${shape(n)}`);
     for (const e of edges) if (keep.has(e.from) && keep.has(e.to)) lines.push(`  ${e.from} --> ${e.to}`);
     for (const n of pending.filter(x => x.startable)) lines.push(`  style ${n.id} stroke-width:3px`);
@@ -2120,7 +2127,9 @@ function cmdGraph(args, json) {
   }
   const chokes = pending.filter(n => n.fanIn >= 5).map(n => `${n.id} (fan-in ${n.fanIn})`);
   if (chokes.length) console.log(`  choke points: ${chokes.join(', ')}`);
-  console.log('  * = startable now');
+  // The legend explains a marker that only appears beside a layer; with no
+  // layers printed it annotates nothing.
+  if (pending.length) console.log('  * = startable now');
 }
 
 function cmdStatus(args, json) {

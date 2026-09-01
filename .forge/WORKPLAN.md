@@ -1158,7 +1158,7 @@
 
 ## [TASK-101] Emit a valid mermaid diagram when no tasks remain
 
-- **Status:** pending
+- **Status:** done
 - **Type:** fix
 - **Depends:** none
 - **Context:** CONTRACT#rules/workplan-access-discipline, CONTRACT#rules/task-ordering
@@ -1166,6 +1166,8 @@
 - **Notes:** Review finding 3, plus the cosmetic legend smell from the same function. `cmdGraph --mermaid` filters to non-`done` tasks and their dependencies; with every task done — this repo's current state — it emits a bare `flowchart TD` with no nodes, which is a mermaid **parse error** in GitHub rather than an empty diagram. The code exists to be consumed by a rendered view later, so a malformed diagram is a defect now.
 
   Emit a single explanatory node when the filtered set is empty. In the same function, suppress the startable-now legend when no layers were printed. Fixture named `empty-graph` in `test-wp.sh`: an all-done workplan must still produce output a mermaid parser accepts.
+  An all-done workplan emitted a bare flowchart TD with no nodes — a mermaid parse error, not an empty diagram. Now emits a single All-N-tasks-complete node; the startable legend is suppressed when no layers print. empty-graph fixture asserts at least one node line survives.
+  Files: .forge/scripts/wp.js, .forge/tests/test-wp.sh, .claude/commands/forge-init.md
 
 ## [TASK-102] Make the push guard's standing scope explicit
 

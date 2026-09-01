@@ -597,6 +597,44 @@ assert_has "depth" "the human view reports depth layers"
 assert_has "startable" "the human view marks what is startable now"
 echo "  graph (human): OK"
 
+# --- empty-graph: an all-done workplan must still render ---
+# `flowchart TD` with no nodes is a mermaid PARSE ERROR, not an empty diagram,
+# so a finished project would render as a broken image in GitHub rather than as
+# finished work. The mermaid output is meant to be consumed by a rendered view,
+# so malformed output is a defect now, not later.
+cat << 'EOF' | write_workplan
+# Workplan
+
+## [TASK-001] The only task, already finished
+
+- **Status:** done
+- **Type:** scaffold
+- **Depends:** none
+- **Context:** CONTRACT#rules/workplan-lint
+- **Gate:** `echo ok`
+- **Notes:**
+EOF
+
+run graph --mermaid
+assert_rc 0 "graph --mermaid succeeds with every task done"
+assert_has "flowchart" "the diagram still declares a flowchart"
+# The real assertion: at least one node line, or mermaid cannot parse it.
+node -e '
+  const out = process.argv[1];
+  const body = out.split("\n").slice(1).filter(l => l.trim());
+  if (body.length === 0) {
+    throw new Error("empty-graph: flowchart has no nodes — mermaid cannot parse this");
+  }
+' "$OUT" || fail "empty-graph must emit at least one node"
+echo "  graph --mermaid (empty-graph): OK"
+
+run graph
+assert_rc 0 "graph (human) succeeds with every task done"
+assert_lacks "startable now" "the legend is suppressed when no layers are printed"
+echo "  graph (human, empty-graph): OK"
+
+base_workplan | write_workplan
+
 echo "Checking usage errors..."
 
 run
