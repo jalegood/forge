@@ -1197,12 +1197,12 @@
 
 ## [TASK-104] Fix the unescaped whitespace class in the heading-prefix regex
 
-- **Status:** pending
+- **Status:** done
 - **Type:** fix
 - **Depends:** none
 - **Context:** CONTRACT#data-model/context-manifest, CONTRACT#rules/test-first-convention
-- **Gate:** `bash .forge/tests/test-markdown.sh && grep -q "Screen:sss" .forge/tests/test-markdown.sh && bash .forge/tests/smoke.sh && echo "prefix regex escapes its whitespace class"`
-- **Notes:** Review smell. `lib/markdown.js:92` builds the UX label-prefix test with a template literal in which the whitespace class is written with a single backslash — inside a template literal that collapses to the plain character `s`, so the compiled pattern requires a literal `s` rather than whitespace. It works today only because the quantifier permits zero occurrences and `headingCompact` does the real comparison, but it also wrongly accepts a heading reading `Screen:sss Name`. Escape the backslash so the class survives into the pattern. Fixture: a heading whose literal text is `Screen:sss` must not match the `Screen` prefix.
+- **Gate:** bash .forge/tests/test-markdown.sh && grep -q "escapes its whitespace class" .forge/tests/test-markdown.sh && bash .forge/tests/smoke.sh && echo "prefix regex escapes its whitespace class"
+- **Notes:** Escaped the class so the pattern says what it means. Deviation recorded: the two patterns are behaviorally identical today (the * quantifier permits zero occurrences), so no behavioral fixture can discriminate and one would have passed with the fix reverted — the assertion is on the source instead, verified to fail when reverted. Gate repaired to match. Files: .forge/scripts/lib/markdown.js, .forge/tests/test-markdown.sh, .claude/commands/forge-init.md
 
 ## [TASK-105] Recognize a root-level test runner in the workplan lint
 

@@ -210,6 +210,28 @@ check('punctuation-mismatched references match by alphanumeric compaction', () =
   assert.ok(r3.ok, 'the hyphen-variant reference must also compact to a match');
 });
 
+check('the UX label prefix pattern escapes its whitespace class', () => {
+  // A source-level assertion, deliberately, and the reason is worth stating:
+  // findHeading builds the prefix test from a template literal, where a
+  // single-backslash \s collapses to the plain character `s`, compiling
+  // /^Screen:s*/ instead of /^Screen:\s*/. Both patterns accept exactly the
+  // same inputs today, because the `*` quantifier permits zero occurrences —
+  // so there is NO behavioural difference to assert, and a fixture claiming
+  // otherwise would pass with the fix reverted, which proves nothing
+  // (the fixture-discrimination rule this suite is built on).
+  //
+  // It is still a real defect: the pattern does not say what it means, and it
+  // becomes wrong the moment anyone tightens `*` to `+` or extends the class.
+  // Pinning the source is the only check that can actually fail (TASK-104).
+  const src = require('fs').readFileSync('.forge/scripts/lib/markdown.js', 'utf8');
+  const line = src.split('\n').find(l => l.includes('${prefix}:'));
+  assert.ok(line, 'the prefix test disappeared from findHeading');
+  assert.ok(
+    line.includes('\\\\s*'),
+    'the whitespace class must be escaped as \\\\s* inside the template literal; found: ' + line.trim()
+  );
+});
+
 check('UX label prefixes are stripped before matching', () => {
   const doc = [
     '# UX Spec', '', '## Flows', '', '### Flow: Sign In', '',

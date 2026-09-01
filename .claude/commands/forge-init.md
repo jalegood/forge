@@ -1015,7 +1015,7 @@ function findHeading(headings, slug, opts = {}) {
     if (h.index < scopeStart || h.index >= scopeEnd) return false;
     if (h.level <= minLevel) return false;
     if (level !== null && h.level !== level) return false;
-    if (prefix !== null && !new RegExp(`^${prefix}:\s*`).test(h.text)) return false;
+    if (prefix !== null && !new RegExp(`^${prefix}:\\s*`).test(h.text)) return false;
     return headingCompact(h.text) === slug;
   });
 }
