@@ -195,7 +195,15 @@ function hasTestInvocation(gate) {
     /\bmocha\b/i.test(gate) ||
     /\bgo\s+test\b/i.test(gate) ||
     /\bcargo\s+test\b/i.test(gate) ||
-    /\btest-[\w-]+\.sh\b/i.test(gate);
+    /\btest-[\w-]+\.sh\b/i.test(gate) ||
+    // A root-level runner: `test.sh`, `./test.sh`, `bash test.sh`, `sh ./test.sh`.
+    // As common a convention as tests/ or test-*.sh, and refusing it made the
+    // lint dictate project layout — a project using it could not satisfy this
+    // invariant for any feature or fix task without renaming its runner
+    // (OBS-020). The leading boundary is `^`, whitespace, or `./` specifically,
+    // so an unrelated word ending in the same characters (`latest.sh`) is not
+    // mistaken for a runner.
+    /(^|\s)(\.\/)?test\.sh\b/i.test(gate);
 }
 
 function referencesCodeFile(gate) {

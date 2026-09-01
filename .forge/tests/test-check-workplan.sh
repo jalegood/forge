@@ -308,6 +308,58 @@ EOF
 )
 run_fixture "feature gate without test command fails" 1 "$FEATURE_NO_TEST" "test command"
 
+# --- 10b. A root-level test.sh IS a test command (OBS-020, TASK-105) ---
+# hasTestInvocation recognized tests/ and test-*.sh but not the equally common
+# root-level test.sh, so a project using that convention could not satisfy
+# invariant 6 for any feature or fix task without renaming its runner — the
+# lint dictating project layout rather than checking for a test.
+FEATURE_ROOT_TEST_SH=$(cat <<'EOF'
+# Workplan
+
+## [TASK-001] Feature gated by a root-level test.sh
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** none
+- **Context:** CONTRACT#data-model/context-manifest
+- **Gate:** `bash test.sh && grep -q "foo" src/app.js`
+- **Notes:**
+EOF
+)
+run_fixture "root-level test.sh satisfies invariant 6" 0 "$FEATURE_ROOT_TEST_SH"
+
+FEATURE_DOT_SLASH_TEST_SH=$(cat <<'EOF'
+# Workplan
+
+## [TASK-001] Feature gated by ./test.sh
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** none
+- **Context:** CONTRACT#data-model/context-manifest
+- **Gate:** `./test.sh && grep -q "foo" src/app.js`
+- **Notes:**
+EOF
+)
+run_fixture "./test.sh satisfies invariant 6" 0 "$FEATURE_DOT_SLASH_TEST_SH"
+
+# The other direction, so the invariant is not widened into uselessness: a word
+# merely ending in the same characters is not a test runner.
+FEATURE_FAKE_TEST_SH=$(cat <<'EOF'
+# Workplan
+
+## [TASK-001] Feature whose gate only looks like a test runner
+
+- **Status:** pending
+- **Type:** feature
+- **Depends:** none
+- **Context:** CONTRACT#data-model/context-manifest
+- **Gate:** `grep -q "latest.sh" src/app.js && echo ok`
+- **Notes:**
+EOF
+)
+run_fixture "a word ending in test.sh is not a test command" 1 "$FEATURE_FAKE_TEST_SH" "test command"
+
 # --- 11. Feature gate without a test command, but deliverable is a markdown
 #     artifact (Gate Patterns sanctions structural checks here) -> exempt, passes ---
 FEATURE_MARKDOWN=$(cat <<'EOF'

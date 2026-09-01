@@ -1206,7 +1206,7 @@
 
 ## [TASK-105] Recognize a root-level test runner in the workplan lint
 
-- **Status:** pending
+- **Status:** done
 - **Type:** fix
 - **Depends:** none
 - **Context:** CONTRACT#rules/workplan-lint, CONTRACT#rules/test-first-convention, CONTRACT#rules/gate-patterns
@@ -1214,3 +1214,5 @@
 - **Notes:** Closes OBS-020, found by TASK-039's end-to-end validation and confirmed in review. `hasTestInvocation` recognizes `tests/`, `test-*.sh`, and the major language runners, but not a root-level `test.sh` — a common convention. A project using it cannot satisfy workplan-lint invariant 6 for any `feature` or `fix` task without renaming its runner, which is the lint dictating project layout rather than checking for a test.
 
   Extend the pattern to accept a bare `test.sh`, optionally path-prefixed with `./` and optionally invoked through `bash` or `sh`. Keep it anchored so it cannot match an unrelated word ending in the same characters. Fixtures both ways: a root-level runner satisfies invariant 6, and a structural-only gate still fails it, so the invariant is not weakened into uselessness.
+  Closes OBS-020. hasTestInvocation now accepts a root-level runner (test.sh, ./test.sh, bash/sh-invoked) with a boundary that rejects an unrelated word ending in the same characters. Three fixtures, both directions; the accept cases were confirmed failing before the fix. OBS-020 swept to closed.
+  Files: .forge/scripts/check-workplan.js, .forge/tests/test-check-workplan.sh, .claude/commands/forge-init.md, .forge/STATUS.md
