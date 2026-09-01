@@ -5,7 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { parseHeadings, normalizeSlug, findHeading, sectionRange, findRoot } = require('./lib/markdown');
+const { parseHeadings, normalizeSlug, findHeading, sectionRange, findRoot, splitTableRow } = require('./lib/markdown');
 
 const screenName = process.argv[2];
 if (!screenName) {
@@ -77,9 +77,14 @@ if (!statesHeading) {
 
   // Reject vague terms in the Experience column only (3rd cell) — State/Trigger labels
   // may legitimately contain words like "slow" or "fast" without violating precision.
+  // Through the shared splitter, never a bare split on the pipe character
+  // (CONTRACT#data-model/markdown-table-parsing: no caller re-implements table
+  // splitting). A cell may legitimately contain an escaped `\|`, and a naive
+  // split counts that as a column break — shifting the vague-term check onto
+  // the wrong cell, so a vague Experience value passes silently.
   const experienceCells = dataRows.map(row => {
-    const cells = row.split('|');
-    return cells[3] !== undefined ? cells[3].trim() : '';
+    const cells = splitTableRow(row);
+    return cells[2] !== undefined ? cells[2].trim() : '';
   });
   const vagueTerms = ['smooth', 'fast', 'subtle', 'snappy', 'quick', 'slow', 'nice', 'clean', 'simple'];
   for (const term of vagueTerms) {

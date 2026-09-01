@@ -120,6 +120,45 @@ echo "Fixture 3: heading-like lines inside a fence must not truncate the screen.
 ( cd "$TMPDIR" && node "$SCRIPT" "Fenced Case" )
 echo "  OK"
 
+# --- Fixture 4: an escaped pipe in an earlier cell must not shift the column ---
+# CONTRACT#data-model/markdown-table-parsing permits `\|` as a literal pipe in a
+# cell. A splitter that splits on every `|` sees one cell too many and reads the
+# vague-term check against the wrong column — so a vague Experience value goes
+# undetected purely because an earlier cell was legitimately escaped (TASK-103).
+cat > "$TMPDIR/.forge/UX.md" << 'EOF'
+# UX Spec
+
+## Flows
+
+### Flow: Checkout
+
+#### Screen: Escaped Case
+
+**Purpose:** Confirm order details before paying.
+**Emotional intent:** Confidence that nothing was missed.
+**Design intention:** Line items animate in with ease-out 250ms so the total feels earned.
+
+##### States
+
+| State | Trigger | Experience |
+| ----- | ------- | ---------- |
+| Retry | User taps retry \| refresh | The transition is smooth |
+
+##### Edge Cases
+
+| Condition          | Behavior |
+| ------------------ | -------- |
+| Empty / first-time | Show empty-cart illustration |
+| Error              | Inline banner, retry button |
+EOF
+
+echo "Fixture 4: an escaped pipe must not shift the Experience column..."
+if ( cd "$TMPDIR" && node "$SCRIPT" "Escaped Case" ) 2>/dev/null; then
+  echo "FAIL: vague term in Experience went undetected — the escaped pipe shifted the column"
+  exit 1
+fi
+echo "  OK"
+
 rm -rf "$TMPDIR"
 echo ""
 echo "All check-ux-spec.js fixtures passed."

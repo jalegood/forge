@@ -1184,7 +1184,7 @@
 
 ## [TASK-103] Use the shared table splitter in check-ux-spec.js
 
-- **Status:** pending
+- **Status:** done
 - **Type:** fix
 - **Depends:** none
 - **Context:** CONTRACT#data-model/markdown-table-parsing, CONTRACT#data-model/ux.md-data-model, CONTRACT#rules/test-first-convention
@@ -1192,6 +1192,8 @@
 - **Notes:** Review smell. `check-ux-spec.js:81` reads the States table's Experience column with a bare split on the pipe character, which is the second ad-hoc table splitter `CONTRACT#data-model/markdown-table-parsing` exists to forbid — "no caller re-implements table splitting", because a format with two parsers has two behaviours. It mis-indexes on any cell containing an escaped pipe, which the same Contract section explicitly permits, so a legitimately-escaped pipe silently moves the vague-term check onto the wrong column.
 
   Switch to `splitTableRow` from `lib/markdown.js` (exported by TASK-081) and index the Experience cell by position within the returned cells. Test-first: add a States-table fixture whose Trigger cell contains an escaped pipe and whose Experience cell contains a vague term — it must be caught, where the current splitter reads past it.
+  check-ux-spec.js now reads the Experience cell through splitTableRow instead of a bare pipe split — the second ad-hoc splitter the Contract forbids. Test-first: fixture 4 (escaped pipe in Trigger, vague term in Experience) confirmed the miss before the fix and catches it after.
+  Files: .forge/scripts/check-ux-spec.js, .forge/tests/test-check-ux-spec.sh, .claude/commands/forge-init.md
 
 ## [TASK-104] Fix the unescaped whitespace class in the heading-prefix regex
 
