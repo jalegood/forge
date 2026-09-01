@@ -1171,7 +1171,7 @@
 
 ## [TASK-102] Make the push guard's standing scope explicit
 
-- **Status:** pending
+- **Status:** done
 - **Type:** clarify
 - **Depends:** none
 - **Context:** CONTRACT#boundaries/hook-configuration, CONTRACT#rules/unattended-execution, CONTRACT#boundaries/what-forge-does-not-do
@@ -1179,6 +1179,8 @@
 - **Notes:** Review finding 4. `guard-branch.sh` and `guard-secrets.sh` are `FORGE_UNATTENDED`-gated and inert in ordinary sessions; `guard-push.sh` is **unconditional**, so installing Forge permanently blocks `git push` through the Bash tool for the human too. That is the intended design (Boundaries: "No auto-merge, no auto-push"), but it arrived as a side effect of a feature branch and is documented nowhere a user would look before it surprises them.
 
   Do not weaken the guard — make the standing change conscious. Three edits: (1) `CONTRACT#boundaries/hook-configuration` states plainly that the push guard is a **standing change** to the project's workflow, permanent and active in interactive sessions, unlike the other two; (2) `guard-push.sh`'s stderr message currently addresses only the agent ("hand it to the human to push") — a human hitting it interactively is the actual common case, so name their path: push from a terminal **outside Claude Code**, or remove the hook entry; (3) README's guard list says the same, so it is visible before install rather than at the moment of the block.
+  Guard unchanged in behavior; its standing scope is now stated where it will be read. CONTRACT names it the one unconditional guard and why, README warns before install, and the guard message itself now addresses the human case (push from a terminal outside Claude Code, or remove the settings entry) rather than only the agent.
+  Files: .forge/CONTRACT.md, README.md, .forge/scripts/guard-push.sh, .claude/commands/forge-init.md
 
 ## [TASK-103] Use the shared table splitter in check-ux-spec.js
 

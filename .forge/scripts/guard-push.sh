@@ -32,7 +32,15 @@ if printf '%s\n' "$command" | grep -Eq '(^|[^[:alnum:]_-])git([[:space:]]+-[^[:s
 Blocked by guard-push.sh: publishing is human-only.
 
 CONTRACT#rules/unattended-execution rule 3 — "No pushing. Publishing is always
-human." Commit the work and hand it to the human to push.
+human." This guard is unconditional: unlike the branch and secret guards, it is
+active in ordinary interactive sessions too, not only unattended ones.
+
+If you are an agent: commit the work and hand it to the human to push.
+
+If you are a human and meant to push: this hook only sees Claude Code's Bash
+tool, so run the same command from a terminal outside Claude Code and it will
+go through. To opt out permanently, remove the guard-push.sh entry from
+.claude/settings.json.
 MSG
   exit 2
 fi

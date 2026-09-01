@@ -149,6 +149,8 @@ Five rules govern an unattended span, and the first three are enforced by hooks 
 4. **Hard stops:** a checkpoint task, a `clarify` task, a task entering `blocked`, a second consecutive gate failure, or a new `foundation`-severity observation. The last one is mechanical: `wp.js` refuses to hand out new work while such a row is open.
 5. **Merge is yours.**
 
+**One of these is a standing change, so it should not surprise you.** The branch and secret guards are armed by `FORGE_UNATTENDED=1` and do nothing in ordinary sessions. The push guard is unconditional: once `/forge-init` writes the hook, `git push` through Claude Code's Bash tool is blocked in *every* session, including yours. That is the point — publishing stays a human act — and it costs you nothing, because pushing from a terminal **outside Claude Code** is unaffected. If you would rather not have it, delete the `guard-push.sh` entry from `.claude/settings.json`.
+
 A gate that cannot fail is worse than no gate, so `wp.js` runs each task's gate *before* marking it active and refuses the transition if it already passes — a gate that certifies nothing never guards a task.
 
 ## Observations
