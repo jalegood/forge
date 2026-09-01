@@ -1130,3 +1130,79 @@
 - **Gate:** `manual: Findings documented in Notes — (1) the item/type catalog and whether Forge's real artifacts fit it without escape hatches; (2) node schema fields, specifically power source (deterministic script / AI / human) and mutates (writes back to shared state); (3) the result of re-expressing Forge's 8 task types, 6 commands, and 3 scripts in that schema, naming every place it did not fit; (4) a go/no-go recommendation for v0.4 with the cost of the next step`
 - **Notes:** NO-GO. Schema written and Forge re-expressed: deterministic tier and task types fit; 5 escape hatches needed, incl. the gate probe and the foundation halt — the two mechanisms that make unattended execution safe. Two ideas survive free (mutates as documentation discipline; resolve as a primitive). Record: .forge/notes/TASK-052.md
 
+## [TASK-099] Make observation dates agree with the local calendar
+
+- **Status:** done
+- **Type:** fix
+- **Depends:** none
+- **Context:** CONTRACT#interfaces/observation-script, CONTRACT#data-model/status.md-data-model, CONTRACT#rules/status-lint
+- **Gate:** `bash .forge/tests/test-obs.sh && bash .forge/tests/smoke.sh && grep -q "getFullYear" .forge/scripts/obs.js && echo "dates agree with the local calendar"`
+- **Notes:** Review finding 1, and the branch's only red test. `obs.js` stamps `new Date().toISOString().slice(0,10)` (UTC) while `test-obs.sh:113` asserts `date +%Y-%m-%d` (local); they disagree for every session west of UTC after local evening. Confirmed live: local `2026-08-31`, stamped `2026-09-01`. `smoke.sh` runs under `set -e` and delegates to `test-obs.sh`, so smoke aborts there — the settings.json and CLAUDE.md checks after it never run — and `guard-headless-run.sh` breaker 6 would block every commit in a non-UTC environment.
+
+  Fix toward **local**, not UTC: STATUS.md is a human-facing log whose Decisions entries are hand-dated with "today's real date" (clarify template), so a UTC-stamped Observations column puts two conventions in one file and shows a reader tomorrow's date. Change `today()` to compose from local parts, and change **both** age computations (`obs.js` and `check-status.js`) to parse the stored date as local midnight (no trailing `Z`) so stamping and ageing agree. Add an assertion pinning that agreement — the row just added must report an age of 0 days — so the two cannot drift apart again.
+  obs.js today() composes the local date; both ageDays implementations (obs.js, check-status.js) parse the stored date as local midnight so stamp and age agree. New assertion pins that agreement — a row written now must read ageDays 0 — so the two cannot drift apart again. Verified under the live failing condition (local 08-31 / UTC 09-01). Payloads re-copied.
+  Files: .forge/scripts/obs.js, .forge/scripts/check-status.js, .forge/tests/test-obs.sh, .claude/commands/forge-init.md
+
+## [TASK-100] Remove the NUL bytes that make check-status.js a binary blob
+
+- **Status:** pending
+- **Type:** fix
+- **Depends:** none
+- **Context:** CONTRACT#rules/status-lint, CONTRACT#data-model/artifacts, CONTRACT#boundaries/what-forge-does-not-do
+- **Gate:** `node -e "const b=require('fs').readFileSync('.forge/scripts/check-status.js'); if (b.includes(0)) { throw new Error('NUL byte present'); }" && bash .forge/tests/test-check-status.sh && bash .forge/tests/test-init-scripts.sh && bash .forge/tests/smoke.sh && echo "check-status.js is reviewable text"`
+- **Notes:** Review finding 2. `check-status.js` carries two literal NUL bytes at offsets 3376 and 3398, used as join separators in the column-order check. Git classifies the file as binary — `git show --numstat` reports `-` for both counts, so there is no diff, no blame, and no review on the project's own status linter. There is no `.gitattributes` compensating. "No hidden state — everything is readable markdown files" is a Boundaries claim, and an unreviewable script is the same defect one layer down.
+
+  Replace the literal bytes with the escape sequence, which keeps the file ASCII text while preserving the property the separator was chosen for: a NUL cannot occur inside a column name, so joining on it cannot make a two-column header collide with a one-column header containing a space. Re-copy the forge-init payload.
+
+## [TASK-101] Emit a valid mermaid diagram when no tasks remain
+
+- **Status:** pending
+- **Type:** fix
+- **Depends:** none
+- **Context:** CONTRACT#rules/workplan-access-discipline, CONTRACT#rules/task-ordering
+- **Gate:** `bash .forge/tests/test-wp.sh && grep -q "empty-graph" .forge/tests/test-wp.sh && bash .forge/tests/smoke.sh && echo "graph output is always valid mermaid"`
+- **Notes:** Review finding 3, plus the cosmetic legend smell from the same function. `cmdGraph --mermaid` filters to non-`done` tasks and their dependencies; with every task done — this repo's current state — it emits a bare `flowchart TD` with no nodes, which is a mermaid **parse error** in GitHub rather than an empty diagram. The code exists to be consumed by a rendered view later, so a malformed diagram is a defect now.
+
+  Emit a single explanatory node when the filtered set is empty. In the same function, suppress the startable-now legend when no layers were printed. Fixture named `empty-graph` in `test-wp.sh`: an all-done workplan must still produce output a mermaid parser accepts.
+
+## [TASK-102] Make the push guard's standing scope explicit
+
+- **Status:** pending
+- **Type:** clarify
+- **Depends:** none
+- **Context:** CONTRACT#boundaries/hook-configuration, CONTRACT#rules/unattended-execution, CONTRACT#boundaries/what-forge-does-not-do
+- **Gate:** `node .forge/scripts/prose.js .forge/CONTRACT.md "standing change" && node .forge/scripts/prose.js README.md "outside Claude Code" && bash .forge/tests/test-guard-hooks.sh && bash .forge/tests/smoke.sh && echo "push guard scope is explicit"`
+- **Notes:** Review finding 4. `guard-branch.sh` and `guard-secrets.sh` are `FORGE_UNATTENDED`-gated and inert in ordinary sessions; `guard-push.sh` is **unconditional**, so installing Forge permanently blocks `git push` through the Bash tool for the human too. That is the intended design (Boundaries: "No auto-merge, no auto-push"), but it arrived as a side effect of a feature branch and is documented nowhere a user would look before it surprises them.
+
+  Do not weaken the guard — make the standing change conscious. Three edits: (1) `CONTRACT#boundaries/hook-configuration` states plainly that the push guard is a **standing change** to the project's workflow, permanent and active in interactive sessions, unlike the other two; (2) `guard-push.sh`'s stderr message currently addresses only the agent ("hand it to the human to push") — a human hitting it interactively is the actual common case, so name their path: push from a terminal **outside Claude Code**, or remove the hook entry; (3) README's guard list says the same, so it is visible before install rather than at the moment of the block.
+
+## [TASK-103] Use the shared table splitter in check-ux-spec.js
+
+- **Status:** pending
+- **Type:** fix
+- **Depends:** none
+- **Context:** CONTRACT#data-model/markdown-table-parsing, CONTRACT#data-model/ux.md-data-model, CONTRACT#rules/test-first-convention
+- **Gate:** `bash .forge/tests/test-check-ux-spec.sh && grep -q "splitTableRow" .forge/scripts/check-ux-spec.js && grep -q "escaped pipe" .forge/tests/test-check-ux-spec.sh && bash .forge/tests/smoke.sh && echo "one table splitter"`
+- **Notes:** Review smell. `check-ux-spec.js:81` reads the States table's Experience column with a bare split on the pipe character, which is the second ad-hoc table splitter `CONTRACT#data-model/markdown-table-parsing` exists to forbid — "no caller re-implements table splitting", because a format with two parsers has two behaviours. It mis-indexes on any cell containing an escaped pipe, which the same Contract section explicitly permits, so a legitimately-escaped pipe silently moves the vague-term check onto the wrong column.
+
+  Switch to `splitTableRow` from `lib/markdown.js` (exported by TASK-081) and index the Experience cell by position within the returned cells. Test-first: add a States-table fixture whose Trigger cell contains an escaped pipe and whose Experience cell contains a vague term — it must be caught, where the current splitter reads past it.
+
+## [TASK-104] Fix the unescaped whitespace class in the heading-prefix regex
+
+- **Status:** pending
+- **Type:** fix
+- **Depends:** none
+- **Context:** CONTRACT#data-model/context-manifest, CONTRACT#rules/test-first-convention
+- **Gate:** `bash .forge/tests/test-markdown.sh && grep -q "Screen:sss" .forge/tests/test-markdown.sh && bash .forge/tests/smoke.sh && echo "prefix regex escapes its whitespace class"`
+- **Notes:** Review smell. `lib/markdown.js:92` builds the UX label-prefix test with a template literal in which the whitespace class is written with a single backslash — inside a template literal that collapses to the plain character `s`, so the compiled pattern requires a literal `s` rather than whitespace. It works today only because the quantifier permits zero occurrences and `headingCompact` does the real comparison, but it also wrongly accepts a heading reading `Screen:sss Name`. Escape the backslash so the class survives into the pattern. Fixture: a heading whose literal text is `Screen:sss` must not match the `Screen` prefix.
+
+## [TASK-105] Recognize a root-level test runner in the workplan lint
+
+- **Status:** pending
+- **Type:** fix
+- **Depends:** none
+- **Context:** CONTRACT#rules/workplan-lint, CONTRACT#rules/test-first-convention, CONTRACT#rules/gate-patterns
+- **Gate:** `bash .forge/tests/test-check-workplan.sh && grep -q "root-level test.sh" .forge/tests/test-check-workplan.sh && bash .forge/tests/smoke.sh && echo "root-level test runners recognized"`
+- **Notes:** Closes OBS-020, found by TASK-039's end-to-end validation and confirmed in review. `hasTestInvocation` recognizes `tests/`, `test-*.sh`, and the major language runners, but not a root-level `test.sh` — a common convention. A project using it cannot satisfy workplan-lint invariant 6 for any `feature` or `fix` task without renaming its runner, which is the lint dictating project layout rather than checking for a test.
+
+  Extend the pattern to accept a bare `test.sh`, optionally path-prefixed with `./` and optionally invoked through `bash` or `sh`. Keep it anchored so it cannot match an unrelated word ending in the same characters. Fixtures both ways: a root-level runner satisfies invariant 6, and a structural-only gate still fails it, so the invariant is not weakened into uselessness.

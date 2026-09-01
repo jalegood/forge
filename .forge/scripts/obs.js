@@ -71,13 +71,22 @@ function die(message, code) {
   process.exit(code === undefined ? 1 : code);
 }
 
+// Dates are LOCAL, not UTC. STATUS.md is a human-facing log whose Decisions
+// entries are hand-dated with "today's real date"; a UTC stamp would put two
+// conventions in one file and show a reader west of UTC tomorrow's date on a
+// row they just wrote. `ageDays` parses the stored date as local midnight for
+// the same reason — the stamp and the age must agree, or a row's reported age
+// jumps a day depending on the hour it is read.
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function ageDays(date) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
-  return Math.floor((Date.now() - new Date(date + 'T00:00:00Z')) / 86400000);
+  // No trailing Z: parsed as local midnight, matching how today() stamps.
+  return Math.floor((Date.now() - new Date(date + 'T00:00:00')) / 86400000);
 }
 
 function readStatus() {

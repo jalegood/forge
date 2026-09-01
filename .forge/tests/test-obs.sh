@@ -109,8 +109,25 @@ assert_rc 0 "add succeeds"
 assert_has "OBS-002" "the minted ID is reported"
 assert_file "| OBS-002 |" "the row was written"
 assert_file "| open |" "new rows are open"
-# The date is stamped by the script, not passed in.
-grep -q "| OBS-002 | $(date +%Y-%m-%d) |" "$TMPDIR/.forge/STATUS.md" || fail "add must stamp today's date"
+# The date is stamped by the script, not passed in, and it is the LOCAL date —
+# the same calendar day the shell reports, not a UTC day that can already be
+# tomorrow for anyone west of UTC.
+grep -q "| OBS-002 | $(date +%Y-%m-%d) |" "$TMPDIR/.forge/STATUS.md" || fail "add must stamp today's local date"
+
+# Stamping and ageing must agree. They are computed in different places
+# (obs.js today() and obs.js/check-status.js ageDays), and a mismatched
+# timezone convention between them is invisible except for a few hours a day —
+# a row written this second must read as zero days old.
+run list --json
+node -e '
+  const d = JSON.parse(process.argv[1]);
+  const r = d.observations.find(o => o.id === "OBS-002");
+  if (!r) throw new Error("OBS-002 missing from the projection");
+  if (r.ageDays !== 0) {
+    throw new Error("a row stamped now reports ageDays=" + r.ageDays +
+      " — today() and ageDays() disagree about the timezone");
+  }
+' "$OUT" || fail "the date stamp and the age computation must use the same calendar"
 echo "  add: OK"
 
 # --- escaping round trip: a literal pipe must survive as content ---
