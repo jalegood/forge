@@ -5,6 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { parseHeadings, normalizeSlug, findHeading, sectionRange, findRoot, splitTableRow } = require('./lib/markdown');
 
 const screenName = process.argv[2];
 if (!screenName) {
@@ -12,30 +13,31 @@ if (!screenName) {
   process.exit(1);
 }
 
-const uxPath = path.join(process.cwd(), '.forge', 'UX.md');
+// Nearest ancestor of the working directory holding .forge/ (TASK-072).
+const uxPath = path.join(findRoot(), '.forge', 'UX.md');
 if (!fs.existsSync(uxPath)) {
   console.error('Error: .forge/UX.md not found');
   process.exit(1);
 }
 
-const content = fs.readFileSync(uxPath, 'utf8');
+const content = fs.readFileSync(uxPath, 'utf8').replace(/\r\n/g, '\n');
 
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// Find the screen section
-const screenRegex = new RegExp(`^#### Screen: ${escapeRegex(screenName)}\\s*$`, 'm');
-const screenMatch = screenRegex.exec(content);
-if (!screenMatch) {
+// Find the screen's "#### Screen: <name>" heading and extract through the next
+// heading at the same level or higher. Scanning goes through lib/markdown.js so
+// that `#`-prefixed lines inside ``` fences are not mistaken for headings — a
+// quoted spec skeleton inside a screen used to truncate the section early.
+const headings = parseHeadings(content);
+const screenHeading = findHeading(headings, normalizeSlug(screenName), { level: 4, prefix: 'Screen' });
+if (!screenHeading) {
   console.error(`Error: Screen "${screenName}" not found in UX.md`);
   process.exit(1);
 }
 
-// Extract screen content through next heading at same or higher level
-const afterMatch = content.slice(screenMatch.index + screenMatch[0].length);
-const nextSectionMatch = /^#{1,4} /m.exec(afterMatch);
-const screenContent = nextSectionMatch ? afterMatch.slice(0, nextSectionMatch.index) : afterMatch;
+// Body excludes the heading line itself, matching the previous implementation.
+const { start, end } = sectionRange(headings, screenHeading, content.length);
+const nl = content.indexOf('\n', start);
+const bodyStart = nl === -1 || nl > end ? end : nl;
+const screenContent = content.slice(bodyStart, end);
 
 const errors = [];
 
@@ -54,12 +56,17 @@ for (const field of mandatoryFields) {
   }
 }
 
+// Sub-sections are located the same fence-aware way as the screen itself, so a
+// quoted "##### States" inside a fence is not mistaken for the real one.
+const subHeadings = parseHeadings(screenContent);
+
 // Check States table exists and has at least one data row
-const statesMatch = /##### States([\s\S]*?)(?=##### |$)/.exec(screenContent);
-if (!statesMatch) {
+const statesHeading = findHeading(subHeadings, normalizeSlug('States'), { level: 5 });
+if (!statesHeading) {
   errors.push('Missing section: ##### States');
 } else {
-  const statesBody = statesMatch[1];
+  const statesRange = sectionRange(subHeadings, statesHeading, screenContent.length);
+  const statesBody = screenContent.slice(statesRange.start, statesRange.end);
   const dataRows = statesBody.split('\n').filter(line => {
     const trimmed = line.trim();
     return trimmed.startsWith('|') && !trimmed.includes('---') && !/^\|\s*State\s*\|/i.test(trimmed);
@@ -68,18 +75,28 @@ if (!statesMatch) {
     errors.push('States table has no data rows');
   }
 
-  // Reject vague terms in States cells
+  // Reject vague terms in the Experience column only (3rd cell) — State/Trigger labels
+  // may legitimately contain words like "slow" or "fast" without violating precision.
+  // Through the shared splitter, never a bare split on the pipe character
+  // (CONTRACT#data-model/markdown-table-parsing: no caller re-implements table
+  // splitting). A cell may legitimately contain an escaped `\|`, and a naive
+  // split counts that as a column break — shifting the vague-term check onto
+  // the wrong cell, so a vague Experience value passes silently.
+  const experienceCells = dataRows.map(row => {
+    const cells = splitTableRow(row);
+    return cells[2] !== undefined ? cells[2].trim() : '';
+  });
   const vagueTerms = ['smooth', 'fast', 'subtle', 'snappy', 'quick', 'slow', 'nice', 'clean', 'simple'];
   for (const term of vagueTerms) {
     const regex = new RegExp(`\\b${term}\\b`, 'i');
-    if (regex.test(statesBody)) {
-      errors.push(`Vague term "${term}" found in States table — use numeric/named values (e.g., "ease-out 250ms")`);
+    if (experienceCells.some(cell => regex.test(cell))) {
+      errors.push(`Vague term "${term}" found in States table Experience column — use numeric/named values (e.g., "ease-out 250ms")`);
     }
   }
 }
 
 // Check Edge Cases section exists
-if (!screenContent.includes('##### Edge Cases')) {
+if (!findHeading(subHeadings, normalizeSlug('Edge Cases'), { level: 5 })) {
   errors.push('Missing section: ##### Edge Cases');
 }
 

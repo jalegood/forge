@@ -1,0 +1,418 @@
+# Status
+
+## Open Questions
+
+| ID    | Question                                                                                                                                                                                                                                                                                                                                                                                                                                                | Blocking? | Raised     |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ---------- |
+| Q-002 | Checkpoint cadence default is 5 tasks (`<!-- ASSUMED -->` in CONTRACT). Right default, or should it be per-project config?                                                                                                                                                                                                                                                                                                                              | No        | 2026-07-24 |
+| Q-003 | Single SPEC.md vs per-feature `.forge/specs/` — split threshold assumed at ~300 lines. **Not** validated by TASK-048: this project's SPEC.md is 96 lines, so the threshold remains untested (see 2026-08-17 Decisions).                                                                                                                                                                                                                                 | No        | 2026-07-24 |
+| Q-004 | Record externalization threshold is 3 lines. Right cutoff, or should it be character-based, or per-project config? Validate against the migrated 67-task work project (TASK-060).                                                                                                                                                                                                                                                                       | No        | 2026-08-14 |
+| Q-006 | Should tasks group into features, derived from their `specs/X#` manifest refs rather than a declared field, to drive feature-aligned checkpoint cadence, per-feature `/forge-status`, and a requirement-coverage lint? Gated by Q-003 — no `.forge/specs/` split means no natural feature identity — and would subsume Q-002's assumed cadence of 5. Evaluation trigger: TASK-046's span, asking whether a five-task window was a coherent review unit. | No        | 2026-08-16 |
+
+## Decisions
+
+### 2026-08-31 — Resolves Q-001: Forge moves to plugin packaging in v0.4, as a hybrid (TASK-041)
+
+The engine ships as a Claude Code plugin — six commands as plugin commands, the three guards plus the status-lint hook in `hooks/hooks.json`, and the scripts and templates as **real files** the plugin carries. `/forge-init` keeps installing the scripts into each project's `.forge/scripts/`, copying them out of the plugin rather than transcribing them through fenced markdown. `/forge-sync` is retained and narrowed: `/plugin update` refreshes the plugin, but the copies that actually execute live in the project, and reconciling those is exactly the job left. Scoped as the first v0.4 workstream; explicitly not started in v0.3.
+
+**Why:** 83% of `forge-init.md` (3,020 of 3,607 lines) is payload transcribing files that exist elsewhere, and 7 of the 20 observations ever recorded are payload or scaffold-distribution defects — one of which shipped a reverted bug fix to every new project for weeks (OBS-016). Three mechanisms exist solely to contain this: embed markers, two content-diff tests, and a Contract rule. All of it exists because the engine cannot ship files, and a plugin can — confirmed: plugins carry arbitrary support scripts, referenced through `${CLAUDE_PLUGIN_ROOT}`, and plugin hooks merge additively with a project's own rather than overriding them.
+
+**Rejected alternatives:** A pure move, with scripts living only at the plugin root — **44 gate commands in this workplan hardcode `.forge/scripts/` paths**, gates are project-owned data written by past tasks, and checkpoints re-run every gate in the span fresh, so the move would turn every future checkpoint into a wall of false regressions; `${CLAUDE_PLUGIN_ROOT}` is documented for hook and MCP definitions, not guaranteed inside an arbitrary bash gate. Staying on copied commands (keeps the zero-install experience, which is the one genuine cost of moving, but keeps paying a defect class that has recurred seven times). Doing it inside v0.3 (it deletes and rewrites the largest command file in the repo — not a change to land in the same release as the machinery it distributes).
+
+### 2026-08-31 — forge-spec-v0.2.md retired; Planning at Scale becomes a Contract rule (TASK-049)
+
+The root narrative spec is archived to `archive/forge-spec-v0.2.md`, beside the v0.1 already there. Its one load-bearing section — Planning at Scale (scoped planning passes, the split thresholds, cross-system dependency wiring) — is lifted verbatim into `CONTRACT#rules/planning-at-scale`, placed beside Context Budget since it is the same concern at a larger grain. README's dangling "see the spec's ..." pointer now names the Contract rule. `prompts/forge-plan-bootstrap.md` is archived alongside: it read the retired file as its blueprint and is a spent bootstrap artifact.
+
+**Why:** A narrative spec doc alongside CONTRACT.md and README.md is a third source of truth about one system, and it is the one that already drifted two versions — it still described 3 commands, no UX/DESIGN, no SPEC/STATUS/checkpoint/sync. Maintaining it by hand reproduces, inside this repo, the drift problem v0.3 exists to solve. Lifting the one section that had no other home makes it manifest-addressable, which is the difference between a rule tasks can cite and prose nobody resolves.
+
+**Rejected alternatives:** Rewriting it as forge-spec-v0.3.md (three documents to hand-sync forever, and the same drift arrives on schedule); leaving it in place (README keeps pointing at a system that no longer exists); deleting it outright rather than archiving (the v0.1 precedent is archival, and the pre-revision notes are project history).
+
+### 2026-08-30 — OBS-019 recorded and planned as TASK-098 in the same checkpoint session (TASK-046)
+
+**OBS-019 recorded and planned as TASK-098 in the same checkpoint session (TASK-046).** wp.js's probe (TASK-074) resolves `bash` through CreateProcess on win32, which searches System32 first and finds WSL's relay when the parent is not Git Bash — the relay exits 1, the probe reads the gate as failing pre-work, and the refusal path never fires. In-session probes were correct (Git Bash parents resolve their own bash first); the defect reaches exactly the invocations nobody watches
+
+**Why:** A probe that silently degrades to always-allow on one class of parent is the vacuous-gate failure mode reintroduced at the meta level; the checkpoint that surfaced it is the right place to plan its fix, and the run holds promotion authority per HEADLESS-RUN.md
+
+**Rejected alternatives:** Leaving it open for the human (a one-line resolution fix with a clear repro should not wait weeks while every PowerShell-driven probe stays inert); foundation severity (the mechanism is sound, the resolution is wrong — scoped, reproducible, fixable)
+
+### 2026-08-30 — The manifest heading-matching rule is now normative in the Contract: alphanumeric compaction on b…
+
+**The manifest heading-matching rule is now normative in the Contract: alphanumeric compaction on both sides (TASK-079).** CONTRACT#data-model/context-manifest states it beside the requirement-heading exception; forge-next.md step 3 describes the real algorithm and points at the Contract instead of documenting a hyphen-preserving slugify that `lib/markdown.js` never implemented and that fails on live refs (`claudemd-integration-block`, `ux.md-data-model`); test-markdown.sh pins the punctuation-mismatch case
+
+**Why:** A resolution rule that lives only in a consumer is not a contract — TASK-050's extraction dropped the req-slug rule for exactly this reason, and the documented-but-unimplemented algorithm sent literal readers to a false unresolvable-reference warning on correct manifests
+
+**Rejected alternatives:** Changing normalizeSlug to the documented hyphen-preserving form (breaks every .md-derived reference in the live workplan — TASK-025 rejected it); leaving the rule in forge-next.md prose only (the defect being fixed)
+
+### 2026-08-30 — Four Contract passages reconciled with their own commands (TASK-077)
+
+**Four Contract passages reconciled with their own commands (TASK-077).** forge-next's Reads line now names both STATUS.md uses (observations every session, full file at checkpoints) instead of "checkpoint tasks only"; Interfaces item 8 points at Rules/Traceability's externalization branch instead of restating the pre-TASK-061 inline-only rule; /forge-plan's false "no side effects beyond WORKPLAN.md" claim replaced — command prose and the Contract Outputs line now name all three licensed writes (WORKPLAN.md, CONTRACT ASSUMED annotations, STATUS.md rows); /forge-status gains a Blocked tasks output slot and the Contract's Does/Outputs name it
+
+**Why:** Each passage described a command more narrowly than the behavior its own interface mandates — the same defect family as OBS-001/OBS-004, and the narrower text is the copy that executes
+
+**Rejected alternatives:** Leaving precedence to sort it out (the narrow bullet is what ships); restating the Traceability branch a third time (two copies already drifted once); a fourth task per passage (same file, same defect family, one Decisions entry)
+
+### 2026-08-30 — Resolves Q-007: the template-payload content diff is built, not narrowed away (TASK-070)
+
+**Resolves Q-007: the template-payload content diff is built, not narrowed away (TASK-070).** All eight template blocks in forge-init.md now carry `forge-init:embed` markers and are content-diffed by test-templates.sh, glob-driven so a later template is covered the moment it exists; five drifted blocks (feature, fix, clarify, refactor, investigate) re-copied from the live originals, which were authoritative in every case
+
+**Why:** Rules/Embedded Payload Synchronization requirement 3 mandated the diff for all payloads; the observation record (OBS-003) showed the field-sampling test reading as coverage while five bodies drifted
+
+**Rejected alternatives:** Narrowing the rule to scripts (leaves the documented OBS-003 drift standing and makes the rule describe less than the defect it was written for)
+
+### 2026-08-30 — Headless planning pass: the 2026-08-29 Observations amendment and the ideas/ intake become 17 tas…
+
+**Headless planning pass: the 2026-08-29 Observations amendment and the ideas/ intake become 17 tasks (TASK-081..097).** Machinery chain sequenced Decisions-migration → table parser → status lint → obs.js (TASK-093, 081, 082, 083), then command integration (084..088), then repairs and graph projection (089..092), with checkpoints TASK-095/096/097 at the Contract's cadence and TASK-039 retargeted behind the last one. ideas/ux-nearterm.md item 4 (Decisions table → dated sections) **approved** as TASK-093 and sequenced before the lint so check-status.js is built once against the final shape; item 3's unified `check-drift.js` **declined** — TASK-070's marker-driven content diff already generalizes to every payload and TASK-080's enum check is a different species, so a third abstraction over two test files is bloat; item 5's drift banner **folded into TASK-084** (same surface, same session start); browser rendering deferred per the doc's own verdict. The Script Exit Codes split folded into TASK-074 (same file, same insertion point). TASK-094 added for the guard-test env-isolation bug the run start exposed
+
+**Why:** Contract Amendment Protocol steps 3-5: the amendment described machinery nothing implemented — obs.js, check-status.js, the Date column, exit codes 3/4, the triage flow — and no pending task built any of it, so the amendment could not be committed truthfully without the workplan catching up in the same commit
+
+**Rejected alternatives:** Regenerating pending tasks wholesale via /forge-plan (TASK-069..080 are verified, well-specified work; regeneration risks discarding planning-time verification for no gain); a separate task per command-file touch of the exit-code split (three one-line sessions re-reading the same context); building obs.js before the lint (write-validate-revert needs the validator first)
+
+### 2026-08-30 — Observation backlog triaged under headless-run authority: OBS-003→planned:TASK-070, OBS-005→plann…
+
+**Observation backlog triaged under headless-run authority: OBS-003→planned:TASK-070, OBS-005→planned:TASK-069, OBS-006→planned:TASK-071, OBS-012→planned:TASK-080, OBS-014→planned:TASK-089, OBS-015→planned:TASK-090, OBS-016→planned:TASK-069, OBS-013→planned:TASK-075 and OBS-018→planned:TASK-073 (both foundation — recorded here per HEADLESS-RUN.md, never declined, flagged for human review at merge), OBS-007→closed, OBS-009→closed, OBS-010→duplicate:OBS-013; OBS-008 stays open (human parked it for v0.4 on 2026-08-16, nothing changed)**
+
+**Why:** Every planned: link names a task whose scope demonstrably covers the row (069's notes name OBS-005 and OBS-016's scripts; 070 closes OBS-003; 071 closes OBS-006; 080 closes OBS-012; 089/090 were created for OBS-014/015 this pass; 073..075 are the OBS-013/018 remediation chain the 2026-08-17/19 triages already assigned). OBS-007's covering task TASK-068 is `done` — the row simply was never flipped. OBS-009 re-measured 2026-08-30: zero `Aborted` lines across the full suite and a 5-spawn isolated repro loop, versus 22/78 on 2026-08-17 with the same GNU grep 3.0 — the environmental defect no longer reproduces, and a row for a vanished environmental defect blocks nothing and teaches nothing. OBS-010's vacuous-clarify-gate instance is the class OBS-013 names and TASK-073..075 remediate — one finding, one row
+
+**Rejected alternatives:** Waiting for the human (the run charter transfers exactly this authority); declining OBS-009 outright as unreproducible-in-principle (the 2026-08-17 measurement was real; closed-on-remeasurement is the honest disposition); leaving the accepted rows unlinked (the exact dead-letter state the amendment's planned: disposition exists to end)
+
+### 2026-08-30 — Headless-run fault tolerance designed and installed (branch v0.3-headless)
+
+**Headless-run fault tolerance designed and installed (branch v0.3-headless).** Policy written to `.forge/HEADLESS-RUN.md`; mechanical breakers encoded in `.forge/scripts/guard-headless-run.sh`, installed as `.git/hooks/pre-commit` and armed by `FORGE_UNATTENDED=1`: branch pinned to v0.3-headless, VISION.md write-locked, 100-task-commit ceiling per the charter's formula, workplan and status lints, full test suite green with the flag unset, secret scan. A pre-push blocker backs up the push guard. Behavioral breakers (two-strike gate failure; foundation rows dispositioned only with a dated Decisions row and never autonomously `declined`) are recorded in the policy file. The existing foundation-severity halt is kept, with run-local triage authority under those constraints
+
+**Why:** Git-native hooks fire on every commit regardless of which process invokes git and inherit the armed environment deterministically, closing the gap that Claude Code's own hook layer snapshots its config and environment at session start where it cannot be re-verified mid-run. Pure halting on foundation rows deadlocks when the queue itself contains the fix (OBS-013, OBS-018); unconstrained self-triage retires the one signal built to interrupt agent momentum — the never-`declined` constraint is the load-bearing middle
+
+**Rejected alternatives:** Relying on the Claude Code guards alone (their hook-process environment is unverifiable from inside the session); disabling the foundation halt for the run (retires the interrupt signal exactly when nobody is watching); a new CONTRACT rule for run policy (the policy is experiment-scoped and dies at merge; the Contract describes the engine)
+
+### 2026-08-29 — Observations system overhauled at the Contract layer
+
+**Observations system overhauled at the Contract layer.** Adds State Machines/Observation Lifecycle (`open` to `accepted` to `planned:TASK-XXX` to `closed`, plus `declined` and `duplicate:OBS-YYY`), a Date column and an enumerated Kind set on the Observations table, Interfaces/Observation Script (`obs.js` as the sole writer), Rules/Status Lint (`check-status.js`, wired as a PostToolUse hook), Data Model/Markdown Table Parsing (escape a literal pipe inside a cell, parse by column name, a malformed row is an error not a skipped row), and Interfaces/Script Exit Codes splitting the overloaded exit 2 into 2 nothing-to-select, 3 foundation-halt, 4 gate-probe-refused. Triage becomes a branch inside `/forge-next` on an exit-3 halt rather than a seventh command. Unattended spans may auto-disposition `normal` rows that are provable duplicates or already covered by a task, each with a dated Decisions row; `foundation` rows are never auto-dispositioned.
+
+**Why:** The channel already earned its keep by surfacing the vacuous-gate class (OBS-013), but everything around it was instruction-following: ~18 hand-written copies of the row format, no validator, no link from a row to the task that resolves it, and a positional parser that silently drops any row containing a pipe — OBS-017 is `open` and invisible in every report today, and a `foundation` row shaped that way would disable the one mechanical hard stop while every report showed a clear queue. Vision pillar 2 requires determinism in exactly this subsystem, and pillar 6 makes routine triage the wrong place to spend human attention.
+
+**Rejected alternatives:** A `/forge-triage` command (rejected: the halt already happens inside a running session, so a separate command adds a step to remember and breaks the six-command budget for no capability). A volume-based halt on accumulated `normal` rows (rejected: a per-session sweep stops the pile-up at the source, and a second way to get blocked is the opposite of the goal). Full agent autonomy over `normal` rows (rejected: an agent that can decline its own novel findings can bury the next OBS-013). Renaming the channel for urgency (rejected: urgency lives in the Severity column, which works; the rename is ~20 sites of churn with no behavior change).
+
+### 2026-08-19 — OBS-018 triaged `open` → `accepted`, folded into pending TASK-073 rather than given its own task,…
+
+**OBS-018 triaged `open` → `accepted`, folded into pending TASK-073 rather than given its own task, and its count corrected from five gates to four.** `CONTRACT#rules/gate-discrimination` obligation 1 now names the *count* shape beside the *topic* shape, and TASK-073's scope and gate carry it into `/forge-plan` step 6 (gate phrase `append-only`, absent from forge-plan.md at triage time)
+
+**Why:** The row's fifth gate does not exist: the `-gt 26` instance is prose at `WORKPLAN.md:800` describing a gate TASK-076 had **already** rewritten to phrase-based at planning time, so the observation counted its own precedent as an instance. The four real ones belong to TASK-051/061/067/068, all `done` — meaning OBS-018 names zero forward risk and nothing can now ship unverified because of it, which is not what `foundation` severity is for. What it does add is genuine and was otherwise about to be missed: TASK-073 taught exactly one substitution, `grep -qi "<topic>"` → `prose.js "<phrase>"`, derived from the four topic-grep instances, and the count shape is a *different* mechanism — vacuous by decay rather than on arrival, so "is this word already present?" does not catch it. That distinction lived only in a prose aside in TASK-076's notes: a task note, not manifest-addressable, the identical failure mode closed as OBS-007 the previous day. This also repeats the OBS-013 deadlock exactly — a `foundation` row for the vacuous-gate class halting TASK-073..076, the very tasks that close it
+
+**Rejected alternatives:** Declining it (TASK-074's transition probe is shape-agnostic and would have caught all four, but that fixes the mechanism while leaving `/forge-plan` authoring the shape forever); a new task to repair the four shipped gates (they guard `done` tasks — repairing them changes nothing that can still fail, and spends a session to alter no outcome); downgrading to `normal` and leaving it `open` (clears the hard stop but parks a correct finding untriaged); leaving the miscount uncorrected (a row asserting five instances where four exist is the same defect class it reports)
+
+### 2026-08-18 — `CONTRACT#interfaces/command-forge-spec` invokes the readiness gate as `node .forge/scripts/check…
+
+`CONTRACT#interfaces/command-forge-spec` invokes the readiness gate as `node .forge/scripts/check-spec.js <file> --max-unresolved N`; the script's strict `0` default is unchanged, and `N` is a declaration of the markers deliberately carried — admissible only once each has its STATUS.md Open Questions row, and reported to the human (TASK-068, closes OBS-007)
+
+**Why:** The Contract mandated `<!-- UNRESOLVED -->` annotation *and* a plain gate run that fails on any marker, so obeying it literally produced a spec that could not pass its own gate and pushed an agent toward deleting markers to go green. The working reconciliation already existed in `forge-spec.md` prose, but a command file is not manifest-addressable, so no task could cite it. Lifting it into the Contract keeps the strict default for every other caller and names the threshold's real function honestly: it forces the count into the human's report, it does not enforce anything arithmetically
+
+**Rejected alternatives:** Loosening `check-spec.js`'s own default so the plain invocation becomes literally correct — a marker-laden spec would then pass silently, reversing the deliberate choices of TASK-030 and TASK-032 and removing the only mechanism that puts the carried count in front of the human; splitting structural validation from readiness into two scripts — two gates and two `/forge-init` payloads to settle a one-line contradiction
+
+### 2026-08-17 — Closes OBS-001 and OBS-004
+
+**Closes OBS-001 and OBS-004.** Two Interfaces bullets described STATUS.md more narrowly than the Data Model that governs it, and both are corrected to match: `/forge-init` now creates the stub with "Open Questions, Decisions, Risks, Blockers, and Observations tables", and `/forge-plan`'s Reads line now annotates STATUS.md "(when present — blocking open questions, observations marked accepted)".
+
+**Why:** The Data Model is the governing spec for STATUS.md and already mandates five tables; an Interfaces bullet naming four made the Observations table look optional at scaffold time, which silently disables `/forge-next`'s open-`foundation` hard stop in any project built from that bullet. The `/forge-plan` annotation contradicted its own Does line, which requires accepted-Observations intake from the same file. Both are text-only corrections — TASK-031 already built the five-table stub and `/forge-plan` already specifies the intake, so no command file or script changes.
+
+**Rejected alternatives:** Widening the Data Model down to four tables (discards the observation channel `/forge-next` depends on); leaving the bullets and relying on the Data Model to win by precedence (the bullet is what `/forge-init` executes from, so the narrower text is the one that ships); splitting into two dated rows (one defect in two places — separate rows would hide that they share a cause)
+
+### 2026-08-17 — TASK-051 ASSUMED triage, part 1 of 5: twelve CONTRACT markers
+
+TASK-051 ASSUMED triage, part 1 of 5: twelve CONTRACT markers confirmed and removed — DESIGN.md as a tool-agnostic markdown artifact (both the Artifacts row and the Data Model heading), the Markdown Resolver artifact row, `prose.js`/`migrate-notes.js` inside the provisioned seven, guards enabled by default for new projects, UX and DESIGN stub detection, DESIGN coverage being additive rather than gating, `.forge/VERSION` line 2 as the repo pointer, the allowlist-infeasibility argument behind the transition probe, and the guards-enforce-policy tie-in
+
+**Why:** Each was validated by shipped implementation or by direct inspection rather than left standing as inference: VERSION's two-line format was read off the real file, the guards and both stub-detection rules ship with tests, and `prose.js` is already a hard dependency of four live gates. A marker sitting over settled fact is noise that camouflages the markers still carrying real doubt
+
+**Rejected alternatives:** Keeping every marker until a checkpoint reviews them (defers indefinitely while the backlog grows); deleting them with no Decisions row (converts unreviewed inference into invisible inference, the one outcome the task forbids); one row per marker (twelve restatements of the same reasoning bury the four substantive decisions beneath them)
+
+### 2026-08-17 — TASK-051 part 2 of 5: `DESIGN#` manifest resolution is now
+
+TASK-051 part 2 of 5: `DESIGN#` manifest resolution is now stated explicitly in Data Model/Context Manifest as shared-resolver, plain-heading-slug matching, replacing the marker that called it the "same resolution pattern as UX#"
+
+**Why:** The claim was imprecise in the one way that reaches an implementer: `UX#` strips `Flow:`/`Screen:` label prefixes before slugifying and `DESIGN#` has no prefix to strip, so "same as UX#" invites a resolver hunting for a label that is never present
+
+**Rejected alternatives:** Confirming the wording unchanged (preserves the ambiguity inside the document every manifest resolves against); surfacing it as an Open Question (the correct behaviour is already implemented in `lib/markdown.js` and documented in `/forge-next` — nothing is genuinely open)
+
+### 2026-08-17 — TASK-051 part 3 of 5: Boundaries/Hook Configuration now states that
+
+TASK-051 part 3 of 5: Boundaries/Hook Configuration now states that each guard exits **2** to block, and that every other nonzero exit is non-blocking. Supersedes the "exits nonzero to block" wording
+
+**Why:** TASK-047 found the assumption factually wrong while implementing against it: Claude Code blocks on exit 2 and treats all other nonzero codes as non-blocking errors that let the tool run anyway. The shipped guards exit 2, so the Contract has been promising a weaker guarantee than the code delivers — and anyone writing a fourth guard from the Contract alone would have written one that fails open
+
+**Rejected alternatives:** Leaving "nonzero" as technically satisfied by exit 2 (true but misleading: it equally licenses exit 1, which does not block); recording the correction only in the TASK-047 record (a record is not the spec, and manifests resolve the Contract)
+
+### 2026-08-17 — TASK-051 part 4 of 5: the init-time "does this project
+
+TASK-051 part 4 of 5: the init-time "does this project have a UI?" question stays a single yes/no gate. Per-artifact granularity is declined outright rather than deferred
+
+**Why:** The bullet's own escape hatch ("left to a future task") produced no task across the entire v0.3 cycle, and the re-ask path already specified under Interfaces/`/forge-init` covers the real need — changing the answer later. A deferral nobody ever schedules is a decision made by omission; stating it is the honest version
+
+**Rejected alternatives:** Keeping the deferral marker (an open commitment with no task behind it); building per-artifact prompts now (four extra questions at init to serve a distinction no project has yet wanted)
+
+### 2026-08-17 — TASK-051 part 5 of 5: **amends Q-003.** The ~300-line SPEC
+
+TASK-051 part 5 of 5: **amends Q-003.** The ~300-line SPEC split threshold stays assumed and Q-003 stays open, but its claimed validation is withdrawn — TASK-048 did not test it
+
+**Why:** Q-003 recorded that TASK-048 would validate the threshold by authoring this project's own SPEC. That SPEC came in at 96 lines, nowhere near 300, so it exercised nothing and the question is exactly as open as before. A row asserting a validation that never happened reads as answered and stops being asked
+
+**Rejected alternatives:** Leaving the row as written (asserts a validation that did not occur); closing Q-003 because 96 lines caused no trouble (absence of strain far below the threshold is no evidence about the threshold)
+
+### 2026-08-17 — Amends the 2026-08-16 observation-backlog triage row below, on OBS-009 only
+
+**Amends the 2026-08-16 observation-backlog triage row below, on OBS-009 only.** OBS-009 returns from `declined` to `open`, and **its stated cause is wrong**: the noise is not SIGPIPE and not the `printf | grep -q` pattern — the local `grep` aborts on essentially every spawn inside a script loop
+
+**Why:** The declination rested on "does not reproduce — test-templates.sh runs clean at exit 0 with no stderr noise". Re-measured 2026-08-17 on the Windows/Git Bash environment this project is developed in: `bash .forge/tests/smoke.sh` emits 22 `Aborted` lines out of 78. Isolating the trigger disproved the row's diagnosis — `grep -qiF pattern file` with no pipe at all aborts 1:1 per spawn; a here-string rewrite is _worse_ (4 aborts vs 2 on the same workload); batching many patterns into a single `grep -f` spawn does not help; `sed`/`awk`/`cat`/`wc` are unaffected; and exit codes stay correct throughout (0 on match, 1 on no-match), so every assertion still validates what it claims to. This is a defective `grep` (GNU grep 3.0 under MSYS2) in this environment, not a defect in Forge's test code — which is the likeliest reason it did not reproduce wherever the 2026-08-16 triage ran. **No edit to `test-templates.sh` will remove it.** Returned to `open` rather than `accepted` because the remedy is environmental and the row now needs re-scoping before anyone plans against it
+
+**Rejected alternatives:** Leaving it `declined` (the noise is real here and does mask real failures in unattended runs, where gate output is the only evidence a human sees); marking it `accepted` (would queue a code fix now known not to work); rewriting the `printf | grep` sites (measured — makes it worse, and treats a symptom whose cause is outside the repo)
+
+### 2026-08-17 — OBS-012 triaged `open` → `accepted` and planned as TASK-080. The
+
+OBS-012 triaged `open` → `accepted` and planned as TASK-080. The fix is a drift test over the enum's restatements, not consolidation of them — and the row undercounts: there are **five** sites, not four (`forge-next.md`'s wp.js output-shape block at line 41 is missing from the row's list)
+
+**Why:** `lib/workplan.js`'s `VALID_TYPES` is the executable source of truth and the only copy that can reject a bad value; the other four are prose that a reader or an agent consults in place. Consolidating them would strip locally useful enumerations — forge-plan's fenced block is a task-format template meant to be copied, and forge-next's block documents literal script output — so the duplication is worth keeping and the drift is what needs catching. This is structurally the same problem Rules/Embedded Payload Synchronization already solves for script payloads: duplicated content with no diff test, where the copy silently disagrees. `checkpoint` falling out of forge-plan's table and going unnoticed until TASK-036 is the proof the mechanism is missing
+
+**Rejected alternatives:** Consolidating the prose copies into pointers at CONTRACT#interfaces/task-types (loses the in-place enumerations that make the command files readable standalone, and forge-plan's fenced block would become uncopyable); leaving it `open` (it has already drifted once with no check catching it, which is Vision pillar 2's exact failure mode); extending `check-workplan.js` instead of a new test (the lint validates workplan data, not whether documentation agrees with code — wrong artifact)
+
+### 2026-08-17 — OBS-013 triaged from `open` to `accepted`
+
+OBS-013 triaged from `open` to `accepted`
+
+**Why:** TASK-073..075 were planned to remediate exactly what OBS-013 describes, but the row's Disposition was never flipped when they were planned — leaving `wp.js next`'s foundation-observation hard stop halting selection of the very tasks meant to close it
+
+**Rejected alternatives:** Leaving it `open` (self-defeating: the halt exists to force human review before continuing to build on a suspect foundation, but the review already happened at planning time when TASK-073..075 were authored); declining it (the defect it names is real and still unfixed)
+
+### 2026-08-17 — Resolves Q-005 and amends the 2026-08-14 fresh-gates row below
+
+**Resolves Q-005 and amends the 2026-08-14 fresh-gates row below.** SPEC req-checkpoint-fresh-gates now takes the completion-time baseline from task status rather than a stored result: `/forge-next` marks a task `done` only after its gate passes, so a gate failing fresh on a `done` task is the flagged regression (TASK-064)
+
+**Why:** The comparison was unimplementable as written — the Task Record Data Model defines Outcome/Decisions/Deviations/Files only, `/forge-next` writes no gate output anywhere, and tasks under the 3-line threshold have no record at all to write it to. The baseline was never actually missing, only unnamed: `done` already _is_ the record that the gate passed. Deriving it costs no new storage, no new writer, and no lint rule, and is more reliable than a stored value — `check-workplan.js` validates status, and nothing could validate a hand-written result line against what actually ran. The cost is that output drift on a still-passing gate is not mechanically flagged; the packet's actual-output reporting already puts that in front of the human
+
+**Rejected alternatives:** Adding a `## Gate` section to the Task Record Data Model plus a `Gate-result:` Notes line for inline tasks (two new writers and per-task ceremony to store a value that is already implied, and it can drift from reality in a way status cannot); dropping the comparison entirely (discards the requirement's purpose, and forces out the criterion that a span containing a regression is never summarized as clean)
+
+### 2026-08-16 — Observation backlog triaged at human direction: OBS-001/003/004/005/006/007 `accepted` and planned
+
+Observation backlog triaged at human direction: OBS-001/003/004/005/006/007 `accepted` and planned as TASK-067..071; OBS-002 and OBS-009 `declined`; OBS-008 left `open` for v0.4
+
+**Why:** First real exercise of the observation channel as a queue rather than a log. OBS-002 is already the deliverable of pending TASK-035, so planning it would duplicate a task. OBS-009 does not reproduce — `test-templates.sh` runs clean at exit 0 with no stderr noise — and planning a fix for an unreproducible defect spends a session on a guess. OBS-008 (TASK-059 absorbing TASK-033's scope) is a process-design problem needing machinery that does not exist, and it overlaps Q-006, so it belongs with the v0.4 cadence questions TASK-046 is meant to inform
+
+**Rejected alternatives:** Planning all nine (duplicates TASK-035, and spends a session on OBS-009's unreproducible defect); planning none (leaves a Contract-mandated script unprovisioned by `/forge-init`); marking OBS-008 `declined` (it is a real signal, and declining it discards the evidence Q-006 needs)
+
+### 2026-08-16 — `Data Model/Context Manifest` amended to state the requirement-heading matching rule
+
+`Data Model/Context Manifest` amended to state the requirement-heading matching rule: `### [req-slug] Name` matches reference `req-slug` on the bracketed portion alone
+
+**Why:** The rule existed only in forge-next.md prose, which is a command file and not manifest-addressable. TASK-050 extracted the shared resolver from Contract sections that never mentioned it, silently dropping it — and check-workplan.js invariant 5 then made every `SPEC#requirements/req-*` ref a hard lint error, so the SPEC manifest rule /forge-plan mandates could not be satisfied by any task. A resolution rule that lives only in a consumer is not a contract
+
+**Rejected alternatives:** Fixing lib/markdown.js alone (leaves the same gap for the next extraction); dropping the req-slug form from the Contract (breaks SPEC-to-task traceability, which is the reason SPEC# refs exist)
+
+### 2026-07-24 — SPEC becomes a first-class artifact beside CONTRACT, with `SPEC#`/`specs/name#` manifest
+
+SPEC becomes a first-class artifact beside CONTRACT, with `SPEC#`/`specs/name#` manifest refs; Contract wins on conflict
+
+**Why:** Proven reliability gain in downstream forge projects; matches 2026 SDD consensus (per-feature specs in Spec Kit/Kiro)
+
+**Rejected alternatives:** Merging spec content into CONTRACT (conflates constraints with behavior); spec as free-form doc outside the manifest system (agent never sees it)
+
+### 2026-07-24 — Workplan invariants move from command prose to a deterministic lint
+
+Workplan invariants move from command prose to a deterministic lint script (`check-workplan.js`)
+
+**Why:** Forge principle #2: deterministic enforcement over instruction-following; prerequisite for safe unattended runs
+
+**Rejected alternatives:** Keeping invariants as instructions in forge-plan/forge-next only
+
+### 2026-07-24 — `checkpoint` task type + Unattended Execution rule: auto-commit allowed on
+
+`checkpoint` task type + Unattended Execution rule: auto-commit allowed on work branches between checkpoints; human reviews the span, merges, and pushes
+
+**Why:** Per-task human review had become the bottleneck and trends toward rubber-stamping; checkpoints concentrate attention where it matters
+
+**Rejected alternatives:** Full autonomy (no quality floor); status quo per-task review (doesn't scale)
+
+### 2026-07-24 — Drift fix: `/forge-sync` + `.forge/VERSION` now; plugin packaging deferred to
+
+Drift fix: `/forge-sync` + `.forge/VERSION` now; plugin packaging deferred to investigation (TASK-041)
+
+**Why:** Sync solves today's drift without restructuring distribution; plugin conversion is a bigger contract change
+
+**Rejected alternatives:** Immediate plugin conversion (premature before sync semantics are proven)
+
+### 2026-07-24 — Relaxed stale 2025-era boundaries: sub-agent blanket ban softened, 4-command budget
+
+Relaxed stale 2025-era boundaries: sub-agent blanket ban softened, 4-command budget cap lifted (now 6 commands)
+
+**Why:** Original rationales (7x token cost, sequential subagents, command character budget) are dated per July 2026 research
+
+**Rejected alternatives:** Keeping defensive constraints whose premises expired
+
+### 2026-07-31 — v0.3's own workplan carries a single checkpoint (TASK-046, after TASK-038)
+
+v0.3's own workplan carries a single checkpoint (TASK-046, after TASK-038) rather than the mandated every-5 cadence
+
+**Why:** Bootstrap exception: checkpoint tasks are unexecutable until TASK-035 (template) and TASK-037 (forge-next packet handling) land at task 13 of 17 — an earlier checkpoint would hit forge-next's "Template file missing" hard stop. TASK-046 is the only executable position, and running it is itself the live test of the machinery. Normal cadence applies from v0.4
+
+**Rejected alternatives:** Retrofitting checkpoints across TASK-025..037 (unexecutable by construction); shipping v0.3 with no checkpoint at all (the flagship feature would go undogfooded)
+
+### 2026-08-14 — Forge gets its own hand-authored `.forge/SPEC.md`, scoped strictly to the
+
+Forge gets its own hand-authored `.forge/SPEC.md`, scoped strictly to the acceptance-criteria layer (TASK-048)
+
+**Why:** Closes the dogfooding gap left by TASK-027/028/029 — SPEC# support shipped but this project never used it; gives check-spec.js a real instance to validate against; exercises the SPEC/CONTRACT duplication risk and Q-003's split threshold here before they bite a user project
+
+**Rejected alternatives:** Generating it after `/forge-spec` ships (leaves check-spec.js validated only by synthetic fixtures); skipping it (accepts building SPEC machinery this project never dogfoods)
+
+### 2026-08-14 — Retire `forge-spec-v0.2.md` rather than update it: fold "Planning at Scale"
+
+Retire `forge-spec-v0.2.md` rather than update it: fold "Planning at Scale" into CONTRACT#rules, repoint README, archive the rest (TASK-049)
+
+**Why:** A narrative spec doc alongside CONTRACT.md and README.md is a third source of truth about one system — and it is the one that already drifted two versions. Maintaining it by hand reproduces, inside this repo, the drift problem v0.3 exists to solve
+
+**Rejected alternatives:** Rewriting as forge-spec-v0.3.md (three documents to hand-sync forever); leaving it stale (README keeps pointing at a system that no longer exists)
+
+### 2026-08-14 — Factory-model prework limited to three items that pay for themselves
+
+Factory-model prework limited to three items that pay for themselves in v0.3 (TASK-050 resolver extraction, TASK-051 ASSUMED triage, TASK-052 node-schema investigation); no node schema, generic runner, item catalog, or plant graph built now
+
+**Why:** Each of the three is justified on present-tense grounds — real triplication of markdown resolution, a real 18-marker assumption backlog, and a cheap go/no-go test. Building the abstraction itself before TASK-052 validates it is exactly the abstraction-bloat failure mode Forge exists to prevent
+
+**Rejected alternatives:** Building the node schema and generic runner now (unvalidated model, large blast radius); adding nothing (leaves the resolver triplication to become a fourth copy in check-spec.js)
+
+### 2026-08-14 — VISION pillar 6 now names the optimization target explicitly: correct
+
+VISION pillar 6 now names the optimization target explicitly: correct decisions per unit of human attention, never throughput
+
+**Why:** v0.3 shipped checkpoints and unattended execution, both throughput-increasing; the factory framing pulls hard toward items/minute. Naming the right metric in the highest-visibility artifact is cheap insurance against v0.4 optimizing the wrong quantity
+
+**Rejected alternatives:** Logging it only as a STATUS risk (too easy to lose); leaving it implicit in pillar 6 (the sim-game framing would override an implication)
+
+### 2026-08-14 — Observation channel routes through `/forge-next`, not `/forge-plan`: foundation-severity rows sur…
+
+Observation channel routes through `/forge-next`, not `/forge-plan`: foundation-severity rows surface at session start and halt unattended loops
+
+**Why:** `/forge-plan` runs at project start and occasionally thereafter; the working cadence is chaining `/forge-next` until something stops. Routing observations to a rarely-invoked command leaves them unread for weeks — the loop would not actually close. `/forge-next` is the command that runs every session
+
+**Rejected alternatives:** `/forge-plan` as primary consumer (unread for weeks); checkpoint-only triage (checkpoints are themselves inserted by `/forge-plan`, same problem)
+
+### 2026-08-14 — Observations governed by an in-scope fix test, not a blanket
+
+Observations governed by an in-scope fix test, not a blanket "do not act" prohibition: fix it if the task's gate covers it and it belongs in the diff, otherwise log one line
+
+**Why:** A prohibition pushes agents to write memos instead of one-line fixes, spawning clarify/investigate tasks that become an analysis quagmire. The channel exists to capture what would otherwise be lost, not to intercept what would otherwise be fixed
+
+**Rejected alternatives:** Blanket "record, never act" (bureaucratic paralysis); no guidance at all (scope creep returns)
+
+### 2026-08-14 — Anti-ceremony constraints on observations: one line each, no auto-spawned tasks
+
+Anti-ceremony constraints on observations: one line each, no auto-spawned tasks, and more than 3 observations from one task collapse into a single `foundation` row
+
+**Why:** Volume of small complaints is itself the signal that the foundation is wrong; recording them as volume buries the signal and floods the checkpoint packet
+
+**Rejected alternatives:** Unlimited observations per task (spam, signal loss); allowing agents to promote observations into tasks directly (unreviewed work entering the DAG without Contract coverage)
+
+### 2026-08-14 — WORKPLAN.md growth left unaddressed in v0.3 despite measuring 552 lines
+
+WORKPLAN.md growth left unaddressed in v0.3 despite measuring 552 lines / ~14K tokens read in full by all three working commands
+
+**Why:** At ~7% of the context window it is tolerable, and every fix (notes compaction, span archival, per-task note files) carries design cost better spent after checkpoints have run once. Revisit when it hurts
+
+**Rejected alternatives:** Notes compaction now; span archival at checkpoint boundaries now (designed before any checkpoint has executed); per-task note files (adds indirection at the active task's continuity notes, the one place it must not fail)
+
+### 2026-08-14 — Supersedes the 2026-08-14 "leave it for now" call on WORKPLAN growth
+
+**Supersedes the 2026-08-14 "leave it for now" call on WORKPLAN growth.** Field measurement on a live work project: 2,177 lines / 481 KB / ~120K tokens across 67 tasks, read in full every session
+
+**Why:** The earlier decision was made against this repo's 552-line workplan at ~7% of the window. At 120K tokens the workplan consumes ~60% of the context window before any work begins, and effective context degrades well before the advertised limit. The earlier call was wrong on the data available now
+
+**Rejected alternatives:** Continuing to defer (actively degrading a live project every session, including the sessions building the rest of v0.3)
+
+### 2026-08-14 — Two-layer fix: externalize task records to `.forge/notes/TASK-XXX.md`, and add `wp.js`
+
+Two-layer fix: externalize task records to `.forge/notes/TASK-XXX.md`, and add `wp.js` so `/forge-next` and `/forge-status` project instead of reading in full (TASK-056..060, sequenced ahead of all other v0.3 work)
+
+**Why:** WORKPLAN.md conflates the DAG (small, needed every session) with the record (large, needed rarely), and is the only Forge artifact with no access discipline — CONTRACT, SPEC, UX, DESIGN have been manifest-scoped from the start. Externalization alone gets ~120K to ~33K; projection gets it to ~1-2K, because task selection is fully deterministic and belongs in a script per Vision pillar 2
+
+**Rejected alternatives:** Externalization alone (~33K still 16% of window); projection alone (a selected task with a large investigate record still dumps it all into context); span archival (redundant once projection lands, and adds archived-ID handling to the lint)
+
+### 2026-08-14 — Externalized records leave a one-line **summary plus** path in the
+
+Externalized records leave a one-line **summary plus** path in the workplan, never a bare pointer; cross-task record access is declared in the Context manifest as `notes/TASK-XXX#section`
+
+**Why:** Any indirection is a step an agent may skip. A bare pointer forces a bad choice — always open it (no savings) or never (information lost). A summary naming the record's contents lets the agent judge without opening, which is progressive disclosure, the same principle as context manifests. Declaring genuine dependencies in the manifest makes them lint-validated rather than left to initiative
+
+**Rejected alternatives:** Bare pointers (relocates the problem); keeping records inline (the problem being solved); relying on agents to go looking (the failure mode raised in review)
+
+### 2026-08-14 — Task records must be self-sufficient without git; `CONTRACT#rules/traceability` amended with
+
+Task records must be self-sufficient without git; `CONTRACT#rules/traceability` amended with a Git-optional clause
+
+**Why:** The rule silently assumed `.forge/` is committed. Forge runs locally against work repos whose `.forge/` is never committed, where `git log --grep="TASK-XXX"` retrieves nothing and the record is the only archaeological artifact. The originally proposed fix — compact notes into commit bodies — was architecturally dead for that setup
+
+**Rejected alternatives:** Commit-body storage (inert where forge files are uncommitted); requiring `.forge/` be committed (not the user's call to make, and often prohibited)
+
+### 2026-08-14 — `/forge-spec` intake bar is adaptive (SPEC req-intake-coverage, TASK-048): every category
+
+`/forge-spec` intake bar is adaptive (SPEC req-intake-coverage, TASK-048): every category must be covered, but a question is skipped when the input already answers it; a draft is disqualified only by a plan-blocking unknown neither asked nor annotated
+
+**Why:** Strict checklists force ceremony questions on well-specified input; judgment-call interviewing is untestable and cannot mechanically disqualify a draft
+
+**Rejected alternatives:** Strict per-category checklist (ceremony); no fixed categories (untestable)
+
+### 2026-08-14 — Mid-span course corrections are direct WORKPLAN.md/STATUS.md edits plus a mandatory
+
+Mid-span course corrections are direct WORKPLAN.md/STATUS.md edits plus a mandatory dated Decisions row (SPEC req-unattended-correction, TASK-048)
+
+**Why:** Direct edits keep correction friction near zero; the Decisions row keeps the redirect reviewable in the checkpoint packet instead of invisible
+
+**Rejected alternatives:** Free edits with no record (invisible redirects at review); checkpoint-only corrections (wastes salvageable partial work)
+
+### 2026-08-14 — Checkpoint packets re-run every automated gate in the span fresh
+
+Checkpoint packets re-run every automated gate in the span fresh, flagging regressions against completion-time results (SPEC req-checkpoint-fresh-gates, TASK-048)
+
+**Why:** A later task in the span can silently break an earlier task's gate; recorded results alone cannot show it
+
+**Rejected alternatives:** Recorded-only results (stale evidence); hybrid final-gate-plus-test-suite (relies on the suite catching cross-task breakage)
+
+### 2026-08-15 — `Rules/Traceability` amended to branch on the externalization threshold: inline tasks
+
+`Rules/Traceability` amended to branch on the externalization threshold: inline tasks keep the `Files` line in Notes, externalized tasks put the list in the record's `## Files` and never duplicate it inline; `Rules/Checkpoint Cadence` updated to match
+
+**Why:** Confirms the deviation TASK-057 took mid-execution, converting an undocumented implementation call into a Contract decision. The deciding argument is non-duplication of a mechanically-derived list, not token savings — measured, the `Files` lines are only 4.5% of this repo's 72KB workplan, so the bloat rationale cited in the TASK-057 record was overstated
+
+**Rejected alternatives:** Always-inline `Files` line (single grep target and no drift, but reverts part of forge-next.md and contradicts the more specific Task Record Data Model); duplicating the list in both places (two copies of derived data, drifts on any hand-edit)
+
+## Risks
+
+| Risk                                                                                           | Impact                                                     | Mitigation                                                                                                                |
+| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Unattended spans amplify weak gates — a permissive gate ships 5 tasks of bad work instead of 1 | Bad code reaches checkpoint review, wasting a span         | Workplan lint invariant #6 (feature/fix gates must invoke tests); checkpoint packet shows gate output, not just pass/fail |
+| SPEC/CONTRACT duplication creeps in over time                                                  | Two sources of truth; agent follows whichever it read last | Spec Precedence rule; `/forge-plan` completeness check spans both; conflicts become clarify tasks                         |
+| STATUS.md goes stale if nothing reads it                                                       | Dead artifact, wasted ceremony                             | Mandatory integrations: forge-status surfaces it, checkpoints embed it, clarify tasks write to it                         |
+
+## Blockers
+
+| Blocker | Blocking tasks | Needs |
+| ------- | ---------- | --------- | ------ | ---------- | ----------- | ----------- |
+
+## Observations
+
+| ID      | Date       | Raised by | Kind   | Severity   | Observation | Disposition |
+| ------- | ---------- | --------- | ------ | ---------- | ----------- | ----------- |
+| OBS-001 | 2026-08-16 | TASK-031  | design | normal     | CONTRACT#interfaces/command-forge-init describes the STATUS.md stub as four tables, omitting Observations, which the Data Model requires and check-workplan.js resolves.                                                                                                                                                            | closed      |
+| OBS-002 | 2026-08-16 | TASK-031  | design | normal     | forge-init.md step 5 creates 6 templates; CONTRACT#interfaces/command-forge-init names 7 unconditional templates — checkpoint.md is never created.                                                                                                                                                                                  | declined    |
+| OBS-003 | 2026-08-16 | TASK-054  | design | normal     | forge-init.md's embedded template bodies have drifted from .forge/templates/ and, unlike the script payloads, carry no forge-init:embed marker, so only the fields a test names are kept in sync.                                                                                                                                   | closed |
+| OBS-004 | 2026-08-16 | TASK-055  | design | normal     | CONTRACT#interfaces/command-forge-plan's Reads line annotates STATUS.md as "blocking open questions" only, though its own Does line requires Observations intake from the same file.                                                                                                                                                | closed      |
+| OBS-005 | 2026-08-16 | TASK-060  | scope  | normal     | migrate-notes.js is not embedded in forge-init.md alongside the other four scripts, so a project scaffolded by forge-init never receives the migration tool it will eventually need.                                                                                                                                                | closed |
+| OBS-006 | 2026-08-16 | TASK-032  | design | normal     | TASK-032's manifest carries only CONTRACT# refs though SPEC req-intake-coverage and req-intake-disqualification govern its deliverable directly — the SPEC manifest rule /forge-plan mandates was not applied to this task.                                                                                                         | closed |
+| OBS-007 | 2026-08-16 | TASK-032  | design | normal     | CONTRACT#interfaces/command-forge-spec mandates UNRESOLVED annotations and a plain check-spec.js run, but the script fails on any unresolved marker unless --max-unresolved is passed; the reconciliation exists only in forge-spec.md prose.                                                                                       | closed      |
+| OBS-008 | 2026-08-16 | TASK-033  | scope  | normal     | TASK-059's forge-status.md rewrite already contained TASK-033's whole deliverable, so this task's gate passed before any work began — a prior task absorbed a later one's scope with no workplan signal.                                                                                                                            | open        |
+| OBS-009 | 2026-08-16 | TASK-033  | bug    | normal     | smoke.sh emits ~22 `Aborted` stderr lines per run, which would mask a real failure in an unattended run; re-diagnosed 2026-08-17 as a defective local `grep` aborting once per spawn — not SIGPIPE, not the `printf` pipe — so the remedy is environmental and no test-code edit applies (see Decisions).                           | closed      |
+| OBS-010 | 2026-08-17 | TASK-064  | design | normal     | A clarify gate of the form `grep -q "<topic>" .forge/STATUS.md` is satisfied by the Open Questions row that raised the topic, so it passes before the question is answered — third vacuous-gate instance after OBS-008 and TASK-034.                                                                                                | duplicate:OBS-013 |
+| OBS-011 | 2026-08-17 | TASK-035  | bug    | normal     | forge-init.md's closing "files created" list names `.forge/scripts/lib/markdown.js` and `.forge/scripts/check-workplan.js` twice each, so the list no longer matches what the command actually creates.                                                                                                                             | closed      |
+| OBS-012 | 2026-08-17 | TASK-036  | design | normal     | The task-type enum is restated in four places (CONTRACT#interfaces/task-types, forge-plan.md's table, forge-plan.md's fenced task format, check-workplan.js) and `checkpoint` had silently drifted out of forge-plan.md's table with no check catching it.                                                                          | closed |
+| OBS-013 | 2026-08-17 | TASK-037  | design | foundation | TASK-037's `grep -qi "checkpoint" .claude/commands/forge-next.md` passed before any work — fourth vacuous-gate instance (OBS-008, OBS-010, TASK-034), and /forge-plan's gate-authoring rule that produces them is still unchanged, so every task arrives with a gate that may certify nothing.                                      | closed |
+| OBS-014 | 2026-08-17 | TASK-038  | bug    | normal     | CONTRACT#interfaces/command-forge-init requires `/forge-init` to create `.forge/VERSION` if absent, but forge-init.md contains no VERSION step at all — so a newly scaffolded project has no stamp and `/forge-sync` stops at step 1.                                                                                               | closed |
+| OBS-015 | 2026-08-17 | TASK-038  | design | normal     | The sync globs in CONTRACT#interfaces/command-forge-sync cover three file classes, but the Artifacts table marks wp.js, prose.js, lib/markdown.js, lib/workplan.js, migrate-notes.js and the three guard-\*.sh scripts Forge-managed too — none of them can ever be synced, so drift in the workplan projection layer is permanent. | closed |
+| OBS-016 | 2026-08-17 | TASK-047  | bug    | normal     | forge-init.md still embeds no payload for `check-spec.js` or `prose.js`, though CONTRACT#interfaces/command-forge-init names both among the seven unconditional scripts — unlike migrate-notes.js (OBS-005) these are live gate dependencies, so a scaffolded project's smoke gate and `/forge-spec` fail on first run.             | closed |
+| OBS-017 | 2026-08-17 | TASK-067  | design | normal     | TASK-067's gate clause `test $(grep -c "^| 2026-" .forge/STATUS.md) -gt 24` was already satisfied by the 33 pre-existing dated rows, so it asserted nothing about the row this task adds — a fourth vacuous-gate instance after OBS-010's three. | open        |
+| OBS-018 | 2026-08-19 | TASK-068  | design | foundation | **Four** (not five — see 2026-08-19 Decisions) workplan gates assert a `grep -c` count of dated STATUS.md rows against absolute thresholds of 8, 21, 24 and 24 — all below the current 35, so every remaining Decisions-row assertion is already satisfied and none can now fail; sixth instance after OBS-017, and the form decays into vacuity by construction as the table grows. | closed |
+| OBS-019 | 2026-08-30 | TASK-046  | bug    | normal     | On win32, spawning `bash` from a non-bash parent resolves to WSL's System32 relay (CreateProcess search order), so wp.js's gate probe reads every gate as failing pre-work and never refuses — found when the checkpoint's span re-run hit the same resolution from Python. | closed |
+| OBS-020 | 2026-08-31 | TASK-039 | design | normal | check-workplan.js hasTestInvocation recognizes test-*.sh and tests/ but not a root-level test.sh or ./test.sh, so a project using that common convention cannot satisfy invariant 6 without renaming its runner. | closed |

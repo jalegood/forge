@@ -1,0 +1,175 @@
+#!/usr/bin/env node
+// check-status.js — validate .forge/STATUS.md invariants (CONTRACT#rules/status-lint)
+// Usage: node .forge/scripts/check-status.js [path]
+//
+// STATUS.md is the one artifact the Contract explicitly invites the human to
+// hand-edit, and the only one whose malformed rows are read by a mechanical
+// hard stop — a dropped Observations row is indistinguishable from an absent
+// one, and at foundation severity it disables the pipeline's one hard stop
+// while every report shows a clear queue. So: every table's columns must match
+// the Data Model skeleton, every row must parse to exactly that column count
+// (an error, never a skipped row), and the Observations enums and lifecycle
+// links must hold.
+//
+// Exit codes (CONTRACT#interfaces/script-exit-codes): 0 success (warnings may
+// print), 1 validation failure or usage error.
+
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const { parseTable, findRoot } = require('./lib/markdown');
+const { readWorkplan } = require('./lib/workplan');
+
+const ROOT = findRoot();
+const statusPath = process.argv[2] || path.join(ROOT, '.forge', 'STATUS.md');
+
+// The Data Model skeleton's columns, in order (CONTRACT#data-model/status.md-data-model).
+const SCHEMAS = {
+  'Open Questions': ['ID', 'Question', 'Blocking?', 'Raised'],
+  'Risks': ['Risk', 'Impact', 'Mitigation'],
+  'Blockers': ['Blocker', 'Blocking tasks', 'Needs'],
+  'Observations': ['ID', 'Date', 'Raised by', 'Kind', 'Severity', 'Observation', 'Disposition'],
+};
+// Column-list separator for the order comparison below. It is a NUL because no
+// column name can contain one, so joining on it cannot make ['a b'] and
+// ['a','b'] compare equal the way a space would. Written as an ESCAPE, never as
+// a literal byte: a literal NUL makes git classify this file as binary, which
+// costs the project's own linter its diff, its blame, and its review.
+const SEP = '\u0000';
+
+const KINDS = new Set(['design', 'bug', 'scope', 'friction']);
+const SEVERITIES = new Set(['normal', 'foundation']);
+const TERMINAL_DISPOSITIONS = new Set(['open', 'accepted', 'declined', 'closed']);
+
+// An accepted row with no task link is a triage backlog, not a malformed
+// artifact — warn, don't block. "Older than one checkpoint span" is
+// operationalized as 7 days: the cadence is 5 tasks and a task is a session,
+// so a week-old accepted row has outlived any plausible span.
+const ACCEPTED_AGE_WARN_DAYS = 7;
+
+const errors = [];
+const warnings = [];
+
+if (!fs.existsSync(statusPath)) {
+  console.error(`check-status.js: ${statusPath} not found.`);
+  process.exit(1);
+}
+const text = fs.readFileSync(statusPath, 'utf8').replace(/\r\n/g, '\n');
+
+// Split into top-level sections, fence-aware.
+function sections(md) {
+  const out = {};
+  let name = null;
+  let buf = [];
+  let inFence = false;
+  for (const line of md.split('\n')) {
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
+    const h = !inFence && /^## (.+)$/.exec(line);
+    if (h) {
+      if (name) out[name] = buf.join('\n');
+      name = h[1].trim();
+      buf = [];
+      continue;
+    }
+    buf.push(line);
+  }
+  if (name) out[name] = buf.join('\n');
+  return out;
+}
+
+const secs = sections(text);
+
+// 1 + 2: every table present has the skeleton's columns in order, and every
+// row parses to exactly that count.
+for (const [secName, columns] of Object.entries(SCHEMAS)) {
+  if (!(secName in secs)) continue; // a missing section is not this lint's call
+  const body = secs[secName];
+  if (!/^\s*\|/m.test(body)) continue; // empty section, no table yet
+  const t = parseTable(body);
+  for (const e of t.errors) {
+    errors.push(`${secName}: line ${e.lineNumber} of section — ${e.reason}\n    ${e.line.trim().slice(0, 120)}`);
+  }
+  if (t.columns.length && t.columns.join(SEP) !== columns.join(SEP)) {
+    errors.push(`${secName}: columns are [${t.columns.join(' | ')}], the Data Model requires [${columns.join(' | ')}] in that order`);
+  }
+  secs['__' + secName] = t; // stash the parse for the checks below
+}
+
+// Decisions: dated sections, not a table (since TASK-093).
+if ('Decisions' in secs) {
+  if (/^\s*\|/m.test(secs['Decisions'])) {
+    errors.push('Decisions: contains table rows — decisions are dated sections (### YYYY-MM-DD — Title) since TASK-093');
+  }
+  let inFence = false;
+  for (const line of secs['Decisions'].split('\n')) {
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
+    if (inFence) continue;
+    if (/^### /.test(line) && !/^### \d{4}-\d{2}-\d{2} — .+$/.test(line)) {
+      errors.push(`Decisions: heading does not match "### YYYY-MM-DD — Title": ${line.trim().slice(0, 90)}`);
+    }
+  }
+}
+
+// 3 + 4 + 5: Observations enums, ID discipline, link integrity, accepted age.
+const obs = secs['__Observations'];
+if (obs && obs.rows.length) {
+  const ids = obs.rows.map(r => r.cells['ID']);
+  const idSet = new Set();
+  let prevNum = 0;
+  const wpTasks = (() => {
+    const wp = readWorkplan(ROOT);
+    return wp ? new Set(wp.tasks.map(t => t.id)) : new Set();
+  })();
+  const byId = new Map(obs.rows.map(r => [r.cells['ID'], r.cells]));
+
+  for (const r of obs.rows) {
+    const c = r.cells;
+    const id = c['ID'];
+    if (!/^OBS-\d+$/.test(id)) errors.push(`Observations ${id}: ID does not match OBS-XXX`);
+    if (idSet.has(id)) errors.push(`Observations ${id}: duplicate ID`);
+    idSet.add(id);
+    const num = Number(id.replace('OBS-', ''));
+    if (num <= prevNum) errors.push(`Observations ${id}: IDs must be monotonic (follows OBS-${String(prevNum).padStart(3, '0')})`);
+    prevNum = num;
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(c['Date'])) errors.push(`Observations ${id}: Date "${c['Date']}" is not an ISO date`);
+    if (!KINDS.has(c['Kind'])) errors.push(`Observations ${id}: Kind "${c['Kind']}" is not one of ${[...KINDS].join('/')}`);
+    if (!SEVERITIES.has(c['Severity'])) errors.push(`Observations ${id}: Severity "${c['Severity']}" is not normal|foundation`);
+
+    const d = c['Disposition'];
+    const planned = /^planned:(TASK-\d+)$/.exec(d);
+    const dup = /^duplicate:(OBS-\d+)$/.exec(d);
+    if (!TERMINAL_DISPOSITIONS.has(d) && !planned && !dup) {
+      errors.push(`Observations ${id}: Disposition "${d}" is not a lifecycle value`);
+    }
+    if (planned && !wpTasks.has(planned[1])) {
+      errors.push(`Observations ${id}: planned:${planned[1]} names a task that does not exist in WORKPLAN.md`);
+    }
+    if (dup) {
+      const target = byId.get(dup[1]);
+      if (!target) errors.push(`Observations ${id}: duplicate:${dup[1]} names a row that does not exist`);
+      else if (/^duplicate:/.test(target['Disposition'])) {
+        errors.push(`Observations ${id}: duplicate:${dup[1]} points at a row that is itself a duplicate:`);
+      }
+    }
+    if (d === 'accepted' && /^\d{4}-\d{2}-\d{2}$/.test(c['Date'])) {
+      // Local midnight, no trailing Z — matches how obs.js stamps the Date
+      // column. A UTC parse here against a local stamp reports an age one day
+      // off for part of every day.
+      const age = Math.floor((Date.now() - new Date(c['Date'] + 'T00:00:00')) / 86400000);
+      if (age > ACCEPTED_AGE_WARN_DAYS) {
+        warnings.push(`Observations ${id}: accepted for ${age} days with no task link — awaiting planning`);
+      }
+    }
+  }
+}
+
+for (const w of warnings) console.log(`warning: ${w}`);
+if (errors.length) {
+  for (const e of errors) console.error(`error: ${e}`);
+  console.error(`\ncheck-status.js: ${errors.length} error(s) in ${statusPath}.`);
+  process.exit(1);
+}
+console.log(`STATUS.md validation passed (${warnings.length} warning(s)).`);
+process.exit(0);

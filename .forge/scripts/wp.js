@@ -1,0 +1,552 @@
+#!/usr/bin/env node
+// wp.js — deterministic WORKPLAN.md projection and mutation
+// (CONTRACT#rules/workplan-access-discipline)
+//
+// Usage:
+//   node .forge/scripts/wp.js next [TASK-XXX] [--json]
+//   node .forge/scripts/wp.js get TASK-XXX [--json]
+//   node .forge/scripts/wp.js status [--json]
+//   node .forge/scripts/wp.js set TASK-XXX <field> <value> [--force]
+//   node .forge/scripts/wp.js append-notes TASK-XXX <text>
+//
+// Why this exists: task selection is entirely deterministic — unblocked-ness,
+// dependency satisfaction, active-task resume, explicit-ID override — so it
+// belongs in a script rather than in an agent's context window (Vision pillar
+// 2). `/forge-next` and `/forge-status` call this instead of reading
+// WORKPLAN.md in full; a 2,000-line workplan then never enters context, and the
+// per-session cost drops to the selected task alone.
+//
+// Format boundary: WORKPLAN.md stays plain, hand-editable markdown. Every
+// mutation here rewrites exactly the field lines it targets, leaves the rest of
+// the file byte-identical, and is re-linted with check-workplan.js before it is
+// allowed to stand — a mutation that fails the lint is reverted, not left on
+// disk.
+//
+// Exit codes (CONTRACT#interfaces/script-exit-codes): 0 success · 1 usage or
+// validation error · 2 nothing to select · 3 foundation-observation halt · 4
+// gate-discrimination probe refusal.
+
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+
+const {
+  VALID_STATUSES,
+  VALID_TYPES,
+  VALID_TRANSITIONS,
+  FIELD_NAMES,
+  readWorkplan,
+  dependsList,
+  contextList,
+  unmetDeps,
+  selectTask,
+  setField,
+  appendNotes,
+} = require('./lib/workplan');
+const { createLoader, resolveRef, findRoot, parseTable } = require('./lib/markdown');
+
+// Nearest ancestor of the working directory holding .forge/, falling back to
+// the installed location — works from a subdirectory and by absolute path
+// (TASK-072).
+const ROOT = findRoot();
+
+const USAGE = `usage: node .forge/scripts/wp.js <command>
+
+  next [TASK-XXX] [--force] [--json]
+                               select the task to execute and emit its fields;
+                               exits 2 when there is nothing to select, and
+                               halts (exit 3) while an open foundation-severity
+                               observation exists, unless --force
+  get TASK-XXX [--json]        emit one task's fields
+  status [--json]              counts, next unblocked task, clarify tasks, open observations
+  graph [--json] [--mermaid]   the DAG as nodes and edges, with each task's
+                               depth, startable-now flag, and fan-in/out
+  set TASK-XXX <field> <value> [--force]
+                               set Status, Type, Depends, Context, Gate, or Notes;
+                               pending -> active runs the task's gate first and
+                               refuses (exit 4) a gate that already passes
+                               pre-work (CONTRACT#rules/gate-discrimination)
+  append-notes TASK-XXX <text> append a line to a task's Notes field
+
+Exit codes follow CONTRACT#interfaces/script-exit-codes: 0 success, 1 usage or
+validation error, 2 nothing to select, 3 foundation-observation halt, 4
+gate-discrimination probe refusal.`;
+
+function die(message, code) {
+  console.error(`wp.js: ${message}`);
+  process.exit(code === undefined ? 1 : code);
+}
+
+// Locate the bash that gates actually run under (OBS-019, TASK-098). On win32
+// a bare spawnSync('bash') resolves through CreateProcess, which searches
+// System32 ahead of PATH-shell order and finds WSL's relay from any non-bash
+// parent — the relay exits 1, and the probe would silently read every gate as
+// "fails pre-work", never refusing. FORGE_BASH overrides; the Git-for-Windows
+// install locations come next; PATH `bash` is the non-win32 answer and the
+// last resort. A wrong-but-loud result stays loud via the existing
+// probe.error path.
+function resolveBash() {
+  if (process.env.FORGE_BASH) return process.env.FORGE_BASH;
+  if (process.platform === 'win32') {
+    const candidates = [
+      'C:\\Program Files\\Git\\usr\\bin\\bash.exe',
+      'C:\\Program Files\\Git\\bin\\bash.exe',
+      'C:\\Program Files (x86)\\Git\\usr\\bin\\bash.exe',
+    ];
+    for (const c of candidates) {
+      if (fs.existsSync(c)) return c;
+    }
+  }
+  return 'bash';
+}
+
+function loadWorkplan() {
+  const wp = readWorkplan(ROOT);
+  if (!wp) die('.forge/WORKPLAN.md not found. Run /forge-plan to generate one.');
+  if (wp.tasks.length === 0) die('no tasks found in .forge/WORKPLAN.md. Run /forge-plan to generate one.');
+  return wp;
+}
+
+// --- Rendering ---
+
+function taskJson(task) {
+  return {
+    id: task.id,
+    description: task.description,
+    status: task.status,
+    type: task.type,
+    depends: dependsList(task),
+    context: contextList(task),
+    gate: task.gate,
+    notes: task.notes || '',
+  };
+}
+
+// Notes come last and are printed verbatim, so a multi-line value needs no
+// escaping and the reader never has to guess where the field ends.
+function printTask(task, selection, warnings) {
+  console.log(`Task: ${task.id} — ${task.description}`);
+  if (selection) console.log(`Selection: ${selection}`);
+  console.log(`Status: ${task.status}`);
+  console.log(`Type: ${task.type}`);
+  console.log(`Depends: ${task.depends}`);
+  console.log(`Context: ${task.contextRaw}`);
+  console.log(`Gate: ${task.gate}`);
+  for (const w of warnings || []) console.log(`Warning: ${w}`);
+  console.log('Notes:');
+  console.log(task.notes && task.notes.trim() ? task.notes : '(none)');
+}
+
+// --- STATUS.md observations ---
+// Reads the Observations table (CONTRACT#data-model/status-md-data-model) and
+// returns open rows, foundation severity first. Missing file or missing section
+// is normal, not an error — STATUS.md is optional.
+
+function readObservations() {
+  const loadFile = createLoader(path.join(ROOT, '.forge'));
+  const result = resolveRef('STATUS#observations', loadFile);
+  if (!result.ok) return [];
+
+  // Header-keyed, never positional (CONTRACT#data-model/markdown-table-parsing):
+  // the Date column landed after this reader existed, and a positional read
+  // would have silently shifted every cell — reading Kind as Severity and
+  // never matching 'open', which disarms the foundation halt while every
+  // report shows a clear queue. Keying by column name also keeps the six-column
+  // fixtures in test-wp.sh valid: they simply have no Date cell.
+  const t = parseTable(result.section);
+  if (!t.ok) {
+    // Fail closed. A malformed row may BE the open foundation row; proceeding
+    // as if the queue were clear is the exact failure the lint exists to stop.
+    const detail = t.errors.map(e => `  ${e.reason}`).join('\n');
+    die(`STATUS.md Observations table is malformed — a dropped row could hide a foundation halt.\n${detail}\nFix the table (node .forge/scripts/check-status.js shows every problem) and retry.`);
+  }
+
+  const rows = [];
+  for (const r of t.rows) {
+    const c = r.cells;
+    const disposition = (c['Disposition'] || '');
+    if (disposition.toLowerCase() !== 'open') continue;
+    rows.push({
+      id: c['ID'] || '',
+      date: c['Date'] || '',
+      raisedBy: c['Raised by'] || '',
+      kind: c['Kind'] || '',
+      severity: (c['Severity'] || '').toLowerCase(),
+      observation: c['Observation'] || '',
+      disposition,
+    });
+  }
+
+  // foundation first — the severity that means "stop and reconsider" must not
+  // be buried under routine friction rows.
+  return rows.sort((a, b) => {
+    const rank = s => (s === 'foundation' ? 0 : 1);
+    return rank(a.severity) - rank(b.severity);
+  });
+}
+
+// --- Commands ---
+
+function cmdNext(args, json) {
+  const force = args.includes('--force');
+  const rest = args.filter(a => a !== '--force');
+  const requestedId = rest.find(a => /^TASK-\d+$/i.test(a));
+  if (rest.some(a => !/^TASK-\d+$/i.test(a))) {
+    die(`unexpected argument for next: ${rest.find(a => !/^TASK-\d+$/i.test(a))}`);
+  }
+  const wp = loadWorkplan();
+  const result = selectTask(wp, requestedId ? requestedId.toUpperCase() : null);
+
+  if (!result.ok) {
+    if (json) {
+      console.log(JSON.stringify({ ok: false, error: result.error }, null, 2));
+      process.exit(result.code);
+    }
+    die(result.error, result.code);
+  }
+
+  // CONTRACT#rules/unattended-execution rule 4: an open foundation-severity
+  // observation halts the loop, mechanically rather than advisorily. This is
+  // the one hard stop an agent must trigger against its own momentum, so it
+  // cannot rest on the agent reading its own warning.
+  //
+  // Resume is exempt on purpose — the contract has the current task finish
+  // cleanly first, so refusal covers new work only. The designed exit is the
+  // human triaging the row off `open`; --force is the deliberate override, and
+  // agents do not pass it.
+  if (result.selection !== 'resume-active' && !force) {
+    const blocking = readObservations().filter(o => o.severity === 'foundation');
+    if (blocking.length) {
+      const rows = blocking.map(o => `  - ${o.id} (${o.raisedBy}, ${o.kind}) — ${o.observation}`).join('\n');
+      const message =
+        `halted: ${blocking.length} open foundation-severity observation${blocking.length > 1 ? 's' : ''} ` +
+        `(CONTRACT#rules/unattended-execution, hard stop 4).\n${rows}\n` +
+        'The spec, contract, or approach is suspect and continuing to build compounds debt. ' +
+        'A human triages these — set the Disposition to accepted or declined in STATUS.md — ' +
+        'or re-runs with --force to continue anyway.';
+      if (json) {
+        console.log(JSON.stringify({ ok: false, error: message, halted: 'foundation-observation', observations: blocking }, null, 2));
+        process.exit(3);
+      }
+      die(message, 3);
+    }
+  }
+
+  if (json) {
+    console.log(JSON.stringify({
+      ok: true,
+      selection: result.selection,
+      warnings: result.warnings,
+      task: taskJson(result.task),
+    }, null, 2));
+  } else {
+    printTask(result.task, result.selection, result.warnings);
+  }
+}
+
+function cmdGet(args, json) {
+  const id = args[0];
+  if (!id) die('get requires a task ID.\n\n' + USAGE);
+  const wp = loadWorkplan();
+  const task = wp.taskById.get(id.toUpperCase());
+  if (!task) die(`${id} not found in WORKPLAN.md.`);
+
+  if (json) console.log(JSON.stringify({ ok: true, task: taskJson(task) }, null, 2));
+  else printTask(task, null, []);
+}
+
+// --- Graph projection ---
+// The DAG's data model, emitted once and consumed by every later layer
+// (graph-aware /forge-status today, a rendered view later). Projection only:
+// no state, no mutation, no opinion about what the reader should do with it.
+//
+// Depth is the longest path to a node, not the shortest: a task is reachable
+// only after its slowest dependency chain completes, so the shortest path
+// would report work as startable earlier than it is.
+function buildGraph(wp) {
+  const { tasks, taskById } = wp;
+  const nodes = tasks.map(t => ({
+    id: t.id,
+    description: t.description,
+    status: t.status,
+    type: t.type,
+    depends: dependsList(t),
+  }));
+  const edges = [];
+  for (const n of nodes) {
+    for (const d of n.depends) edges.push({ from: d, to: n.id });
+  }
+
+  const depthCache = new Map();
+  function depth(id, seen) {
+    if (depthCache.has(id)) return depthCache.get(id);
+    const t = taskById.get(id);
+    if (!t) return 0;
+    const deps = dependsList(t);
+    // A cycle is a lint error (check-workplan.js invariant 3); guard anyway so
+    // a broken workplan produces a report rather than a stack overflow.
+    if (seen.has(id)) return 0;
+    seen.add(id);
+    const d = deps.length ? 1 + Math.max(...deps.map(x => depth(x, seen))) : 1;
+    seen.delete(id);
+    depthCache.set(id, d);
+    return d;
+  }
+
+  const done = new Set(tasks.filter(t => t.status === 'done').map(t => t.id));
+  for (const n of nodes) {
+    n.depth = depth(n.id, new Set());
+    // Startable = the same unblocked-ness rule selection applies, so the graph
+    // and `next` can never disagree about what is available.
+    n.startable = n.status === 'pending' && n.depends.every(d => done.has(d));
+    n.fanIn = n.depends.length;
+    n.fanOut = nodes.filter(m => m.depends.includes(n.id)).length;
+  }
+  return { nodes, edges };
+}
+
+function cmdGraph(args, json) {
+  const mermaid = args.includes('--mermaid');
+  const wp = loadWorkplan();
+  const { nodes, edges } = buildGraph(wp);
+
+  if (mermaid) {
+    // Mermaid renders in GitHub, in terminal-adjacent tooling, and unchanged
+    // inside an HTML page — a picture for zero rendering code.
+    const shape = n =>
+      n.status === 'done' ? `${n.id}["${n.id} ✓"]`
+      : n.status === 'active' ? `${n.id}(("${n.id} ▶"))`
+      : n.status === 'blocked' ? `${n.id}{{"${n.id} ✗"}}`
+      : `${n.id}["${n.id}"]`;
+    const lines = ['flowchart TD'];
+    const pending = nodes.filter(n => n.status !== 'done');
+    // Done tasks are frozen history and would swamp the picture; include them
+    // only where a pending task still depends on one.
+    const keep = new Set(pending.map(n => n.id));
+    for (const n of pending) for (const d of n.depends) keep.add(d);
+    // A flowchart with no nodes is a mermaid *parse error*, not an empty
+    // diagram — so an all-done workplan would render as a broken image rather
+    // than as finished work. Say so with a node instead.
+    if (keep.size === 0) {
+      console.log(`flowchart TD\n  complete["All ${nodes.length} tasks complete"]`);
+      return;
+    }
+    for (const n of nodes.filter(x => keep.has(x.id))) lines.push(`  ${shape(n)}`);
+    for (const e of edges) if (keep.has(e.from) && keep.has(e.to)) lines.push(`  ${e.from} --> ${e.to}`);
+    for (const n of pending.filter(x => x.startable)) lines.push(`  style ${n.id} stroke-width:3px`);
+    console.log(lines.join('\n'));
+    return;
+  }
+
+  if (json) {
+    console.log(JSON.stringify({ ok: true, nodes, edges }, null, 2));
+    return;
+  }
+
+  const pending = nodes.filter(n => n.status !== 'done');
+  const maxDepth = pending.reduce((m, n) => Math.max(m, n.depth), 0);
+  console.log(`Graph: ${nodes.length} tasks, ${edges.length} edges, ${pending.length} not done`);
+  for (let d = 1; d <= maxDepth; d++) {
+    const layer = pending.filter(n => n.depth === d);
+    if (!layer.length) continue;
+    console.log(`  depth ${d} (${layer.length}): ${layer.map(n => n.id + (n.startable ? '*' : '')).join(' ')}`);
+  }
+  const chokes = pending.filter(n => n.fanIn >= 5).map(n => `${n.id} (fan-in ${n.fanIn})`);
+  if (chokes.length) console.log(`  choke points: ${chokes.join(', ')}`);
+  // The legend explains a marker that only appears beside a layer; with no
+  // layers printed it annotates nothing.
+  if (pending.length) console.log('  * = startable now');
+}
+
+function cmdStatus(args, json) {
+  const wp = loadWorkplan();
+  const { tasks, taskById } = wp;
+
+  const counts = {};
+  for (const s of VALID_STATUSES) counts[s] = 0;
+  for (const t of tasks) if (counts[t.status] !== undefined) counts[t.status]++;
+
+  const active = tasks.find(t => t.status === 'active') || null;
+  const next = tasks.find(t => t.status === 'pending' && unmetDeps(t, taskById).length === 0) || null;
+  const clarify = tasks.filter(t => t.type === 'clarify' && (t.status === 'pending' || t.status === 'active'));
+  const blocked = tasks.filter(t => t.status === 'blocked');
+  const observations = readObservations();
+
+  const brief = t => ({ id: t.id, description: t.description, status: t.status, type: t.type });
+
+  if (json) {
+    console.log(JSON.stringify({
+      ok: true,
+      total: tasks.length,
+      counts,
+      active: active ? brief(active) : null,
+      next: next ? brief(next) : null,
+      clarify: clarify.map(brief),
+      blocked: blocked.map(brief),
+      observations,
+    }, null, 2));
+    return;
+  }
+
+  console.log(`Tasks: ${tasks.length} total — ${counts.done} done, ${counts.active} active, ${counts.pending} pending, ${counts.blocked} blocked`);
+  console.log(`Active: ${active ? `${active.id} — ${active.description}` : 'none'}`);
+  console.log(`Next unblocked: ${next ? `${next.id} — ${next.description}` : 'none'}`);
+
+  console.log(clarify.length ? 'Clarify tasks awaiting input:' : 'Clarify tasks awaiting input: none');
+  for (const t of clarify) console.log(`  - ${t.id} (${t.status}) — ${t.description}`);
+
+  console.log(blocked.length ? 'Blocked tasks:' : 'Blocked tasks: none');
+  for (const t of blocked) console.log(`  - ${t.id} — ${t.description}`);
+
+  console.log(observations.length ? 'Open observations:' : 'Open observations: none');
+  for (const o of observations) {
+    console.log(`  - [${o.severity}] ${o.id} (${o.raisedBy}) — ${o.observation}`);
+  }
+}
+
+// Re-lint after every write. check-workplan.js resolves the workplan from the
+// working directory, same as this script, so it validates what was just
+// written. A failure means the mutation was wrong: put the file back.
+function writeAndLint(wp, content, successMessage) {
+  const original = fs.readFileSync(wp.path, 'utf8');
+  fs.writeFileSync(wp.path, content);
+
+  const lint = spawnSync(process.execPath, [path.join(__dirname, 'check-workplan.js')], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  });
+
+  if (lint.status !== 0) {
+    fs.writeFileSync(wp.path, original);
+    const detail = `${lint.stdout || ''}${lint.stderr || ''}`.trim();
+    die(`mutation rejected — check-workplan.js failed, so WORKPLAN.md was reverted:\n${detail}`);
+  }
+
+  console.log(successMessage);
+}
+
+function cmdSet(args) {
+  const force = args.includes('--force');
+  const rest = args.filter(a => a !== '--force');
+  const [rawId, rawField, ...valueParts] = rest;
+  if (!rawId || !rawField || valueParts.length === 0) die('set requires a task ID, a field, and a value.\n\n' + USAGE);
+
+  const id = rawId.toUpperCase();
+  const key = rawField.toLowerCase();
+  const value = valueParts.join(' ');
+
+  if (!FIELD_NAMES[key]) {
+    die(`unknown field "${rawField}". Expected one of: ${Object.values(FIELD_NAMES).join(', ')}.`);
+  }
+
+  const wp = loadWorkplan();
+  const task = wp.taskById.get(id);
+  if (!task) die(`${id} not found in WORKPLAN.md.`);
+
+  if (key === 'status') {
+    if (!VALID_STATUSES.includes(value)) {
+      die(`invalid Status "${value}". Expected one of: ${VALID_STATUSES.join(', ')}.`);
+    }
+    if (value !== task.status) {
+      const allowed = VALID_TRANSITIONS[task.status] || [];
+      if (!allowed.includes(value) && !force) {
+        die(`invalid transition ${task.status} → ${value} for ${id} (CONTRACT#state-machines/task-lifecycle allows: ${allowed.length ? allowed.join(', ') : 'none'}). Use --force to override.`);
+      }
+    }
+    // The one-active-task constraint is enforced on write, not only on read:
+    // a script that can create a second active task has dropped the invariant
+    // it was supposed to carry over from /forge-next.
+    if (value === 'active') {
+      const other = wp.tasks.find(t => t.status === 'active' && t.id !== id);
+      if (other && !force) {
+        die(`${other.id} is currently active. Only one task can be active at a time. Complete or block it first, or use --force.`);
+      }
+
+      // Gate-discrimination probe (CONTRACT#rules/gate-discrimination,
+      // obligation 2): a gate that already passes against the pre-work tree
+      // certifies nothing, so the task must not proceed on it. Probing at the
+      // pending -> active transition rather than in /forge-next's prose is the
+      // point — a step an agent is merely told to run is a step it may skip,
+      // which is how all recorded vacuous-gate instances shipped.
+      //
+      // manual: gates are exempt (no command to run). Resuming an already-
+      // active task performs no transition and never reaches this branch.
+      // --force is the human's override, same as `next --force`; agents repair
+      // the gate instead, via `set TASK-XXX gate '<discriminating gate>'` on
+      // the still-pending task.
+      if (task.status === 'pending' && !force && !/^manual:/.test(task.gate || '')) {
+        const probe = spawnSync(resolveBash(), ['-c', task.gate], {
+          cwd: ROOT,
+          encoding: 'utf8',
+          timeout: 300000,
+        });
+        if (probe.error) {
+          die(`gate-discrimination probe could not run the gate (${probe.error.message}). ` +
+              `Fix the environment or the gate before activating ${id}.`);
+        }
+        if (probe.status === 0) {
+          const output = `${probe.stdout || ''}${probe.stderr || ''}`.trim();
+          die(
+            `refused: ${id}'s gate already passes against the pre-work tree, so it cannot ` +
+            `verify this task's work (CONTRACT#rules/gate-discrimination).\n` +
+            `  Gate: ${task.gate}\n` +
+            (output ? `  Output:\n${output.split('\n').map(l => `    ${l}`).join('\n')}\n` : '') +
+            `Repair the gate to assert this task's change (wp.js set ${id} gate '<discriminating gate>') and retry. ` +
+            `If the gate is right and the work already exists, a prior task absorbed this task's scope — ` +
+            `report that to the human instead of proceeding. --force is the human's override.`,
+            4
+          );
+        }
+      }
+    }
+  }
+
+  if (key === 'type' && !VALID_TYPES.includes(value)) {
+    die(`invalid Type "${value}". Expected one of: ${VALID_TYPES.join(', ')}.`);
+  }
+
+  const result = setField(wp, id, key, value);
+  if (!result.ok) die(result.error);
+
+  const before = key === 'status' ? task.status : null;
+  writeAndLint(wp, result.content,
+    before ? `${id} Status: ${before} → ${value}` : `${id} ${FIELD_NAMES[key]} updated.`);
+}
+
+function cmdAppendNotes(args) {
+  const [rawId, ...textParts] = args;
+  if (!rawId || textParts.length === 0) die('append-notes requires a task ID and text.\n\n' + USAGE);
+
+  const id = rawId.toUpperCase();
+  const wp = loadWorkplan();
+  if (!wp.taskById.has(id)) die(`${id} not found in WORKPLAN.md.`);
+
+  const result = appendNotes(wp, id, textParts.join(' '));
+  if (!result.ok) die(result.error);
+
+  writeAndLint(wp, result.content, `${id} Notes: appended.`);
+}
+
+// --- Entry point ---
+
+function main(argv) {
+  const json = argv.includes('--json');
+  const args = argv.filter(a => a !== '--json');
+  const command = args[0];
+  const rest = args.slice(1);
+
+  switch (command) {
+    case 'next': return cmdNext(rest, json);
+    case 'get': return cmdGet(rest, json);
+    case 'status': return cmdStatus(rest, json);
+    case 'graph': return cmdGraph(rest, json);
+    case 'set': return cmdSet(rest);
+    case 'append-notes': return cmdAppendNotes(rest);
+    case undefined: return die(USAGE);
+    default: return die(`unknown command "${command}".\n\n${USAGE}`);
+  }
+}
+
+main(process.argv.slice(2));

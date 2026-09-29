@@ -24,6 +24,18 @@ Follow this test-first ordering strictly:
 4. **Root cause, not symptoms.** Find why it broke, not just what broke. A surface fix that passes the gate but leaves the underlying issue will fail again downstream.
 5. **Minimal fix.** Change only what's necessary to fix the issue. Don't refactor, don't improve, don't clean up surrounding code.
 6. **Verify the original gate.** The gate for this fix task should include the original failing command. Make sure that specific command passes.
+7. **Record what you noticed but did not fix.** Apply the in-scope test: if the fix is covered by this task's gate and belongs in this task's diff, make it now — no observation needed. Otherwise record one row through `.forge/scripts/obs.js` and move on. This channel captures what would otherwise be lost, not what would otherwise be fixed; most tasks produce no rows at all, and that is the expected case rather than a gap to fill.
+   - Record it by invoking the script — never by writing the row yourself:
+
+     ```bash
+     node .forge/scripts/obs.js add --kind design|bug|scope|friction --severity normal|foundation --task {{task_id}} "One-line observation."
+     ```
+
+     `obs.js` mints the ID against the file at write time, stamps the date, escapes the text, and re-validates before the write stands. A hand-written row is how a literal `|` reaches a cell and silently removes the row from every reader — including the hard stop that reads it.
+   - One line per observation — a pointer, not a report.
+   - No observation spawns a task on its own. Only a human promotes one, later.
+   - More than three from this task collapse into a single `foundation` row: volume of small complaints is itself the signal that the foundation is wrong, and recording it as volume buries that signal.
+   - `foundation` means the spec, contract, or approach is suspect and continuing to build compounds debt. Everything else is `normal`.
 
 ## Completion
 

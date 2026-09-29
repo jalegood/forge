@@ -1,54 +1,99 @@
 # /forge-next
 
-Read `.forge/WORKPLAN.md`, select the next task, resolve its context manifest from `.forge/CONTRACT.md`, inject into the prompt template, and execute the task.
+Select the next task via the `.forge/scripts/wp.js` projection, resolve its context manifest from `.forge/CONTRACT.md`, inject into the prompt template, and execute the task.
+
+Workplan reads and writes both go through `wp.js` — the command never loads `.forge/WORKPLAN.md` into context and never hand-edits it (CONTRACT#rules/workplan-access-discipline).
 
 If `$ARGUMENTS` is present (e.g., the user typed `/forge-next TASK-012`), treat it as the target task ID.
 
 ## Steps
 
-### 1. Read WORKPLAN.md
+### 1. Sweep observations, report open foundation rows, then project the workplan
 
-Read `.forge/WORKPLAN.md` in full. Parse each task entry:
+**Before selecting a task**, run the deterministic triage pass:
 
-```markdown
-## [TASK-XXX] Description
-
-- **Status:** pending | active | done | blocked
-- **Type:** scaffold | feature | clarify | refactor | fix | investigate
-- **Depends:** none | comma-separated TASK-IDs
-- **Context:** manifest references
-- **Gate:** shell command or manual: prefix
-- **Notes:** free text (may be multi-line)
+```bash
+node .forge/scripts/obs.js sweep
 ```
 
-If `.forge/WORKPLAN.md` does not exist or contains no tasks, tell the user: "No workplan found. Run `/forge-plan` to generate one." Stop.
+`sweep` makes no judgment call and takes no input. It reports `planned:` rows whose task is now `done` (re-run with `--apply` to close them — the one transition that is resolved by definition), `accepted` rows carrying no task link, and exact-duplicate observation text. Anything requiring judgment is reported, never applied. This is what stops `accepted` from being a dead letter: the state advances on its own once the work lands.
 
-### 2. Select the target task
+Then report every open `foundation`-severity row to the user (CONTRACT#interfaces/command-forge-next, Observations). Do this regardless of what selection turns out to be — including a resume:
 
-Follow this priority order:
+```bash
+node .forge/scripts/obs.js list --json --severity foundation --disposition open
+```
 
-**A. Explicit task ID argument:**
-If the user provided a task ID argument:
+If any exist, relay each verbatim (id, raised by, age in days, observation text) before continuing to task selection. This report is independent of the mechanical halt below: `wp.js next` itself refuses to select *new* work while an open foundation row exists, but that refusal is exempted on `resume-active` (CONTRACT#rules/unattended-execution, hard stop 4) — so a resume would otherwise surface nothing. This step closes that gap by reporting unconditionally, before the selection call, whether or not that call ends up halting.
 
-- Locate that task in the workplan.
-- If the specified task is already `active`, treat this as a resume (proceed to B).
-- If a _different_ task is currently `active`, warn: "TASK-XXX is currently active. Only one task can be active at a time. Complete or block it before starting a new task." Stop and wait for the user to decide.
-- If the specified task's `Depends` are not all `done` (and Depends is not `none`), warn: "TASK-XXX has unmet dependencies: [list each with its status]." Ask for confirmation before proceeding.
-- Otherwise, select it.
+Do **not** open `.forge/WORKPLAN.md`. Task selection is entirely deterministic — unblocked-ness, dependency satisfaction, active-task resume, explicit-ID override — so it runs in a script, and the script returns only the selected task (CONTRACT#rules/workplan-access-discipline). The workplan grows without bound; the per-session cost of this command must not grow with it.
 
-**B. Resume active task:**
-If no argument was provided (or the argument matches the active task) and a task has status `active`:
+Run:
 
-- Select that task.
-- Read its `Notes` field carefully — this provides continuity from the previous session.
-- Report: "Resuming TASK-XXX — [description]" and display the Notes content if non-empty.
+```bash
+node .forge/scripts/wp.js next
+```
 
-**C. Next unblocked pending task:**
-If no argument and no active task:
+If the user supplied a task ID (e.g., the user typed `/forge-next TASK-012`), pass it through:
 
-- Scan tasks in file order. A task is **unblocked** when its `Depends` field is `none` or every listed task ID has status `done`.
-- Select the first unblocked `pending` task.
-- If no unblocked pending task exists, report: "No unblocked tasks available. Run `/forge-status` to see what's blocked." Stop.
+```bash
+node .forge/scripts/wp.js next TASK-012
+```
+
+The script emits exactly the fields this command needs:
+
+```
+Task: TASK-XXX — Description
+Selection: next-unblocked | resume-active | explicit
+Status: pending | active | done | blocked
+Type: scaffold | feature | clarify | refactor | fix | investigate | ux-spec | checkpoint
+Depends: none | comma-separated TASK-IDs
+Context: manifest references
+Gate: shell command or manual: prefix
+Warning: ...            (zero or more)
+Notes:
+<verbatim, possibly multi-line>
+```
+
+Add `--json` if you would rather consume the fields structurally. Either way, this output is the whole of your knowledge of the workplan for this session — do not go read the document to fill in around it.
+
+### 2. Interpret the selection
+
+The script has already applied every selection rule; your job is to react to what it returned.
+
+**Exit code 0 — a task was selected.** The `Selection:` line says why:
+
+- `next-unblocked` — no task was active, and this is the first `pending` task whose `Depends` are all `done` or `none`.
+- `resume-active` — a task was already `active`, so this is a resume (this also covers the case where the user named the active task explicitly). Read the `Notes:` block carefully — it is your only link to the previous session. Report: "Resuming TASK-XXX — [description]" and display the Notes content if non-empty.
+- `explicit` — the user named this task and it was free to start.
+
+**Any `Warning:` lines must be surfaced to the user before you begin work.** The script warns rather than refuses, and the human decides:
+
+- Unmet dependencies (`TASK-XXX has unmet dependencies: ...`) — relay it and ask for confirmation before proceeding.
+- Already `done`, or currently `blocked` — relay it and ask for confirmation before proceeding.
+
+**Exit code 2 — nothing to select.** Report the script's message and stop. Two cases produce it:
+
+- A _different_ task is currently `active`. Only one task can be active at a time — the human must complete or block it before starting a new one.
+- No unblocked pending task exists. Point the user at `/forge-status` to see what is blocked.
+
+**Exit code 3 — halted by an open `foundation`-severity observation.** Hard stop 4 from CONTRACT#rules/unattended-execution: the spec, contract, or approach is suspect, and continuing to build compounds debt. The script prints the offending rows — relay every one verbatim.
+
+**A halt is not the end of the session; it is the start of a triage one.** Do not merely report the refusal and stop — that leaves the human a wall of text to reconstruct. Enter the guided triage flow instead:
+
+1. **Present each open row in plain language** — what was observed, which task raised it, how many days it has been open, and what continuing to build on it would cost.
+2. **Recommend a disposition for each, with your reasoning.** `accepted` (the work is worth doing), `declined` (it is not), or `duplicate:OBS-YYY` (another row already covers it). A recommendation is not a decision — say why, and say what you are unsure of.
+3. **Apply the human's answers through the script**, never by editing the row by hand:
+   ```bash
+   node .forge/scripts/obs.js set OBS-XXX disposition accepted
+   ```
+4. **Retry selection.** Once no open `foundation` row remains, `wp.js next` proceeds normally.
+
+**Do not pass `--force`, and do not disposition a `foundation` row yourself.** A halt an agent can lift is not a halt, and this is the one stop that exists to interrupt your momentum rather than support it. During an unattended span with no human present, write the triage packet — the rows, your recommendations, and your reasoning — to `.forge/notes/triage-YYYY-MM-DD.md` and stop, so the operator finds a decision waiting rather than an error to reconstruct.
+
+**Exit code 4 — the gate-discrimination probe refused a transition.** See step 4; this code reaches you only from `wp.js set`, not from selection.
+
+**Exit code 1 — usage or lookup error.** The named task ID does not exist, or `.forge/WORKPLAN.md` is missing or has no tasks. Report the message verbatim; for a missing workplan, tell the user to run `/forge-plan`.
 
 ### 3. Resolve the context manifest
 
@@ -62,15 +107,22 @@ Parse the selected task's `Context` field into a list of references. Each refere
 - `UX#flows/flow-name/screen-name` — one screen spec from `.forge/UX.md`
 - `DESIGN#section-name` — a top-level section from `.forge/DESIGN.md` (e.g., `DESIGN#tokens`)
 - `DESIGN#section-name/subsection` — a subsection within DESIGN.md (e.g., `DESIGN#components/button`)
+- `SPEC#section-name` — a top-level section from `.forge/SPEC.md` (e.g., `SPEC#requirements`)
+- `SPEC#section-name/subsection` — a subsection within SPEC.md (e.g., `SPEC#requirements/req-login`)
+- `specs/name#section-name` — a top-level section from a per-feature spec file `.forge/specs/name.md` (e.g., `specs/auth#requirements`)
+- `specs/name#section-name/subsection` — a subsection within that per-feature spec file
+- `notes/TASK-XXX#section-name` — a section of a task record `.forge/notes/TASK-XXX.md` (e.g., `notes/TASK-029#deviations`)
 
-**Source file routing:** `CONTRACT#` references resolve against `.forge/CONTRACT.md`. `UX#` references resolve against `.forge/UX.md`. `DESIGN#` references resolve against `.forge/DESIGN.md`.
+**Source file routing:** `CONTRACT#` references resolve against `.forge/CONTRACT.md`. `UX#` references resolve against `.forge/UX.md`. `DESIGN#` references resolve against `.forge/DESIGN.md`. `SPEC#` references resolve against `.forge/SPEC.md`. `specs/name#` references resolve against `.forge/specs/name.md` (the `name` segment names the file, not a heading). `notes/TASK-XXX#` references resolve against `.forge/notes/TASK-XXX.md` (likewise, `TASK-XXX` names the file).
 
 **For each reference, extract the matching markdown section from the appropriate file:**
 
-1. **Slugify and match headers.** To match a reference segment to a markdown heading:
+1. **Match headers by alphanumeric compaction** (normative rule: CONTRACT#data-model/context-manifest):
    - Take the heading text (strip `#` markers, formatting characters like backticks, asterisks)
-   - Lowercase it, replace runs of non-alphanumeric characters with single hyphens, trim leading/trailing hyphens
-   - Compare to the reference segment
+   - Reduce **both** the heading text and the reference segment to lowercase alphanumerics — strip every other character outright rather than turning it into hyphens
+   - Compare the compacted forms directly
+
+   Compacting both sides is what lets the mixed punctuation live in real Context fields match: `claudemd-integration-block` and `CLAUDE.md Integration Block` both compact to `claudemdintegrationblock`. A hyphen-preserving slugify would report a correct reference as unresolvable.
 
    Examples of slug matches:
    - `data-model` matches `## Data Model`
@@ -107,7 +159,24 @@ Parse the selected task's `Context` field into a list of references. Each refere
    - Same nested navigation as `CONTRACT#parent/child`, but resolved against `.forge/DESIGN.md`
    - First find the heading matching `section-name`, then within it find the sub-heading matching `subsection`
 
+   For `SPEC#section-name` / `SPEC#section-name/subsection`:
+   - Same standard slug matching and nested navigation as `CONTRACT#`, but resolved against `.forge/SPEC.md`
+   - **Requirement headings are the one exception to standard slug matching.** A `### [req-slug] Requirement Name` heading under `## Requirements` matches subsection reference `req-slug` by comparing only the bracketed portion — strip the brackets, lowercase, compare directly — ignoring the trailing "Requirement Name" text. So `SPEC#requirements/req-login` matches `### [req-login] User Login` regardless of what "User Login" says.
+
+   For `specs/name#section-name` / `specs/name#section-name/subsection`:
+   - The `name` segment selects the file: `.forge/specs/name.md` (e.g., `specs/auth#requirements` resolves against `.forge/specs/auth.md`)
+   - Within that file, resolve `section-name` (and optional `subsection`) using the same standard slug matching and nested navigation as `CONTRACT#`
+   - If `.forge/specs/name.md` does not exist, treat the reference as unresolved (see below)
+
+   For `notes/TASK-XXX#section-name`:
+   - The `TASK-XXX` segment selects the file: `.forge/notes/TASK-XXX.md` (e.g., `notes/TASK-029#deviations` resolves against `.forge/notes/TASK-029.md`)
+   - Within that file, resolve `section-name` using the same standard slug matching as `CONTRACT#`. Record headings are the plain Task Record Data Model sections — `## Outcome`, `## Decisions`, `## Deviations`, `## Files`
+   - If `.forge/notes/TASK-XXX.md` does not exist, treat the reference as unresolved (see below)
+   - **A record is read only when a task declares it.** Do not open `.forge/notes/` on your own initiative to fill in background on a prior task — an undeclared lookup is one an agent may skip, which is why cross-task record access runs through the manifest
+
 3. **Extract section content.** Capture everything from the matched heading (inclusive) through just before the next heading at the **same level or higher**. A `###` section ends at the next `###`, `##`, or `#`.
+
+   **Lines inside ``` fences are not headings.** Any section that fences a markdown example — a file template, a document skeleton, a sample artifact — holds heading-like lines inside the fence. A scan that ignores fences stops at the first one and truncates the section silently: the reference still resolves, so no unresolved-reference warning fires and the loss is invisible. Track fence state while extracting — toggle on each ``` line, and ignore headings while inside a fence. If `.forge/scripts/lib/markdown.js` is present in the project, prefer its `resolveRef`, which already handles this.
 
 4. **Concatenate** all resolved sections in the order they appear in the Context field, separated by a blank line.
 
@@ -117,12 +186,22 @@ Parse the selected task's `Context` field into a list of references. Each refere
 
 ### 4. Mark task active in WORKPLAN.md
 
-If the task is not already `active`, update its status in `.forge/WORKPLAN.md`:
+If the task is not already `active`, mark it through the same script — never by hand-editing the document:
 
-Change `- **Status:** pending` to `- **Status:** active` for this task.
+```bash
+node .forge/scripts/wp.js set TASK-XXX status active
+```
+
+`wp.js set` rewrites exactly the one field line, leaves the rest of the file byte-identical, enforces the lifecycle transitions from CONTRACT#state-machines/task-lifecycle and the one-active-task constraint, re-runs `check-workplan.js`, and reverts the write if the lint fails. A nonzero exit means the mutation did not stand: diagnose what it reported and fix that before continuing to step 5.
+
+**Exit 4 — the gate-discrimination probe refused the transition.** `wp.js` ran the task's gate against the pre-work tree and it already passed, so the gate cannot verify this task's work (CONTRACT#rules/gate-discrimination). This refusal is distinct from a lint rejection or an invalid transition (both exit 1), and it has exactly two legitimate routes out — distinguishing them is your job, because they look identical from the exit code:
+
+1. **The gate is wrong.** It asserts a topic the file already mentions, or a count an append-only artifact has outgrown. Repair it while the task is still `pending` — `node .forge/scripts/wp.js set TASK-XXX gate '<discriminating gate>'`, naming the change this task makes (a `prose.js` phrase, the new fixture, the new test) — then retry the activation. The repaired gate lands in this task's diff, which is what makes the repair reviewable at the checkpoint rather than invisible.
+2. **The gate is right and the work already exists.** A prior task absorbed this task's scope — the OBS-008 condition. This is a scope finding, not a gate defect: report it to the human and stop. Do not silently mark the task `done` (that is what happened to TASK-033), and do not invent a stricter gate just to have something to pass.
+
+**Never pass `--force`** — it is the human's override (CONTRACT#rules/gate-discrimination, obligation 2). A vacuous gate you force past ships this task unverified while reading as verified, which is the exact failure the probe exists to stop.
 
 Do this **before** beginning execution — if the session is interrupted, the task should already be marked active.
-
 ### 5. Load and fill the prompt template
 
 1. Read `.forge/templates/{type}.md` where `{type}` is the task's Type field (e.g., `feature`, `scaffold`, `clarify`). If the file does not exist, stop and tell the user: "Template file missing. Run `/forge-init` to create project templates." Do not proceed with inline fallbacks.
@@ -145,6 +224,24 @@ Follow the filled template's Instructions section to implement the task. This is
 - Do not modify CONTRACT.md without asking the human first.
 - If the task grows beyond what can be completed in this session, stop and proceed to step 8 (incomplete handling).
 
+#### Checkpoint tasks
+
+When the selected task's Type is `checkpoint`, execution produces no code. It assembles the **review packet** for the span this checkpoint closes, presents it, and stops (CONTRACT#interfaces/command-forge-next, Checkpoint tasks). `.forge/templates/checkpoint.md` drives the assembly; what follows is what this command guarantees around it.
+
+**The span is exactly the task IDs in the checkpoint's `Depends` field.** Do not reconstruct it from `git log`, and do not take it as "everything since the last checkpoint" — `/forge-plan` already recorded the span in `Depends` (CONTRACT#rules/checkpoint-cadence), and a re-derived span quietly omits or over-claims tasks. Read each one through the projection, `node .forge/scripts/wp.js get TASK-XXX`.
+
+The packet contains, in order:
+
+1. **The span's tasks** — ID, description, and file list for each. The file list is the `Files:` line in the task's Notes when the notes are inline, or the `## Files` section of `.forge/notes/TASK-XXX.md` when the Notes name a record.
+2. **Fresh gate results.** Re-run every automated gate in the span now, at packet-assembly time, and report each with its **actual output** rather than a bare pass/fail (SPEC#requirements/req-checkpoint-fresh-gates). Task status is not evidence: a later task in the span can break an earlier task's gate, and catching that is the reason this checkpoint exists.
+   - A gate that fails fresh on a task whose status is `done` is a **regression** — flag it explicitly. `done` already means the gate passed at completion (step 8 marks `done` only after a pass), so nothing needs to have stored the earlier result.
+   - **A span containing a regression is never summarized as clean.** One regression outranks any number of passes in the summary line.
+   - Gates whose value begins with `manual:` are **listed with their verification steps, not executed.** Running them is the human's job at this checkpoint.
+3. **STATUS.md, quoted into the packet.** Open Questions (all rows, flagging any marked Blocking), Risks (all rows), open Observations with `foundation` severity first, and any Decisions entry dated inside the span. Quote the rows and entries — a packet that sends the human to a file to find out what happened is defective (CONTRACT#data-model/status.md-data-model).
+4. **The rollback.** Name the span's starting commit and the single command that undoes the span, and say plainly that it discards the span's work. The human runs it; you never do.
+
+**The checkpoint's own gate is always `manual:`.** Step 7 runs no shell command for it — present the packet, end with "Does this checkpoint pass? (pass/fail)", and **stop**. Do not select further work, do not mark the task `done`, and do not commit before the human answers. A checkpoint is a hard stop for the unattended loop (CONTRACT#rules/unattended-execution, hard stop 4): an unanswered packet halts every downstream task by construction, which is the checkpoint working rather than a stall.
+
 ### 7. Run the gate
 
 When you believe the task is complete, run the gate from the task's Gate field.
@@ -161,53 +258,152 @@ When you believe the task is complete, run the gate from the task's Gate field.
 - Present the gate description (everything after `manual:`) to the human.
 - Ask: "Does this gate pass? (yes/no)"
 - Proceed based on their answer.
+- **`checkpoint` tasks always take this branch** — their gate is `manual:` by construction, and what gets presented is the review packet from step 6, ending in "Does this checkpoint pass? (pass/fail)".
 
 ### 8. Handle the result
 
+**Recording observations produced during execution:** Regardless of which branch below applies, check whether anything noticed during execution was out of scope for this task (CONTRACT#data-model/status.md-data-model, Observations). The governing test: if the fix was covered by this task's gate and belonged in this task's diff, you already made it — no observation needed. Otherwise:
+
+- **One line per observation.** A pointer, not a report.
+- **Never promote one to a task.** Observations never spawn `clarify` or `investigate` tasks — only a human does that, later, at a checkpoint or ad hoc.
+- **More than three from this task collapse into one.** If execution surfaced more than three separate candidates, don't append four-plus rows — write a single `foundation`-severity row instead. Volume of small complaints is itself the signal that the foundation is wrong, and recording it as volume buries that signal.
+- **`foundation` severity** means the spec, contract, or approach is suspect and continuing to build compounds debt (this is also what feeds CONTRACT#rules/unattended-execution hard stop 4 for the *next* session). Everything else is `normal`.
+- **Determine the next ID** — `OBS-XXX` where `XXX` is `max(existing OBS ids in .forge/STATUS.md) + 1`.
+- **Record it through `obs.js`, never by hand** (CONTRACT#interfaces/observation-script):
+
+  ```bash
+  node .forge/scripts/obs.js add --kind design --severity normal --task TASK-XXX "One-line observation."
+  ```
+
+  The script mints the ID against the file at write time, stamps the date, escapes the text, sets the disposition to `open`, and re-validates through `check-status.js` before the write stands. Do not compute the next ID yourself and do not write the row layout: a hand-written row is how a literal `|` reaches a cell and silently removes the row from every reader — including the foundation hard stop, which then reports a clear queue while the row that should have halted the loop is invisible.
+
+If execution produced nothing worth logging, skip this — most tasks generate no observations, and that is the expected case, not a gap to fill.
+
+**Autonomous disposition during an unattended span** (CONTRACT#rules/unattended-execution). Two passes run without human input, and only two:
+
+- `obs.js sweep`, from step 1 — purely deterministic, no judgment, no risk.
+- **`normal` rows only**, where the duplicate target or the covering task **demonstrably already exists**: set `duplicate:OBS-YYY` or `planned:TASK-XXX` via `obs.js set`, and record a dated Decisions entry naming which row or task and why. The checkpoint reviews those entries; a disposition applied without one is a checkpoint finding.
+
+Novel `normal` rows stay `open` and wait for the checkpoint — they do not halt the span. **A `foundation` row is never auto-dispositioned under any circumstance:** an agent that can clear its own foundation rows can retire the one signal designed to interrupt its momentum.
+
 **Gate passes:**
 
-1. Mark the task `done` in `.forge/WORKPLAN.md`:
+1. Mark the task `done`:
+
+   ```bash
+   node .forge/scripts/wp.js set TASK-XXX status done
    ```
-   - **Status:** done
-   ```
-2. Collect touched files: run `git diff --name-only HEAD` (or `git diff --name-only --cached` if changes are staged but not committed). Take the resulting file list and append a `Files:` line to the task's Notes field in WORKPLAN.md:
-   ```
-   - **Notes:** Files: path/to/file1.md, path/to/file2.ts
-   ```
-   If the Notes field already has content, append on a new line after existing content.
-3. Report success to the user.
-4. Suggest a commit message:
+2. Collect touched files: run `git diff --name-only HEAD` (or `git diff --name-only --cached` if changes are staged but not committed).
+3. Write the task's narrative — what was built, decisions made, deviations taken, files touched. Decide where it goes using the **externalization threshold** below.
+4. Report success to the user.
+5. Suggest a commit message:
    ```
    [Description] (TASK-XXX)
    ```
    Example: `Implement /forge-next command (TASK-004)`
 
+#### Externalization threshold
+
+Draft the narrative first, then measure it.
+
+**3 lines or fewer** — it stays inline. Append it to the task's Notes field, with the file list as a `Files:` line:
+
+```bash
+node .forge/scripts/wp.js append-notes TASK-XXX 'Fixed the off-by-one in the slug matcher; no deviations.'
+node .forge/scripts/wp.js append-notes TASK-XXX 'Files: .forge/scripts/lib/markdown.js, .forge/tests/test-markdown.sh'
+```
+
+which leaves the workplan reading:
+
+```markdown
+- **Notes:** Fixed the off-by-one in the slug matcher; no deviations.
+  Files: .forge/scripts/lib/markdown.js, .forge/tests/test-markdown.sh
+```
+
+`append-notes` preserves whatever the Notes field already held and indents the addition as a continuation line, so existing content is never clobbered. A separate file for a one-line note is churn, not structure.
+
+**More than 3 lines** — externalize it. Write `.forge/notes/TASK-XXX.md` using the Task Record Data Model:
+
+```markdown
+# TASK-XXX — Description
+
+## Outcome
+<!-- What was built. 2-4 sentences. -->
+
+## Decisions
+<!-- Choices made during execution and why. One bullet each. -->
+
+## Deviations
+<!-- Where implementation departed from spec or contract, and why. -->
+
+## Files
+<!-- Paths created or modified. -->
+```
+
+Omit a section only when it is genuinely empty (no deviations occurred). The file list from step 2 goes in the record's `## Files` section — do not also duplicate it inline.
+
+Then replace the task's Notes field with a **one-line summary plus the record path** (`set`, not `append-notes` — the summary supersedes whatever was there):
+
+```bash
+node .forge/scripts/wp.js set TASK-029 notes 'Implemented SPEC# resolution; one deviation on req-slug matching. Record: .forge/notes/TASK-029.md'
+```
+
+which leaves the workplan reading:
+
+```markdown
+- **Notes:** Implemented SPEC# resolution; one deviation on req-slug matching. Record: .forge/notes/TASK-029.md
+```
+
+**The summary is load-bearing.** A bare pointer relocates the problem instead of solving it: an agent that cannot tell what a record contains either opens it every time (no savings) or never opens it (information lost). The summary must name what is inside — the deliverable, and whether there are decisions or deviations worth reading. `Record: .forge/notes/TASK-029.md` alone is not acceptable output.
+
+**Records must stand alone without git.** Forge runs against projects where `.forge/` is never committed, so `git log --grep` retrieves nothing about tasks and the record is the only archaeological artifact. A record that says "see the commit message" or "see the diff" is defective — write what the commit would have said, in the record.
+
 **Task is blocked (cannot proceed):**
 
 If during execution you determine the task cannot proceed — a dependency is missing, a Contract section is ambiguous, or the task requires human decisions that aren't available:
 
-1. Mark the task `blocked` in `.forge/WORKPLAN.md`:
+1. Mark the task `blocked`:
+
+   ```bash
+   node .forge/scripts/wp.js set TASK-XXX status blocked
    ```
-   - **Status:** blocked
-   ```
-2. Update Notes with: what's blocking, what needs to happen to unblock.
+2. Record what is blocking and what needs to happen to unblock, via `node .forge/scripts/wp.js append-notes TASK-XXX '...'`.
 3. Suggest a `clarify` or `fix` task if appropriate.
+
+**Checkpoint fails (the human failed the span):**
+
+1. Mark the checkpoint `blocked`. The span did not pass, and leaving it `active` would keep the one-active-task constraint from letting any `fix` task run:
+
+   ```bash
+   node .forge/scripts/wp.js set TASK-XXX status blocked
+   ```
+2. Append a row to `.forge/STATUS.md`'s Blockers table naming what failed, which tasks it blocks, and what has to happen to clear it (CONTRACT#data-model/status.md-data-model — `/forge-next` is the named writer of this table):
+
+   ```markdown
+   | What failed at the checkpoint | TASK-XXX, TASK-YYY | What has to happen to pass the span |
+   ```
+3. Record what the human directed — `fix` tasks, a workplan edit, or a rollback — via `node .forge/scripts/wp.js append-notes TASK-XXX '...'`.
+4. **Do not add the `fix` tasks yourself.** A failed checkpoint produces them (CONTRACT#rules/checkpoint-cadence), but the human writes them into the workplan, the same way an observation only ever becomes work through a human. The checkpoint returns to `pending` once they say it is ready to re-run.
 
 **Gate fails / Task incomplete:**
 
-1. Keep the task `active` in WORKPLAN.md (do not change status).
-2. Update the task's `Notes` field in WORKPLAN.md with:
+1. Keep the task `active` (do not change status).
+2. Append to the task's `Notes` field with `node .forge/scripts/wp.js append-notes TASK-XXX '...'`:
    - What was accomplished
    - What remains to be done
    - Any decisions made or blockers encountered
 3. Report the current state to the user.
 4. The human will commit partial progress or stash, then run `/clear`.
 
+**Workplan lint:** Whichever branch above applies, every `wp.js` mutation re-runs `node .forge/scripts/check-workplan.js` and reverts itself if the lint fails, so a nonzero exit from `wp.js` means the write did not stand. Diagnose the reported violation, fix it, and re-run the mutation until it exits 0 before reporting to the user.
+
 ## Constraints
 
-- **One active task at a time.** Exactly 0 or 1 tasks may have status `active`. Do not activate a new task while another is active.
+- **Projection, not reading.** Workplan state arrives through `.forge/scripts/wp.js` and changes go back through it. Opening `.forge/WORKPLAN.md` to read it, or editing it by hand, defeats the access discipline this command exists to keep (CONTRACT#rules/workplan-access-discipline). Editing the file directly is still the human's prerogative — it stays plain markdown — but it is not yours.
+- **One active task at a time.** Exactly 0 or 1 tasks may have status `active`. Do not activate a new task while another is active; `wp.js` enforces this on both selection and write.
 - **Context budget.** Resolved context should not exceed ~200 lines of Contract content per task.
 - **Contract is read-only.** Do not modify CONTRACT.md unless the human explicitly approves.
 - **Notes are continuity.** When resuming an active task, the Notes field is your only link to previous sessions. Read it carefully before starting work.
+- **Records are the durable narrative.** WORKPLAN.md holds the DAG; `.forge/notes/TASK-XXX.md` holds everything else. Records are read only when a task declares one in its Context field (`notes/TASK-XXX#section-name`) — never open `.forge/notes/` on your own initiative.
 - **No auto-commit.** Suggest a commit message but never commit automatically. The human is the final gate.
 - **Template drives execution.** After step 5, the filled template's instructions govern what you do. The template includes its own completion protocol — follow it.

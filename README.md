@@ -64,7 +64,7 @@ Every statement should be testable. If something is ambiguous, mark it with `<!-
 Two optional spec files feed into the pipeline alongside the Contract:
 
 - **`.forge/UX.md`** — screen-level experience spec: flows, states, copy, emotional intent. `/forge-plan` generates `ux-spec` tasks (one per screen) that gate feature tasks — no feature task for a screen can run until its `ux-spec` task is done.
-- **`.forge/DESIGN.md`** — visual design system: tokens, typography, spacing, component specs. Hand-author it or generate it with a design tool. Feature tasks automatically reference `DESIGN#tokens` and relevant component sections when implementing screens.
+- **`.forge/DESIGN.md`** — visual design system: tokens, typography, spacing, component specs. Hand-authored markdown — copy in values from whatever source you use. Feature tasks automatically reference `DESIGN#tokens` and relevant component sections when implementing screens.
 
 Fill these in before running `/forge-plan` if you want the pipeline to include UX and design context.
 
@@ -96,9 +96,12 @@ Run `/forge-plan`. Review the generated tasks. Edit anything that doesn't look r
 
 Bootstraps a new Forge project by creating all required scaffold files. Safe to re-run — never overwrites existing files.
 
-- Creates `.forge/VISION.md` and `.forge/CONTRACT.md` stubs
-- Creates all six prompt templates under `.forge/templates/`
-- Creates `.claude/settings.json` with placeholder hook config
+- Creates `.forge/VISION.md`, `.forge/CONTRACT.md`, `.forge/SPEC.md`, and `.forge/STATUS.md` stubs
+- Creates all eight prompt templates under `.forge/templates/`
+- Creates the engine scripts under `.forge/scripts/` — the workplan lint, the projection (`wp.js`), the spec and status gates, the observation writer (`obs.js`), and the hook scripts
+- Creates `.claude/settings.json` with the lint hook, the status-lint hook, and the three unattended-execution guards
+- Creates `.forge/VERSION` (engine stamp + canonical repo, read by `/forge-sync`)
+- Asks whether the project has a user-facing interface; if yes, also creates `.forge/UX.md`, `.forge/DESIGN.md`, the `ux-spec` template, and its gate script
 - Appends the Forge integration block to `CLAUDE.md` (or creates it)
 
 Run this once in a new project before writing your Vision or Contract.
@@ -120,7 +123,47 @@ The main execution command. Picks the next unblocked task, injects relevant Cont
 
 ### `/forge-status`
 
-Read-only progress summary: done/active/pending/blocked counts, next unblocked task, any `clarify` tasks awaiting your input.
+Read-only progress summary: done/active/pending/blocked counts, the shape of the remaining work (how many layers deep, which tasks are startable *now*, where the graph chokes), any `clarify` tasks awaiting your input, blocked tasks, and the observation backlog — open `foundation` rows first, then the `accepted` queue awaiting planning.
+
+### `/forge-spec`
+
+Turns raw planning input — an idea, a pasted ticket, a file — into `.forge/SPEC.md`. Runs a structured intake interview *before* drafting, annotates every inference with `<!-- ASSUMED -->` and every unresolvable unknown with `<!-- UNRESOLVED -->`, logs the open questions to STATUS.md, and gates the result on `check-spec.js`.
+
+The Contract states what must be true; the Spec states what the system should do. Where they conflict, the Contract wins and the conflict becomes a `clarify` task.
+
+### `/forge-sync`
+
+Updates the Forge engine files in a project — commands, templates, scripts — from the canonical repository, file by file with your approval. Never touches project-owned artifacts (Vision, Contract, Spec, Workplan, Status, UX, Design). Reads `.forge/VERSION` to know where it came from.
+
+## Checkpoints and unattended runs
+
+Per-task review does not scale, and it trends toward rubber-stamping. Forge concentrates your attention at **checkpoints** instead.
+
+`/forge-plan` inserts a `checkpoint` task at each dependency-phase boundary, or after every five tasks, whichever comes first. Between checkpoints, the loop may run unattended on a work branch: `/forge-next` executes and commits one task at a time without asking. At the checkpoint, you get a **review packet** — every task in the span with its files, every automated gate in the span *re-run fresh* with regressions flagged, the current open questions and risks, and the one command that rolls the span back.
+
+Five rules govern an unattended span, and the first three are enforced by hooks rather than by asking Claude to remember them:
+
+1. **Work branch only** — never the default branch (branch guard).
+2. **One commit per task**, message ending `(TASK-XXX)`.
+3. **No pushing** — publishing is always yours (push guard).
+4. **Hard stops:** a checkpoint task, a `clarify` task, a task entering `blocked`, a second consecutive gate failure, or a new `foundation`-severity observation. The last one is mechanical: `wp.js` refuses to hand out new work while such a row is open.
+5. **Merge is yours.**
+
+**One of these is a standing change, so it should not surprise you.** The branch and secret guards are armed by `FORGE_UNATTENDED=1` and do nothing in ordinary sessions. The push guard is unconditional: once `/forge-init` writes the hook, `git push` through Claude Code's Bash tool is blocked in *every* session, including yours. That is the point — publishing stays a human act — and it costs you nothing, because pushing from a terminal **outside Claude Code** is unaffected. If you would rather not have it, delete the `guard-push.sh` entry from `.claude/settings.json`.
+
+A gate that cannot fail is worse than no gate, so `wp.js` runs each task's gate *before* marking it active and refuses the transition if it already passes — a gate that certifies nothing never guards a task.
+
+## Observations
+
+Any task can note something it should not fix — a defect outside its scope, a contract that disagrees with itself, friction worth naming. It records one line through `obs.js` and moves on:
+
+```bash
+node .forge/scripts/obs.js add --kind design --severity normal --task TASK-012 "One-line observation."
+```
+
+The rules that keep this from becoming a memo dump: one line each, never more than three from a single task (four collapse into one `foundation` row — volume *is* the signal), and **no observation ever becomes a task on its own.** You promote them, at a checkpoint or ad hoc.
+
+`foundation` severity means the approach itself is suspect, and it halts the loop until you triage it. Everything else waits for the checkpoint. `/forge-next` sweeps the backlog every session, closing rows whose task is done.
 
 ## Task Types
 
@@ -133,6 +176,7 @@ Read-only progress summary: done/active/pending/blocked counts, next unblocked t
 | `refactor`    | Improve structure, preserve behavior        | Existing tests pass                                   |
 | `fix`         | Repair a broken gate or bug                 | Original failing command passes                       |
 | `investigate` | Diagnose issues, explore unknowns           | `manual:` — findings documented in Notes              |
+| `checkpoint`  | Pause point closing a span; produces no code | `manual:` — you approve the span's review packet     |
 
 ## Common Scenarios
 
@@ -222,7 +266,7 @@ If your Contract exceeds ~500 lines, plan in passes instead of all at once:
 2. Plan each system independently: System A → feature tasks, System B → feature tasks
 3. Cross-system dependencies wire up automatically through the unified workplan DAG
 
-See the spec's "Planning at Scale" section for the full pattern.
+See `CONTRACT#rules/planning-at-scale` in `.forge/CONTRACT.md` for the full pattern.
 
 ## Gate Patterns
 
